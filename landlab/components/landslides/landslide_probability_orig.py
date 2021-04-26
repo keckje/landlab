@@ -459,12 +459,6 @@ class LandslideProbability(Component):
 
         self._nodal_values = self._grid.at_node
 
-        # create emptly class variable for saving the 1*self._n np.array or FS values  #\jk\
-        # final list can be made into an number for core nodes * self._n np.array. 
-        # each column is factor of safety map of core nodes 1 iteration of the self._n itterations
-        
-        self._FS_list = [] 
-        
     def calculate_factor_of_safety(self, i):
         """Method to calculate factor of safety.
 
@@ -573,39 +567,12 @@ class LandslideProbability(Component):
         self._FS = (self._C_dim / np.sin(np.arctan(self._theta))) + (
             np.cos(np.arctan(self._theta)) * (Y / np.sin(np.arctan(self._theta)))
         )
-        
-        self._FS_list.append(self._FS)
         count = 0
         for val in self._FS:  # find how many FS values <= 1
             if val <= 1.0:
                 count = count + 1  # number with unstable FS values (<=1)
         # probability: No. unstable values/total No. of values (n)
         self._landslide__probability_of_failure = np.float32(count) / self._n
-        
-        #/jk/
-        # need to return maps of probability #/jk/
-        # append factor of safety column to a list. 
-        
-        # example
-        # a = [1,2,3,4,5]; b = [1,2,3,4,5]; c = [1,2,3,4,5]; d = [1,2,3,4,5];
-        # e = [a,b,c,d]
-        # g = np.array(f) # combine into one long 2d array. each row is values from all iterations for one cell
-        # h = g[:,0] is grid rows*columns long 1D array of values from first column, which is the values at each 
-        # cell in the first iteration
-        # first value in h is cell 0,0, second value is (0,1), last value is m,n, where n is number of iterations.
-        # m is the number of grid cells in the DEM, DEM rows*columns 
-        
-        # landslide probability is run once to create FS nparray 
-        # FS nparray is then used to run the mass wasting router n times (for each column) 
-        # and develope n DEMS.
-                # runout distance determined from equation given material volume and contributing area of cell
-                # stochastic log jam determines head height.
-                # DEM is filled with volume using capart algorith
-        # the average DEM is then used as input into NST. cells associated with each link read 
-        # change in elevation (last time step DEM is subtracted from current DEM).
-        # a percent of that volume channge is entered into the channel as bedload and subtracted from the channel dem
-        #/jk/
-        
 
     def calculate_landslide_probability(self):
         """Main method of Landslide Probability class.

@@ -550,7 +550,7 @@ class NetworkSedimentTransporter(Component):
 
         elif self._active_layer_method == "Constant10cm":
             # Set all active layers to 10 cm thickness.
-            self._active_layer_thickness = 1 * np.ones_like(self._d_mean_active) #/jk/ changed from 0.1 to 1
+            self._active_layer_thickness = 0.1 * np.ones_like(self._d_mean_active)
 
         # If links have no parcels, we still need to assign them an active layer
         # thickness..
@@ -620,12 +620,6 @@ class NetworkSedimentTransporter(Component):
         )
 
         self._vol_stor = (self._vol_tot - self._vol_act) / (1 - self._bed_porosity)
-        
-        # print('all')  #/jk/
-        # print(self._vol_stor)  #/jk/
-        
-        # if self._vol_stor.any() < 0:  #/jk/
-        #     self._vol_stor[self._vol_stor < 0] = 0 #/jk/
 
     def _adjust_node_elevation(self):
         """Adjusts slope for each link based on parcel motions from last
@@ -679,12 +673,7 @@ class NetworkSedimentTransporter(Component):
                     width_of_downstream_link = self._grid.at_link["channel_width"][
                         downstream_link_id
                     ][n]
-                
-                # print(downstream_link_id) #/jk/
-                # print(self._vol_stor[downstream_link_id][n])
-                # if self._vol_stor[downstream_link_id][n].any() < 0:  #/jk/
-                #     self._vol_stor[downstream_link_id][n][self._vol_stor[downstream_link_id][n] < 0] = 0 #/jk/
-                
+
                 alluvium__depth = _calculate_alluvium_depth(
                     self._vol_stor[downstream_link_id][n],
                     width_of_upstream_links,
@@ -998,7 +987,7 @@ class NetworkSedimentTransporter(Component):
         if self._this_timesteps_parcels.any():
             self._partition_active_and_storage_layers()
             self._adjust_node_elevation()
-            # self._update_channel_slopes()  #/jk/ commented out
+            self._update_channel_slopes()
             self._update_transport_time()
             self._move_parcel_downstream(dt)
 
@@ -1099,9 +1088,7 @@ def _calculate_alluvium_depth(
     )
 
     if alluvium__depth < 0.0:
-        alluvium__depth = 0.0 #/jk/
-        print('alluvium depth less than zero') #/jk/
-        # raise ValueError("NST Alluvium Depth Negative")  #/jk/ commented out
+        raise ValueError("NST Alluvium Depth Negative")
 
     return alluvium__depth
 
@@ -1149,13 +1136,10 @@ def _calculate_reference_shear_stress(
         * (0.021 + 0.015 * np.exp(-20.0 * frac_sand))
     )
 
-    
     if np.any(np.asarray(taursg < 0)):
-
-        print(taursg) #/jk/
-        # raise ValueError( #/jk/ commented out
-        #     "NetworkSedimentTransporter: Reference Shields stress is negative" #/jk/ commented out
-        # ) #/jk/ commented out
+        raise ValueError(
+            "NetworkSedimentTransporter: Reference Shields stress is negative"
+        )
 
     return taursg
 
