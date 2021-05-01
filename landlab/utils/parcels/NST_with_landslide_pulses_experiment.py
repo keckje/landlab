@@ -70,6 +70,12 @@ df.map_depressions()
 
 mwlinkDF_d ={}
 
+#view existing landscape
+plt.figure('topo')
+imshow_grid(mg,mg.at_node['topographic__elevation'],grid_units=('m','m'),var_name='dem',plot_name = 'test')
+# plt.clim(0, 1)
+#plt.ylim([0,1000])
+
 
 #%% SETUP NETWORK MODEL GRID
 
@@ -311,4 +317,14 @@ axs[1].set_ylim([0,np.nansum(parcels.dataset["volume"].values, axis=0).max()*1.2
 axs[0].tick_params(axis = 'both', which = 'major', labelsize = 12)
 axs[1].tick_params(axis = 'both', which = 'major', labelsize = 12)
 plt.legend(fontsize = 14, loc = 'best')
+
+
+
+
+#view existing landscape
+plt.figure('topo')
+imshow_grid(mg,mg.at_node['MW__probability'],grid_units=('m','m'),var_name='MWprob',plot_name = 'test')
+# Landslide probability map
+
+mg.at_node['MW__probability'][mg.core_nodes] = aa[:,0]
 
