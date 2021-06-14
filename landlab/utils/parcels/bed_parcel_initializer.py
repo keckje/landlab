@@ -14,7 +14,7 @@ class BedParcelInitializer:
     This function creates a landlab DataRecord to represent parcels of sediment
     on a river network (represented by a NetworkModelGrid). The function takes
     discharge data for each link as input, as well as channel geometry
-    (`channel_width`, `reach_length`, `channel_slope`) fields attached to the
+    (`channel_width`, `channel_length`, `channel_slope`) fields attached to the
     NetworkModelGrid.
 
     This function currently estimates median parcel grain size at a link
@@ -125,7 +125,7 @@ class BedParcelInitializer:
             )
         elif user_d50 is not None: # d50 = f(contributing area) or d50 = constant             
             d50 = calc_d50_grain_size_hydraulic_geometry(user_d50,
-                                                         self._grid.at_link["drainage_area"])
+                                                         self._grid.at_link["drainage_area"]/1e6)
         else:
             msg = "D50 not specified"
             raise ValueError(msg)          
@@ -223,6 +223,7 @@ def _parcel_characteristics(
     if user_parcel_volume is not None:
         n_parcels_at_link = (median_number_of_starting_parcels*
                              np.ones(len(d50))).astype(dtype=int)
+        print(user_parcel_volume)
         parcel_volume = user_parcel_volume
         total_parcel_volume_at_link = (median_number_of_starting_parcels*
                                        parcel_volume*np.ones(len(d50))).astype(dtype=int)
@@ -249,12 +250,13 @@ def _parcel_characteristics(
         grain_size[offset:offset + n_parcels] = np.random.lognormal(
             np.log(d50[link]), np.log(std_dev), n_parcels
         )
-        volume[offset] = (
-                        total_parcel_volume_at_link[link]
-                        - ((n_parcels-1)*parcel_volume)
-                        ) # small remaining volume
+        # volume[offset] = (
+        #                 total_parcel_volume_at_link[link]
+        #                 - ((n_parcels-1)*parcel_volume)
+        #                 ) # small remaining volume
 
         offset += n_parcels
+    print(volume)
     starting_link = element_id.copy()
     abrasion_rate = np.full_like(element_id, abrasion_rate, dtype=float)
     density = np.full_like(element_id, rho_sediment, dtype=float)
@@ -266,7 +268,8 @@ def _parcel_characteristics(
     time_arrival_in_link = np.expand_dims(np.random.rand(np.sum(n_parcels_at_link)), axis=1)
     location_in_link = np.expand_dims(np.random.rand(np.sum(n_parcels_at_link)), axis=1)
 
-    active_layer = np.empty_like(element_id, dtype=float)
+    # active_layer = np.empty_like(element_id, dtype=float)
+    active_layer = np.full_like(element_id, 1, dtype=float)
     variables = {
         "starting_link": (["item_id"], starting_link),
         "abrasion_rate": (["item_id"], abrasion_rate),

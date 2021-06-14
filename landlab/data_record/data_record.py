@@ -721,7 +721,7 @@ class DataRecord(object):
         # first id of new item = last item in existing datarecord+1
         new_first_item_id = self._dataset["item_id"][-1].values + 1
         new_item_ids = np.array(
-            range(new_first_item_id, new_first_item_id + number_of_new_items)
+            range(int(new_first_item_id), int(new_first_item_id) + number_of_new_items) #/jk/
         )
 
         if time is not None:

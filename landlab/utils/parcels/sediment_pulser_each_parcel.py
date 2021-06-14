@@ -5,7 +5,7 @@ from landlab.utils.parcels.sediment_pulser_base import SedimentPulserBase
 
 _OUT_OF_NETWORK = -2
 
-class SedimentPulserCatalog(SedimentPulserBase):
+class SedimentPulserTable(SedimentPulserBase):
     
     '''
     Send a pulse of sediment to specific locations of channel network and divide 
@@ -15,7 +15,7 @@ class SedimentPulserCatalog(SedimentPulserBase):
     method on a DataRecord that has been prepared for the NetworkSedimentTransporter. 
     In the NetworkSedimentTransporter, the items are sediment "parcels"
     
-    SedimentPulserCatalog is instantiated by specifying general sediment 
+    SedimentPulserTable is instantiated by specifying general sediment 
     characteritics of pulses of sediment
     
     
@@ -117,25 +117,25 @@ class SedimentPulserCatalog(SedimentPulserBase):
         SedimentPulserBase.__init__(self, grid,**kwgs)
         
     
-    def __call__(self, time, max_parcel_volume = 0.05, SedimentPulseDF = None):
+    def __call__(self, time, SedimentPulseDF = None):
         
 
 
-        if SedimentPulseDF is None:
+        if SedimentPulseDF is None: # if no PulseDF provided, raise error. Should at least provide an empty PulseDF
             
             raise('SedimentPulseDF was not specified')
             
-        else:
+        else: # PulseDf was provided
             
-            if SedimentPulseDF.empty == True:
+            if SedimentPulseDF.empty == True: # if empty, pulser stops, returns the existing parcels, call stops
                 return self._parcels
             
-            variables, items = _sediment_pulse_dataframe(time,
-                parcelDF,
-                max_parcel_volume,
+            variables, items = self._sediment_pulse_dataframe(time,  # create variabels and and items needed to create the data record
+                SedimentPulseDF,
                 point_pulse = True)
                
-        if self._parcels is None:
+        
+        if self._parcels is None: # if no parcels, create parcels
             self._parcels = DataRecord(
                 self._grid,
                 items=items,
@@ -143,7 +143,7 @@ class SedimentPulserCatalog(SedimentPulserBase):
                 data_vars=variables,
                 dummy_elements={"link": [_OUT_OF_NETWORK]},
             )
-        else:
+        else: # else use the add item method to add parcels
             self._parcels.add_item(time=[time], new_item=items, new_item_spec=variables)
             
         return self._parcels
@@ -191,17 +191,17 @@ class SedimentPulserCatalog(SedimentPulserBase):
 
         p_np = []
         if 'parcel_volume [m^3]' in SedimentPulseDF:       
-            for index, row in parcelDF.iterrows():
+            for index, row in SedimentPulseDF.iterrows():
                 p_np.append(int(row['vol [m^3]']/row['parcel_volume [m^3]'])) #number of parcels in pulse = volume pulse/volume 1 parcel        
         else:               
-            for index, row in parcelDF.iterrows():
-                p_np.append(int(row['vol [m^3]']/self._parcel_vol)) #number of parcels in pulse = volume pulse/volume 1 parcel
+            for index, row in SedimentPulseDF.iterrows():
+                p_np.append(int(row['vol [m^3]']/self._parcel_volume)) #number of parcels in pulse = volume pulse/volume 1 parcel
      
         num_pulse_parcels = sum(p_np) # total number of parcels that enter network for timestep t
     
        
         LinkDistanceRatio = np.array([]) #create 1 x num_pulse_parcels array that lists distance ratio of each link. 
-        for i,val in enumerate(parcelDF['link_downstream_distance'].values):
+        for i,val in enumerate(SedimentPulseDF['link_downstream_distance'].values):
             # print(val)
             if point_pulse:
                 LinkDistanceRatio = np.concatenate((LinkDistanceRatio,np.ones(p_np[i])*val)) #enter channel at single point
@@ -213,7 +213,7 @@ class SedimentPulserCatalog(SedimentPulserBase):
         
         #(3)create 1xnum_pulse_parcels array that lists the link each parcel is entered into.
         newpar_element_id = np.array([]) 
-        for i, row in parcelDF.iterrows():       
+        for i, row in SedimentPulseDF.iterrows():       
             newpar_element_id = np.concatenate((newpar_element_id,np.ones(p_np[i])*row['link_#']))        
     
         newpar_element_id = np.expand_dims(newpar_element_id.astype(int), axis=1) #change format to 1Xn array
@@ -227,7 +227,7 @@ class SedimentPulserCatalog(SedimentPulserBase):
             np.shape(newpar_element_id)) #arrives at current time in nst model
         
         #(6) compute total volume of all parcels entered into network during timestep
-        new_volume = parcel_vol*np.ones(np.shape(newpar_element_id)) #parcelDF['vol [m^3]'].values /100  # volume of each parcel (m3) divide by 100 because large parcels break model
+        new_volume = self._parcel_volume*np.ones(np.shape(newpar_element_id)) #SedimentPulseDF['vol [m^3]'].values /100  # volume of each parcel (m3) divide by 100 because large parcels break model
         #new_volume = np.expand_dims(new_volume, axis=1)
         
         #(7) assign grain properties -lithology ,activity, density, abrasion rate, diameter,- this can come from dataframe parcelDF
@@ -242,9 +242,9 @@ class SedimentPulserCatalog(SedimentPulserBase):
         new_abrasion_rate = 0 * np.ones(np.size(newpar_element_id))
         
         try:
-            p_parcel_D  = parcelDF['d50 [m]'] # grain size in parcel : Change to read parcelDF
+            p_parcel_D  = SedimentPulseDF['d50 [m]'] # grain size in parcel : Change to read parcelDF
         except:
-            p_parcel_D = self.d50
+            p_parcel_D = self._d50
             
         new_D = p_parcel_D * np.ones(np.shape(newpar_element_id))
     
