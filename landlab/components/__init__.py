@@ -3,6 +3,7 @@ from .depression_finder import DepressionFinderAndRouter
 from .depth_dependent_diffusion import DepthDependentDiffuser
 from .depth_dependent_taylor_soil_creep import DepthDependentTaylorDiffuser
 from .detachment_ltd_erosion import DepthSlopeProductErosion, DetachmentLtdErosion
+from .dhsvm_to_landlab import DHSVMtoLandlab
 from .diffusion import LinearDiffuser
 from .discharge_diffuser import DischargeDiffuser
 from .drainage_density import DrainageDensity
@@ -26,6 +27,7 @@ from .landslides import LandslideProbability
 from .lateral_erosion import LateralEroder
 from .lithology import LithoLayers, Lithology
 from .marine_sediment_transport import SimpleSubmarineDiffuser
+from .mass_wasting_router import MassWastingRouter
 from .network_sediment_transporter import NetworkSedimentTransporter
 from .nonlinear_diffusion import PerronNLDiffuse
 from .normal_fault import NormalFault
@@ -68,6 +70,7 @@ COMPONENTS = [
     DepthDependentTaylorDiffuser,
     DepthSlopeProductErosion,
     DetachmentLtdErosion,
+	DHSVMtoLandlab,
     DischargeDiffuser,
     DrainageDensity,
     ErosionDeposition,
@@ -97,6 +100,7 @@ COMPONENTS = [
     LithoLayers,
     Lithology,
     LossyFlowAccumulator,
+	MassWastingRouter,
     NetworkSedimentTransporter,
     NormalFault,
     OverlandFlow,

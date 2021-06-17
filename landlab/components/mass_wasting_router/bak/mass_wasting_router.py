@@ -4,82 +4,39 @@ Created on Thu May  2 17:36:00 2019
 
 @author: keckj
 
-TO DO:
-    1. ADD bedload and debris flow networks
-    2. Use debris flow network to determine clumping extent
-    3. add new routing fuction to MWR
-    4. create function of converting dem differences into a dataframe of pulses
-    
-    
+    TODO: erode channel node elevations using flow rate at grid cell
+          record datetime of each timestep
+          add parameter for using different router and option to have no terrace cells (for models with larger grid cells)
+          clean up doc strings and comments
+          tests (review Datacamp class), submittal to LANDLAB
+          debris flow erosion model that accounts for available regolith thickness
+          
+
+    WISH LIST  
     ADD entrainment model - See Frank et al., 2015, user parameterizes based on literature OR results of model runs in RAMMS
         first draft done
-    Add function for breaking debris flow volume into parcels and distributing them along channel based on debris flow geometry that user can aparameterize based on deposit geometry - See ParcelLocation.py
-        done
+       
         
-    Add function for continued erosion of remaining flood plain deposit that stochasticly release sediment from length of deposit at rate defined by an exponential decay curve that use can parameterize based on field observations    
-    
-    Make Raster to Network Model grid function work for squiggly lines => see network model grid plotting tool for method to get curved line representation
-        not necessary
-        
-    tests, submittal to LANDLAB
+
 """
 
-from landlab import Component, FieldError
+import os as os
 import numpy as np
 import pandas as pd
 from collections import OrderedDict
 import matplotlib.pyplot as plt
 
-from landlab.components import FlowDirectorMFD, FlowAccumulator
-from landlab import imshow_grid
-from landlab import imshow_grid_at_node
+from landlab import Component, FieldError
+from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFinderAndRouter)
+from landlab import imshow_grid, imshow_grid_at_node
+
+from landlab.utils.grid_t_tools import GridTTools
 
 
-print('nnnnnnnnnnn')
-
-class MassWastingRouter(Component):
+class MassWastingRouter(GridTTools):
     
     '''
-        (000) assumption - dem changes are controlled by debris flow deposition. DEm changes caused by scour minor - not included
-        (0) Given a landslide probability map, initial_dem and maps of soil and geologic properties
-        (1) Determines mass wasting unit area,volume, material
-        (2) Routes mass wasting unit downslope
-        (3) erodes and deposits, updating the dem
-        (5) erodes DEM, # updating DEM, note dem changes limited to 1 cell width
-        (6) Converts deposition location from raster model grid to network model grid
-        (7) 
 
-        (9) transfer of deposit to nmg
-                make this the "rasterdeposit_to link"
-                
-                reqiored raster model grid fields:
-                    
-                initial_dem
-                new_dem 
-                difference
-                max difference (initially 0)
-                time since difference >= max difference (initially 0)
-                probability pulse
-                    
-                for each time step
-                    subtracts initial_dem from dem
-                    
-                    immediate transfer to network:
-                        if raster grid cell is link cell, a percent of volume is entered into the channel network
-                    
-                    delayed transfer to network
-                        if >= max_dfference (once max difference, vegetation killed, so underlying deposit is unstable again)
-                            time since difference >= max difference = 0
-                            volume = (new_dem-initial_dem)*cell area
-                            determine probability of pulse from grid cell during flow event Q P = f(time since max difference,Q/Qbf), Adjust probability funciton so that material is released to match field observed rate.
-                            if probability pulse > th and cell volume greater than pulse
-                                pulse
-                                    convert pulse location to link location
-                                update DEM (subtract pulse volume)
-
-
-        (10) how to deal with parcels upstream of deposiiton?: All parcels removed or ignored? Possibly ignored since likely few parcels in supply limited channels/and new debris is left in channel
-    
     Parameters
     ----------
     grid: ModelGrid 
@@ -147,7 +104,7 @@ class MassWastingRouter(Component):
         'unstable grid cells that are assumed to fail as one, single mass'
     }
         
-    
+#%%    
     
     def __init__(
             self, 
@@ -161,7 +118,7 @@ class MassWastingRouter(Component):
             FluvialErosionRate = [[0.03,-0.43], [0.01,-0.43]],
             probability_threshold = 0.75,
             min_mw_cells = 1,
-            mass_wasting_type='debrisflow', # use these to use a pre-set set of parameters for router
+            min_depth = 0.2, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
             **kwds):
         
         """
@@ -190,25 +147,11 @@ class MassWastingRouter(Component):
         
         """
         
-        # Store grid, parameters and fields in grid
-        
-        super().__init__(grid)
-        
-        # Create fields needed for MWR
-        #   Elevation
-        if 'topographic__elevation' in grid.at_node:
-            self.dem = grid.at_node['topographic__elevation']
-        else:
-            raise FieldError(
-                'A topography is required as a component input!')
-        
-        #   flow receiver node
-        if 'flow__receiver_node' in grid.at_node:
-            self.frnode = grid.at_node['flow__receiver_node']
-        else:
-            raise FieldError(
-                'A flow__receiver_node field is required as a component input!')  
-        
+        # call __init__ from parent classes
+        super().__init__(grid, nmgrid, Ct, BCt, MW_to_channel_threshold, 
+                         PartOfChannel_buffer, TerraceWidth)
+               
+
         #   landslide probability
         if 'MW__probability' in grid.at_node:
             self.mwprob = grid.at_node['MW__probability']
@@ -249,54 +192,23 @@ class MassWastingRouter(Component):
         self._grid.add_field('topographic__initial_elevation',
                         self._grid.at_node['topographic__elevation'],
                         at='node',
-                        copy = True)
+                        copy = True,clobber=True)
 
         # prep MWR 
-
         # time
-        self._time_idx = 0
-        self._time = 0.0
+        self._time_idx = 0 # index
+        self._time = 0.0 # duration of model run (hours, excludes time between time steps)
+        # TODO need to keep track of actual time (add difference between date of each iteration)
 
-        ### Grid characteristics
-        self.gr = grid.shape[0] #number of rows
-        self.gc = grid.shape[1] #number of columns
-        self.dx = grid.dx #width of cell
-        self.dy = grid.dy #height of cell
-            
-        receivers = self.frnode #receiver nodes (node that receives runoff from node)
-
-        # nodes, reshaped in into m*n,1 array like other mg fields
-        self.nodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1],1)
-        self.rnodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1]) #nodes in single column array
-                
-        self.xdif = grid.node_x[receivers]-grid.node_x[self.rnodes] # change in x from node to receiver node
-        self.ydif = (grid.node_y[receivers]-grid.node_y[self.rnodes])*-1 #, change in y from node to receiver node...NOTE: flip direction of y axis so that up is positve
-       
-        # grid node coordinates, translated to origin of 0,0
-        self.gridx = grid.node_x#-grid.node_x[0] 
-        self.gridy = grid.node_y#-grid.node_y[0]
-        
-        # extent of each cell in grid        
-        self.ndxe = self.gridx+self.dx/2
-        self.ndxw = self.gridx-self.dx/2
-        self.ndyn = self.gridy+self.dy/2
-        self.ndys = self.gridy-self.dy/2
-        
-        ### clumping
-        self.Ct = Ct # Channel initiation threshold [m2]   
-                  
-        self.MW_to_C_threshold = MW_to_channel_threshold # maximum distance [m] from channel for downslope clumping        
-        self.POCbuffer = PartOfChannel_buffer # distance [m] from a channel cell that is considered part of the channel (used for determining distance between landslide and channel)
-                     
+        ### clumping                  
+        self.MW_to_C_threshold = MW_to_channel_threshold # maximum distance [m] from channel for downslope clumping                            
         self.probability_threshold = probability_threshold # probability of landslide threshold      
         self.min_mw_cells = min_mw_cells # minimum number of cells to be a mass wasting clump
         
-        ### runout
+        ### runout method
         self._method = 'ScourAndDeposition'
 
         ### fluvial erosion            
-        self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
-        self.TerraceWidth = TerraceWidth # distance from channel grid cells that are considered terrace grid cells [# cells] 
         self.C_a = FluvialErosionRate[0][0]
         self.C_b = FluvialErosionRate[0][1]
         self.T_a = FluvialErosionRate[1][0]
@@ -304,23 +216,24 @@ class MassWastingRouter(Component):
         
         self.ErRate = 0 # debris flow scour depth for simple runout model
         
+        self.min_d = min_depth
+        
         # dictionaries of variables for each iteration, for plotting
         self.DFcells_dict = {} # dictionary of all computational cells during the debris flow routing algorithm
         self.parcelDF_dict = {} # dictionary of the parcel dataframe
         self.LS_df_dict = {}
         self.LSclump_dict = {}        
-        #### Define the raster model grid representation of the channel network
+        self.FED_all = {}
+        self.FENodes_all = {}     
         
-        ## nmg geometry and conversion to raster model grid equivalent
-        self._nmgrid = nmgrid
-        # network model grid characteristics       
-        self.linknodes = self._nmgrid.nodes_at_link #links as ordered by read_shapefile       
-        # network model grid node coordinates, translated to origin of 0,0, used to map grid to nmg
-        self.nmgridx = self._nmgrid.x_of_node
-        self.nmgridy = self._nmgrid.y_of_node
-        self.linklength = nmgrid.length_of_link
-        
-        self._LinktoNodes()
+        #### Define the raster model grid representation of the network model grid
+        out = self._LinktoNodes(linknodes = self.linknodes, 
+                                active_links = self._nmgrid.active_links,
+                                nmgx = self.nmgridx, nmgy = self.nmgridy)
+
+        self.Lnodelist = out[0]
+        self.Ldistlist = out[1]
+        self.xyDf = pd.DataFrame(out[2])
                         
         ## define bedload and debris flow channel nodes       
         ## channel
@@ -331,153 +244,24 @@ class MassWastingRouter(Component):
         self._DefineErosionRates()
         
         
-        ### Prep MWR
-        # extract cells from landslide probability map that will be used as unstable cells
-        self._extractLSCells() 
-        # create initial parcel DF        
-        self.parcelDF = pd.DataFrame([]) 
-        
+        ### create initial values
+        self._extractLSCells() # initial high landslide probability grid cells             
+        self.parcelDF = pd.DataFrame([]) # initial parcel DF          
         self.dem_initial = self._grid.at_node['topographic__initial_elevation'].copy() # set initial elevation
         self.dem_previous_time_step = self._grid.at_node['topographic__initial_elevation'].copy() # set previous time step elevation
         self.dem_dz_cumulative = self.dem - self.dem_initial
         self.dem_mw_dzdt = self.dem_dz_cumulative # initial cells of deposition and scour - none, TODO, make this an optional input        
         self.DistNodes = np.array([])
 
-
-    def _LinktoNodes(self):
-        '''
-        #convert links to coincident nodes
-            #loop through all links in network grid to determine raster grid cells that coincide with each link
-            #and equivalent distance from upstream node on link
-        '''
-        
-        def LinktoNodes_code(linknodes, active_links, nmgx, nmgy):
-            Lnodelist = [] #list of lists of all nodes that coincide with each link
-            Ldistlist = [] #list of lists of all nodes that coincide with each link
-            xdDFlist = []
-            Lxy= [] #list of all nodes the coincide with the network links
-                  
-            for k,lk in enumerate(linknodes) : #for each link in network grid
-                
-                linkID = active_links[k] #link id (indicie of link in nmg fields)
-                
-                lknd = lk #link node numbers
-                
-                x0 = nmgx[lknd[0]] #x and y of downstream link node
-                y0 = nmgy[lknd[0]]
-                x1 = nmgx[lknd[1]] #x and y of upstream link node
-                y1 = nmgy[lknd[1]]
-                
-                #create 1000 points along domain of link
-                X = np.linspace(x0,x1,1000)
-                Xs = X-x0 #change begin value to zero
-                
-                #determine distance from upstream node to each point
-                #y value of points
-                if Xs.max() ==0: #if a vertical link (x is constant)
-                    vals = np.linspace(y0,y1,1000)
-                    dist = vals-y0 #distance along link, from downstream end upstream
-                    dist = dist.max()-dist #distance from updtream to downstream
-                else: #all their lines
-                    vals = y0+(y1-y0)/(x1-x0)*(Xs)
-                    dist = ((vals-y0)**2+Xs**2)**.5
-                    dist = dist.max()-dist #distance from updtream to downstream
-                
-                    
-              
-               #match points along link (vals) with grid cells that coincide with link
-                
-                nodelist = [] #list of nodes along link
-                distlist = [] #list of distance along link corresponding to node
-                # print(vals)
-                for i,v in enumerate(vals):
-                    
-                    x = X[i]
-                    
-                    mask = (self.ndyn>=v) & (self.ndys<=v) & (self.ndxe>=x) & (self.ndxw<=x)  #mask - use multiple boolian tests to find cell that contains point on link
-                    
-                    node = self.nodes[mask] #use mask to extract node value
-                    # print(node)
-                    if node.shape[0] > 1:
-                        node = np.array([node[0]])
-                    # print(node)
-                    # create list of all nodes that coincide with linke
-                    if node not in nodelist: #if node not already in list, append - many points will be in same cell; only need to list cell once
-                        nodelist.append(node[0][0])  
-                        distlist.append(dist[i])
-                        xy = {'linkID':linkID,
-                            'node':node[0][0],
-                              'x':self.gridx[node[0][0]],
-                              'y':self.gridy[node[0][0]]}
-                        Lxy.append(xy)
-                
-                Lnodelist.append(nodelist)
-                Ldistlist.append(distlist)
-                
-            return (Lnodelist, Ldistlist, Lxy)
-
-        # if NetType == 'bedload':
-        linknodes = self.linknodes
-        active_links = self._nmgrid.active_links
-        nmgx = self.nmgridx
-        nmgy = self.nmgridy
-
-        out = LinktoNodes_code(linknodes, active_links, nmgx, nmgy)
-
-        self.Lnodelist = out[0]
-        self.Ldistlist = out[1]
-        self.xyDf = pd.DataFrame(out[2])
-                   
-    def _ChannelNodes(self):
-        
-        # to top of debris flow channel (top colluvial channel)
-        ChannelNodeMask = self._grid.at_node['drainage_area'] > self.Ct
-        df_x = self._grid.node_x[ChannelNodeMask]
-        df_y = self._grid.node_y[ChannelNodeMask]
-        self.xyDf_d = pd.DataFrame({'x':df_x, 'y':df_y})
-        self.ChannelNodes = self.rnodes[ChannelNodeMask] 
-        
-        # to top of bedload channels (~top cascade channels)
-        BedloadChannelNodeMask = self._grid.at_node['drainage_area'] > self.BCt
-        bc_x = self._grid.node_x[BedloadChannelNodeMask]
-        bc_y = self._grid.node_y[BedloadChannelNodeMask]
-        self.xyDf_bc = pd.DataFrame({'x':bc_x, 'y':bc_y})
-        self.BedloadChannelNodes = self.rnodes[BedloadChannelNodeMask] 
-
-    def _TerraceNodes(self):
-     
-        for i in range(self.TerraceWidth):
-            if i == 0:
-                # diagonal adjacent nodes to channel nodes
-                AdjDN =np.ravel(self._grid.diagonal_adjacent_nodes_at_node[self.BedloadChannelNodes])  
-                # adjacent nodes to channel nodes
-                AdjN = np.ravel(self._grid.adjacent_nodes_at_node[self.BedloadChannelNodes])
-            elif i>0:
-                # diagonal adjacent nodes to channel nodes
-                AdjDN = self._grid.diagonal_adjacent_nodes_at_node[TerraceNodes] 
-                # adjacent nodes to channel nodes
-                AdjN = self._grid.adjacent_nodes_at_node[TerraceNodes]            
-            
-            # all adjacent nodes to channel nodes
-            AllNodes = np.concatenate((AdjN,AdjDN))
-            # unique adjacent nodes
-            AllNodes = np.unique(AllNodes)
-            # unique adjacent nodes, excluding all channel nodes.
-            TerraceNodes = AllNodes[np.in1d(AllNodes,self.ChannelNodes,invert = True)]
-        
-        t_x = self._grid.node_x[TerraceNodes]
-        t_y = self._grid.node_y[TerraceNodes]
-        self.xyDf_t = pd.DataFrame({'x':t_x, 'y':t_y})
-        self.TerraceNodes = TerraceNodes
-
     
     def _DefineErosionRates(self):
         '''
-        sets the erosion rate of the terrace and channel cells.
+        defines the coefficient and exponent of a negative power function that
+        predicts fluvial erosion rate per storm [L/storm] as a funciton of time 
+        since the last disturbance. 
         
-        channel cells include the debris flow channels.
-        
-        terrace nodes are all nodes adjacent to the bedload channel cells.
+        function is defined for all channel nodes, including the debris flow channel
+        nodes. 
         
         Erosion rate is specified as the parameters of a negative power function       
         that predicts fluvial erosion rate [m/storm] relative to time since 
@@ -505,83 +289,7 @@ class MassWastingRouter(Component):
         
         self.FluvialErosionRate = np.array(coefL,dtype = 'float')   
 
-    
-    def _min_distance_to_network(self, cellid, ChType = 'debrisflow'):
-        def distance_to_network(row):
-            '''
-            compute distance between a cell and the nearest debris flow network 
-            cell used to determine clump distance to colluvial channel network
-            for clumping algorithm
-            
-            ChType = debrisflow: uses debris flow network
-            ChType = nmg: uses network model grid network
-            
-            '''
-            return ((row['x']-self.gridx[cellid])**2+(row['y']-self.gridy[cellid])**2)**.5
-        
-        if ChType == 'debrisflow':
-            nmg_dist = self.xyDf_d.apply(distance_to_network,axis=1)
-            offset = nmg_dist.min() # minimum distancce
-            mdn = self.xyDf_d[nmg_dist == offset] # minimum distance node and node x y        
-        elif ChType == 'nmg':
-            nmg_dist = self.xyDf.apply(distance_to_network,axis=1)
-            offset = nmg_dist.min() # minimum distancce
-            mdn = self.xyDf[nmg_dist == offset] # minimum distance node and node x y    
-
-        return offset, mdn
-
-
-    def _downslopecells(self,StartCell):
-        '''
-        compute distance between a given cell and the nearest downslope channel 
-        network cell. distance is computed to POCbuffer distance from channel network
-        cell. Track which cells are downslope
-        
-        channel network is the colluvial channel network
-        
-        this function is used to determine the lower extent of a landslide.
-        
-        use this to determine 
-        
-        (1) check if clump meets distance threshold (is close enough to channel network)
-         to causethe hillslope below to fail         
-        
-        (2) if it does, get list of all unique cells and add to clump
-        
-        '''
-
-        loc = []
-        dist = []
-        c = 0
-        
-        loc.append(int(StartCell))
-        dist.append((self.xdif[int(StartCell)]**2+self.ydif[int(StartCell)]**2)**.5)
-                       
-        flow = True
-        
-        while flow == True:
-            
-            slope  = self.grid.at_node['topographic__slope'][loc[c]]
-            #compute distance between deposit and all debris flow network cells
-            cdist, nc = self._min_distance_to_network(loc[c],  ChType = 'debrisflow')
-            #TO DO need to change so that if distance to network is less than minimum, then stop
-            
-            
-            #if loc[c] not in self.xyDf['node'].values: # channel network doesnt always match DEM
-            # print(cdist)
-            if cdist > self.POCbuffer: # downslope distance measured to POCbuffer from channel    
-                loc.append(self.grid.at_node['flow__receiver_node'][loc[c]])
-                dist.append((self.xdif[self.grid.at_node['flow__receiver_node'][loc[c]]]**2+self.ydif[self.grid.at_node['flow__receiver_node'][loc[c]]]**2)**.5)
-                c=c+1
-                if loc[-1] == loc[-2]: # check that runout is not stuck at same node # NEED TO DEBUG
-                    break
-            else:
-                flow = False
-        
-        Dista = np.array(dist)
-        Dist = Dista.sum()
-        return (Dist,loc)
-        
+         
     
     def _extractLSCells(self):
         '''
@@ -613,227 +321,6 @@ class MassWastingRouter(Component):
         self.LS_cells = self.nodes[mask]
         # print(self.LS_cells)            
 
-
-    
-    def AdjCells(self,n):
-        '''                
-        returns cell numbers of cells adjacent to cell (n) AND the flow direction indexes
-        
-        gr - number of rows in grid
-        gc - number of columns in grid
-        n - cell number other cells are adjacent to
-        ac - node numbers
-        acn - a
-        
-        #change to use mg.adjacent_nodes_at_node[] and mg.diagonal_adjacent_nodes_at_node[]
-
-        '''
-        gc = self.gc
-        gr = self.gr
-        
-        u = n-gc
-        ur = n-gc+1
-        r = n+1
-        br = n+gc+1
-        b = n+gc
-        bl = n+gc-1
-        l = n-1
-        ul = n-gc-1   
-        
-        
-        if n == 0:                      #top left corner
-            ac = [r,br,b]
-            acn = [2,3,4]               #flow directio index
-        elif n == gc-1:                 #top right corner
-            ac = [b,bl,l]
-            acn = [4,5,6]
-        elif n == gr*gc-1:              #bottom right corner
-            ac = [u,l,ul]  
-            acn = [0,6,7]
-        elif n == gr*gc-gc:             #bottom left corner
-            ac = [u,ur,r]
-            acn = [0,1,2]
-        elif n<gc-1 and n>0:            #top side
-            ac = [r,br,b,bl,l]
-            acn = [2,3,4,5,6]
-        elif n%gc == gc-1:              #right side
-            ac = [u,b,bl,l,ul]
-            acn = [0,4,5,6,7]
-        elif n<gr*gc-1 and n>gr*gc-gc:  #bottom side
-            ac = [u,ur,r,l,ul]
-            acn = [0,1,2,6,7]
-        elif n%gc == 0:                 #left side
-            ac = [u,ur,r,br,b]
-            acn = [0,1,2,3,4]
-        else:                           #inside grid
-            ac = [u,ur,r,br,b,bl,l,ul]
-            acn = [0,1,2,3,4,5,6,7]
-            
-        return ac,acn #adjacent cell numbers and cell numbers for direction grid
-
-    
-    def NotDivergent(self,n,ac,acn):
-        '''        
-        takes mass wasting cell and adjacent cell numbers as input
-        returns boolian list of cells that are not divergent (convergent or planar)
-        
-        xdif - change in x in slope direction to receiving cell
-        ydif -  change in y in slope direciton to receiving cell
-        n - mass wasting unit cell
-        ac - grid number of adjacent cells
-        acn - adjacent cell number
-        '''
-        
-        xd = self.xdif[n]
-        yd = self.ydif[n]
-        
-        '''       
-        functions that check if cell is not divergent based on center cell direction
-        
-        Input to functions:
-        x - adjacent cell number (ordered 0 to 7, with 0 north of center, clockwise)
-        yda - change in y direction at adjacent cell to it's receiving cell
-        xda - change in x direction at adjacent cell to it's receiving cell
-            '''
-    
-        def pyzx(x,yda,xda): #positve y zero x  (slopes north)
-    
-            return {            
-                0: True,
-                1: (yda > 0 and xda == 0) or (yda > 0 and xda < 0) or (yda == 0 and xda < 0),    
-                2: (yda > 0 and xda == 0) or (yda > 0 and xda < 0) or (yda == 0 and xda < 0),
-                3: (yda > 0 and xda == 0) or (yda > 0 and xda < 0),
-                4: (yda > 0 and xda == 0),
-                5: (yda > 0 and xda == 0) or (yda > 0 and xda > 0),
-                6: (yda > 0 and xda == 0) or (yda > 0 and xda > 0) or (yda == 0 and xda > 0),
-                7: (yda > 0 and xda == 0) or (yda > 0 and xda > 0) or (yda == 0 and xda > 0),
-                    
-            }[x]
-        
-        def nyzx(x,yda,xda): #negative y, zero x (slopes south)
-            
-            return {
-                0: (yda < 0 and xda == 0),
-                1: (yda < 0 and xda == 0) or (yda < 0 and xda < 0),
-                2: (yda < 0 and xda == 0) or (yda < 0 and xda < 0) or (yda == 0 and xda < 0),
-                3: (yda < 0 and xda == 0) or (yda < 0 and xda < 0) or (yda == 0 and xda < 0),
-                4: True,
-                5: (yda < 0 and xda == 0) or (yda < 0 and xda > 0) or (yda == 0 and xda > 0),
-                6: (yda < 0 and xda == 0) or (yda < 0 and xda > 0) or (yda == 0 and xda > 0),
-                7: (yda < 0 and xda == 0) or (yda < 0 and xda > 0),
-                
-            }[x]
-            
-        def zypx(x,yda,xda): #zero y, positive x (slopes east)
-            
-            return {
-                0: (yda == 0 and xda > 0) or (yda < 0 and xda > 0) or (yda < 0 and xda == 0),
-                1: (yda == 0 and xda > 0) or (yda < 0 and xda > 0) or (yda < 0 and xda == 0),
-                2: True,
-                3: (yda == 0 and xda > 0) or (yda > 0 and xda > 0) or (yda > 0 and xda == 0),
-                4: (yda == 0 and xda > 0) or (yda > 0 and xda > 0) or (yda > 0 and xda == 0),
-                5: (yda == 0 and xda > 0) or (yda > 0 and xda > 0),
-                6: (yda == 0 and xda > 0),
-                7: (yda == 0 and xda > 0) or (yda < 0 and xda > 0),
-                
-            }[x]
-        
-        def zynx(x,yda,xda): #zero y, negative x (slopes west)
-            
-            return {
-                0: (yda == 0 and xda < 0) or (yda < 0 and xda < 0) or (yda < 0 and xda == 0),
-                1: (yda == 0 and xda < 0) or (yda < 0 and xda < 0),
-                2: (yda == 0 and xda < 0),
-                3: (yda == 0 and xda < 0) or (yda > 0 and xda < 0),
-                4: (yda == 0 and xda < 0) or (yda > 0 and xda < 0) or (yda > 0 and xda == 0), 
-                5: (yda == 0 and xda < 0) or (yda > 0 and xda < 0) or (yda > 0 and xda == 0),
-                6: True,
-                7: (yda == 0 and xda < 0) or (yda < 0 and xda < 0) or (yda < 0 and xda == 0),
-                
-            }[x]
-        
-        def pypx(x,yda,xda): #positive y, positive x (slopes northeast)
-            
-            return {
-                0: (yda > 0 and xda > 0) or (yda == 0 and xda > 0) or (yda < 0 and xda > 0), 
-                1: True,
-                2: (yda > 0 and xda > 0) or (yda > 0 and xda == 0) or (yda > 0 and xda < 0),
-                3: (yda > 0 and xda > 0) or (yda > 0 and xda == 0) or (yda > 0 and xda < 0), 
-                4: (yda > 0 and xda > 0) or (yda > 0 and xda == 0), 
-                5: (yda > 0 and xda > 0), 
-                6: (yda > 0 and xda > 0) or (yda == 0 and xda > 0), 
-                7: (yda > 0 and xda > 0) or (yda == 0 and xda > 0) or (yda < 0 and xda > 0), 
-                
-            }[x]
-        
-        def pynx(x,yda,xda): # positive y, negative x (slopes northwest)
-            
-            return {
-                0: (yda > 0 and xda < 0) or (yda == 0 and xda < 0) or (yda < 0 and xda < 0), 
-                1: (yda > 0 and xda < 0) or (yda == 0 and xda < 0) or (yda < 0 and xda < 0), 
-                2: (yda > 0 and xda < 0) or (yda == 0 and xda < 0), 
-                3: (yda > 0 and xda < 0),  
-                4: (yda > 0 and xda < 0) or (yda > 0 and xda == 0), 
-                5: (yda > 0 and xda < 0) or (yda > 0 and xda == 0) or (yda > 0 and xda > 0), 
-                6: (yda > 0 and xda < 0) or (yda > 0 and xda == 0) or (yda > 0 and xda > 0), 
-                7: True, 
-                
-            }[x]
-        
-        def nypx(x,yda,xda): #negative y, postive x (slopes southeast)
-            
-            return {
-                0: (yda < 0 and xda > 0) or (yda < 0 and xda == 0),  
-                1: (yda < 0 and xda > 0) or (yda < 0 and xda == 0) or (yda < 0 and xda < 0), 
-                2: (yda < 0 and xda > 0) or (yda < 0 and xda == 0) or (yda < 0 and xda < 0), 
-                3: True, 
-                4: (yda < 0 and xda > 0) or (yda == 0 and xda > 0) or (yda > 0 and xda > 0),
-                5: (yda < 0 and xda > 0) or (yda == 0 and xda > 0) or (yda > 0 and xda > 0), 
-                6: (yda < 0 and xda > 0) or (yda == 0 and xda > 0), 
-                7: (yda < 0 and xda > 0), 
-                
-            }[x]
-        
-        def nynx(x,yda,xda): #negative y, negative x (slopes southwest)
-            
-            return {
-                0: (yda < 0 and xda < 0) or (yda < 0 and xda == 0), 
-                1: (yda < 0 and xda < 0), 
-                2: (yda < 0 and xda < 0) or (yda == 0 and xda < 0), 
-                3: (yda < 0 and xda < 0) or (yda == 0 and xda < 0) or (yda > 0 and xda < 0), 
-                4: (yda < 0 and xda < 0) or (yda == 0 and xda < 0) or (yda > 0 and xda < 0), 
-                5: True, 
-                6: (yda < 0 and xda < 0) or (yda < 0 and xda == 0) or (yda < 0 and xda > 0),
-                7: (yda < 0 and xda < 0) or (yda < 0 and xda == 0) or (yda < 0 and xda > 0), 
-                
-            }[x]
-        
-            
-        ydal = self.ydif[ac]
-        xdal = self.xdif[ac]
-        
-        #create mask for adjacent cells using  check if not divergent (True) or divergent (false)
-        if yd > 0 and xd == 0:
-            ac_m = np.array(list(map(pyzx,acn,ydal,xdal)))
-        elif yd < 0 and xd == 0:
-            ac_m = np.array(list(map(nyzx,acn,ydal,xdal)))        
-        elif yd == 0 and xd > 0:
-            ac_m = np.array(list(map(zypx,acn,ydal,xdal)))
-        elif yd == 0 and xd < 0:
-            ac_m = np.array(list(map(zynx,acn,ydal,xdal)))
-        elif yd > 0 and xd > 0:
-            ac_m = np.array(list(map(pypx,acn,ydal,xdal)))
-        elif yd > 0 and xd < 0:
-            ac_m = np.array(list(map(pynx,acn,ydal,xdal)))
-        elif yd < 0 and xd > 0:
-            ac_m = np.array(list(map(nypx,acn,ydal,xdal)))
-        elif yd < 0 and xd < 0:
-            ac_m = np.array(list(map(nynx,acn,ydal,xdal)))
-        else: # if yd == 0 and xd == 0, flat ground? # NEED TO DETERMINE WHEN THIS ARISES
-            print('WARNING, CELL '+str(n)+'HAS INDETERMINANT FLOW DIRECTION')
-            ac_m = np.array(list(map(nynx,acn,ydal,xdal)))
-        
-        return ac_m
 
     
     def aLScell(self,cl):
@@ -884,15 +371,6 @@ class MassWastingRouter(Component):
         
         return group
         
-    
-    # def DownslopeCells(self,group):
-    #     '''
-    #     determines cells downslope of mass wasting unit and upslope of nearest channel
-    #     '''
-        
-    
-    
-    ##Use above functions to clump groups of cells into mass wasting units
     
     def _MassWastingExtent(self):
         '''
@@ -1060,17 +538,7 @@ class MassWastingRouter(Component):
                 loc.append(int(row['cell']))
                 dist.append((self.xdif[int(row['cell'])]**2+self.ydif[int(row['cell'])]**2)**.5)
                 
-                # TO DO add user input that specifies distance based on Crominas, 1996.
-                # Need elevation of highest landslide cell and channel at base of shortest
-                # hillslope path
-                # V = row['vol [m^3]'] 
-                # el = row['elevation [m]']
-                # H = el - self.minZ
-                # A = .866#5#.866
-                # B = -.1#-.2
-                # MaxD = 1000#H/(A*V**B) #max distance based on Crominas, 1996
-                # volslide = V
-                
+               
                 
                 #list of conditionals
                 cond = [lambda x: DistT>x[0] and SlopeT<x[1], 
@@ -1124,81 +592,16 @@ class MassWastingRouter(Component):
         # return Locd,Disd,Dist
 
 
-    def _RasterOutputToLink(self):
-        '''
-        convert output of MassWastingRunout from raster grid coordinates to a
-        location on the network model grid
-        Locd: Landslide run out path - dictionary that contains a list of the raster grid cell numbers included in the run out path of each landslide
-        LS_df: Landslide catalogue for watershed that includes volume of landslide
-        
-        '''
-           
-        #for each deposit, find closest link cell, record link, link cell and offset from original raster model cell
-        if len(self.Locd) == 0:
-            dep = []
-            parcelDF = pd.DataFrame([])
-        Lmwlink = []
-        for h, val in enumerate(OrderedDict(self.Locd)): #for each runout path
-            dep = self.Locd[h][-1] # deposition location node: last value in runout path
-            
-            depXY = [self.gridx[dep],self.gridy[dep]] #deposition location x and y coordinate
-            
-            #search cells of links to find closest link grid
-            
-            #compute distance between deposit and all network cells
-            def Distance(row):
-                return ((row['x']-depXY[0])**2+(row['y']-depXY[1])**2)**.5
-            
-            nmg_dist = self.xyDf.apply(Distance,axis=1)
-            
-            offset = nmg_dist.min()
-            mdn = self.xyDf[nmg_dist == offset] #minimum distance node
-            
-            
-            #find link that contains raster grid cell
-            
-            search = mdn['node'].iloc[0] #node number, first value if more than one grid cell is min dist from debris flow
-            for i, sublist in enumerate(self.Lnodelist): #for each list of nodes (corresponding to each link i) 
-                if search in sublist: #if node is in list, then 
-                    link_n = sublist#Lnodelist[i]
-                    en = link_n.index(search)
-                    link_d = self.Ldistlist[i]
-                    ld = link_d[en]
-                    linkID = i
-                    break #for now use the first link found - later, CHANGE this to use largest order channel
-            
-            mwlink = OrderedDict({'mw_unit':h,'vol [m^3]':self.LS_df['vol [m^3]'][h],'raster_grid_cell_#':dep,'link_#':linkID,'link_cell_#':search,'raster_grid_to_link_offset [m]':offset,'link_downstream_distance [m]':ld})
-            
-            Lmwlink.append(mwlink)
-        
-        parcelDF = pd.DataFrame(Lmwlink)
-        
-            #(2) determine deposition location on reach - ratio of distance from inlet to deposition location in link to length of link
-        def LDistanceRatio(row):
-            return row['link_downstream_distance [m]']/self.linklength[int(row['link_#'])] 
-        
-        # print(parcelDF)
-        pLinkDistanceRatio = parcelDF.apply(LDistanceRatio,axis=1)
-        pLinkDistanceRatio.name = 'link_downstream_distance'
-        
-        parcelDF = pd.concat([parcelDF,pLinkDistanceRatio],axis=1)
-        
-        self.parcelDF = parcelDF
-        
-        # return dep, nodelist, parcelDF, Lnodelist
-
-
-
     def _MassWastingScourAndDeposition(self):
         # print('self._time_idx is: '+str(self._time_idx))
         # save data for plots
         # if self._time_idx == 1:
-        SavePlot = True
+        SavePlot = False
         # else:
         #     SavePlot = False
             
         self.DFcells = {}
-        self.RunoutPlotInterval = 2
+        self.RunoutPlotInterval = 5
         
         # depostion
         slpc = 0.1# critical slope at which debris flow stops
@@ -1207,7 +610,11 @@ class MassWastingRouter(Component):
         # release parameters for landslide
         nps = 8 # number of pulses, list for each landslide
         nid = 5 # delay between pulses (iterations), list for each landslide
-                
+        
+        # max erosion depth per perception coefficient
+        dc = 0.02
+        
+        
         if self.LS_df.empty is True:
             print('no debris flows to route')
         else:
@@ -1219,7 +626,7 @@ class MassWastingRouter(Component):
             
             # ivL and innL can be a list of values. For each value in list:
             for i,inn in enumerate(innL):
-                print(i)
+                # print(i)
                 cL[i] = []
                 
                 # # release parameters for landslide
@@ -1250,6 +657,8 @@ class MassWastingRouter(Component):
                 c2=0
                 arn = rni
                 arv = rvi
+                cs = 1.5e-5
+                enL = []
                 while len(arn)>0:# or c <300:
             
                     
@@ -1271,8 +680,7 @@ class MassWastingRouter(Component):
                     # print(arn)
                     for n in np.unique(arn):
                         n = int(n)
-                        # 
-                        dmx = self.dem_dz_cumulative[n]+self.Soil_h[n]
+                        
                         # slope at cell (use highes slope)
                         slpn = self._grid.at_node['topographic__steepest_slope'][n].max()
                         
@@ -1283,12 +691,31 @@ class MassWastingRouter(Component):
                         # since using volume (rather than volume/dx), L is (1-(slpn/slpc)**2) 
                         # rather than mg.dx/(1-(slpn/slpc)**2)           
                         Lnum = np.max([(1-(slpn/slpc)**2),0])
-                        dpd = vin*Lnum # deposition
                         
-                        #determine erosion volume (function of slope)
-                        er = dmx-dmx*Lnum
+                        # deposition volume
+                        df_depth = vin/(self._grid.dx*self._grid.dx) #df depth
                         
+                        dpd = vin*Lnum # deposition volume
                         
+                        # max erosion depth
+                        # dmx = dc*self._grid.at_node['soil__thickness'][n]
+                        
+                        # determine erosion volume (function of slope)
+                        # change this to be a function of preciption depth
+                        # er = (dmx-dmx*Lnum)*self.dx*self.dy
+                        
+                        T_df = 1700*9.81*df_depth*slpn # shear stress from df
+                        
+                                    # max erosion depth equals regolith (soil) thickness
+                        dmx = self._grid.at_node['soil__thickness'][n]
+                        
+                        # erosion depth: 
+                        er = min(dmx, cs*T_df)
+                        
+                        enL.append(er)
+                        
+                        # erosion volume
+                        ev = er*self._grid.dx*self._grid.dy
                         # volumetric balance at cell
                         
                         # determine volume sent to downslope cells
@@ -1305,17 +732,24 @@ class MassWastingRouter(Component):
                             deta = (dpd)/(self.dx*self.dy) # (deposition)/cell area
             
                         else:
-                            vo = vin-dpd+er # vol out = vol in - vol deposited + vol eroded
+                            vo = vin-dpd+ev # vol out = vol in - vol deposited + vol eroded
                             
                             # determine change in cell height
-                            deta = (dpd-er)/(self.dx*self.dy) # (deposition-erosion)/cell area
+                            deta = (dpd-ev)/(self.dx*self.dy) # (deposition-erosion)/cell area
             
                         # print(deta)
-                        # update raster model grid
+                        # update raster model grid regolith thickness and dem elevation
+
+                        # if deta larger than regolith thickness, deta equals regolith thickness (fresh bedrock is not eroded)
+                        if self._grid.at_node['soil__thickness'][n]+deta <0:
+                            deta = - self._grid.at_node['soil__thickness'][n]    
+                        
+                        # Regolith - difference between the fresh bedrock surface and the top surface of the dem
+                        self._grid.at_node['soil__thickness'][n] = self._grid.at_node['soil__thickness'][n]+deta                         
+
+                        # Topographic elevation - top surface of the dem
                         self._grid.at_node['topographic__elevation'][n] = self._grid.at_node['topographic__elevation'][n]+deta
-                        # print(mg.at_node['topographic__elevation'][n])
-                
-                
+                                                       
                         # build list of receiving nodes and receiving volumes for next iteration        
                 
                         # material stops at node if transport volume is 0 OR node is a 
@@ -1341,8 +775,7 @@ class MassWastingRouter(Component):
                             arn_ns =np.concatenate((arn_ns,rn), axis = 0) # next step receiving node list
                             arv_ns = np.concatenate((arv_ns,rv), axis = 0) # next steip receiving node incoming volume list
                             
-            
-                        
+                                    
                     # once all cells in iteration have been evaluated, temporary receiving
                     # node and node volume arrays become arrays for next iteration
                     arn = arn_ns
@@ -1354,9 +787,7 @@ class MassWastingRouter(Component):
                                     partition_method = 'slope')
                     fd.run_one_step()
                     
-                    
-    
-                    
+                                            
                     if c%self.RunoutPlotInterval == 0:
                         cL[i].append(c)
                         
@@ -1385,10 +816,10 @@ class MassWastingRouter(Component):
         self.DFcells_dict[self._time_idx] = self.DFcells
                    
     
-    def _TimeSinceDisturbance(self,dt):
+    def _TimeSinceDisturbance(self, dt):
         '''
-        All cells move foward amount dt years
-        
+        Years since a cell was disturbed advance in time increases period of 
+        time since the storm event and the last storm event (ts_n - ts_n-1)
         if landslides, time since disturbance in any cell that has a change 
         in elevation caused by the debris flows is set to 0 (fluvial erosion does not count)
 
@@ -1415,55 +846,124 @@ class MassWastingRouter(Component):
         of sediment is determined independently of flow magnitude
         '''
         # change in dpeth less than this is ignored
-        dmin = 0.01
+        # dmin = 0.1
             
         # rnodes = self._grid.nodes.reshape(mg.shape[0]*mg.shape[1]) # reshame mg.nodes into 1d array
         
-        # disturbance (dz>0) mask
-        DistMask = np.abs(self.dem_mw_dzdt) >dmin # deposit/scour during last debris flow was greater than threhsold value. 
+
         
-        if np.any(np.abs(self.dem_mw_dzdt) > dmin): # if there are no disturbed cells 
-            self.NewDistNodes = self.rnodes[DistMask]
+        if np.any(np.abs(self.dem_mw_dzdt) > 0): # if there are no disturbed cells
+            
+            
+            if shear_stress_erosion:
+                DistMask = self.dem_mw_dzdt > 0
+        
+        
+            if time_dependent_erosion:
+            # disturbance (dz>0) mask
+            DistMask = np.abs(self.dem_mw_dzdt) > 0 # deposit/scour during last debris flow was greater than threhsold value. 
+            self.NewDistNodes = self.rnodes[DistMask] # all node ids that have disturbance larger than minimum value
             
             #new deposit and scour cell ids are appeneded to list of disturbed cells
-            self.DistNodes = np.unique(np.concatenate((self.DistNodes,self.rnodes[DistMask]))).astype(int)
+            self.DistNodes = np.unique(np.concatenate((self.DistNodes,self.rnodes[DistMask]))).astype(int)            
+            FERateC  = self.FluvialErosionRate[self.DistNodes] # fluvial erosion rate coefficients 
+            cnd_msk = FERateC[:,0] > 0 # channel nodes only mask, no ersion applied to hillslope nodes
+            self.FERateC = FERateC[cnd_msk] # coefficients of erosion function for channel nodes
             
-            FERateC  = self.FluvialErosionRate[self.DistNodes] 
-        
-            # remove cells that do not fluvially erode (hillslope nodes)
-            self.FENodes = self.DistNodes[FERateC[:,0] > 0] 
-            FERateC = np.stack(FERateC[FERateC[:,0] > 0])
+            self.FENodes = self.DistNodes[cnd_msk] 
+            print('no disturbed cells')
             
-            if len(self.FENodes) !=0:# if there are no disturbed channel cells 
-                # determine erosion depth
+        if len(self.FENodes)>0:
+            
+            FERateCs = np.stack(self.FERateC) # change format
+            # determine erosion depth
+
+            
+            # time since distubrance [years]
+            YSD = self.years_since_disturbance[self.FENodes]
+            
+            # fluvial erosion rate (depth for storm) = a*x**b, x is time since distubrance #TODO: apply this to terrace cells only
+            FED = FERateCs[:,0]*YSD**FERateCs[:,1]
+            
+            # force cells that have not been disturbed longer than ___ years to have no erosion
+            # FED[YSD>3] = 0
+
+            # Where FED larger than regolith thickness, FED equals regolith thickness (fresh bedrock is not eroded)
+            MxErMask = self._grid.at_node['soil__thickness'][self.FENodes]< FED
+            FED[MxErMask] = self._grid.at_node['soil__thickness'][self.FENodes][MxErMask]
+            
+            # update regolith depth : 
+            self._grid.at_node['soil__thickness'][self.FENodes] = self._grid.at_node['soil__thickness'][self.FENodes]-FED
+
+            # update dem       
+            self._grid.at_node['topographic__elevation'][self.FENodes] = self._grid.at_node['topographic__elevation'][self.FENodes]-FED
+            
+
+            # TODO make new erosion function for channel cells that erodes as a function of flow shear stress
+            # FED
+            
+            # apply criteria erosion can't exceed maximum, i.e., regolith depth
+            # FED[FED>FEDmax] = FEDmax[FED>FEDmax]
+            
+            # apply minimum depth conditional
+            # FEDMask = np.abs(FED) > dmin # scour depth during storm must be greater than threhsold value. 
+            # FED = FED[FEDMask]
+            
+            ###TODO - create parcel aggregator - combines erosion depth into a single parcel equal to the minium parcel size (depth)
+            ### deposits parcels at node locationn closest to center of deposits
+            
+            
+            self.FED_all[self._time_idx] = FED
+            self.FENodes_all[self._time_idx] = self.FENodes
+            
+            FED_ag = []
+            FENodes_ag = []
+            c = 0 # advance through FED using counter c
+            while c < len(FED):
+                d = FED[c]
+                if d < self.min_d:
+                    dsum = d
+                    ag_node_L = [] # list of nodes aggregated into one parcel
+                    while dsum < self.min_d:
+                        dsum = dsum+d # add depth of nodes
+                        ag_node_L.append(self.FENodes[c])  #add node to list of nodes in parcel
+                        c+=1
+                        if c >= len(FED):
+                            break
+                else:
+                    ag_node_L = [self.FENodes[c]] 
+                    dsum = d
+                    c+=1
                 
-                # max fluvial erosion depth (same as max fluvial erosion depthj)
-                FEDmax = self.dem_dz_cumulative[self.FENodes]+self._grid.at_node['soil__thickness'][self.FENodes] # deposition since initial dem + soil depth 
-                
-                # erosion rate in router is not tied to soil depth and may be less than zero, set to zero if that is the case
-                FEDmax[FEDmax<0] = 0
-                
-                # time since distubrance [years]
-                YSD = self.years_since_disturbance[self.FENodes]
-                
-                # fluvial erosion rate (depth for storm) = a*x**b, x is time since distubrance #TODO: apply this to terrace cells only
-                FED = FERateC[:,0]*YSD**FERateC[:,1]
-                
-                # TODO make new erosion function for channel cells that erodes as a function of flow shear stress
-                # FED
-                
-                self.FED = FED
-                self.FEDmax = FEDmax
-                
-                # apply criteria erosion can't exceed maxim
-                FED[FED>FEDmax] = FEDmax[FED>FEDmax]
-                
-                # convert depth to volume        
-                self.FEV = FED*self._grid.dx*self._grid.dx
+                FED_ag.append(dsum) # cumulative depth in each aggregated parcel (will be greater than d_min)
+                FENodes_ag.append(ag_node_L[-1]) # the last node in the list is designated as the deposition node
+            
+            self.FED = np.array(FED_ag)
+            self.FENodes = np.array(FENodes_ag)
+
+
+            self.FED = FED#np.array(FED_ag)
+            self.FENodes = self.FENodes#np.array(FENodes_ag)
+            
+            
+            # self.FEDMask = FEDMask
+            # self.FENodes = self.FENodes[FEDMask]
+
+            # store as class variable
+            # self.FED = FED
+            # self.FEDmax = FEDmax
+            
+            # convert depth to volume        
+            self.FEV = FED*self._grid.dx*self._grid.dx
+            
+            # TODO SUBTRACT FED FROM DEM
+            
+            
         else:
             print('no disturbed cells to fluvially erode')
             self.FENodes = np.array([])
         
+
         # print(self.FEV)
         # print(self.FENodes)
         # return (FENodes, FEV)
@@ -1475,58 +975,65 @@ class MassWastingRouter(Component):
         from the list of cell locations of the pulse and the volume of the pulse, 
         convert to a dataframe of pulses (ParcelDF) that is the input for pulser
         '''
-    
+        
+        def LDistanceRatio(row):
+            '''
+            # determine deposition location on reach - ratio of distance from 
+              inlet to deposition location in link to length of link
+
+            '''
+            return row['link_downstream_distance [m]']/self.linklength[int(row['link_#'])] 
+        
         if len(self.FENodes) == 0:
             FEDn = []
             parcelDF = pd.DataFrame([])
-        Lmwlink = []
-        for h, FEDn in enumerate(self.FENodes): #for each cell deposit
-            
-            depXY = [self._grid.node_x[FEDn],self._grid.node_y[FEDn]] #deposition location x and y coordinate
-            
-            #search cells of links to find closest link grid
+            self.parcelDF = parcelDF
+
         
-    
-            #compute distance between deposit and all network cells
-            def Distance(row):
-                return ((row['x']-depXY[0])**2+(row['y']-depXY[1])**2)**.5
+        else:
+            Lmwlink = []            
+            for h, FEDn in enumerate(self.FENodes): #for each cell deposit
             
-            nmg_dist = self.xyDf.apply(Distance,axis=1)
+                depXY = [self._grid.node_x[FEDn],self._grid.node_y[FEDn]] #deposition location x and y coordinate
+                
+                #search cells of links to find closest link grid
             
-            offset = nmg_dist.min()
-            mdn = self.xyDf[nmg_dist == offset] #minimum distance node
-            
-            
-            #find link that contains raster grid cell
-            
-            search = mdn['node'].iloc[0] #node number, first value if more than one grid cell is min dist from debris flow
-            for i, sublist in enumerate(self.Lnodelist): #for each list of nodes (corresponding to each link i) 
-                if search in sublist: #if node is in list, then 
-                    link_n = sublist#Lnodelist[i]
-                    en = link_n.index(search)
-                    link_d = self.Ldistlist[i]
-                    ld = link_d[en]
-                    linkID = i
-                    break #for now use the first link found - later, CHANGE this to use largest order channel
-            
-            mwlink = OrderedDict({'mw_unit':h,'vol [m^3]':self.FEV[h],'raster_grid_cell_#':FEDn,'link_#':linkID,'link_cell_#':search,'raster_grid_to_link_offset [m]':offset,'link_downstream_distance [m]':ld})
-            
-            Lmwlink.append(mwlink)
         
-        parcelDF = pd.DataFrame(Lmwlink)
+                #compute distance between deposit and all network cells
+                def Distance(row):
+                    return ((row['x']-depXY[0])**2+(row['y']-depXY[1])**2)**.5
+                
+                nmg_dist = self.xyDf.apply(Distance,axis=1)
+                
+                offset = nmg_dist.min()
+                mdn = self.xyDf[nmg_dist == offset] #minimum distance node
+                
+                
+                #find link that contains raster grid cell
+                
+                search = mdn['node'].iloc[0] #node number, first value if more than one grid cell is min dist from debris flow
+                for i, sublist in enumerate(self.Lnodelist): #for each list of nodes (corresponding to each link i) 
+                    if search in sublist: #if node is in list, then 
+                        link_n = sublist#Lnodelist[i]
+                        en = link_n.index(search)
+                        link_d = self.Ldistlist[i]
+                        ld = link_d[en]
+                        linkID = i
+                        mwlink = OrderedDict({'mw_unit':h,'vol [m^3]':self.FEV[h],'raster_grid_cell_#':FEDn,'link_#':linkID,'link_cell_#':search,'raster_grid_to_link_offset [m]':offset,'link_downstream_distance [m]':ld})
+                        Lmwlink.append(mwlink)
+                        break #for now use the first link found - later, CHANGE this to use largest order channel
+                    else:
+                        if i ==  len(self.Lnodelist):
+                            print(' DID NOT FIND A LINK NODE THAT MATCHES THE DEPOSIT NODE ')
+
+                
+            parcelDF = pd.DataFrame(Lmwlink)
+            pLinkDistanceRatio = parcelDF.apply(LDistanceRatio,axis=1)
+            pLinkDistanceRatio.name = 'link_downstream_distance'        
+            self.parcelDF = pd.concat([parcelDF,pLinkDistanceRatio],axis=1)            
         
         
-        #(2) determine deposition location on reach - ratio of distance from inlet to deposition location in link to length of link
         
-        
-        def LDistanceRatio(row):
-            return row['link_downstream_distance [m]']/self.linklength[int(row['link_#'])] 
-        
-        # print(parcelDF)
-        pLinkDistanceRatio = parcelDF.apply(LDistanceRatio,axis=1)
-        pLinkDistanceRatio.name = 'link_downstream_distance'
-        
-        self.parcelDF = pd.concat([parcelDF,pLinkDistanceRatio],axis=1)
         self.parcelDF_dict[self._time_idx] = self.parcelDF.copy() # save a copy of each pulse
 
 
@@ -1558,9 +1065,18 @@ class MassWastingRouter(Component):
             self._grid.delete_field(loc = 'node', name = 'flow__receiver_proportions') # not needed?
         except:
             None
+        
         # run flow director, add slope and receiving node fields
+        # re-compute slope and flow directions
+        # sfb = SinkFillerBarnes(self._grid,'topographic__elevation', method='D8',fill_flat = False, 
+        #                        ignore_overfill = False)
+        # sfb.run_one_step()
+        
         fr = FlowAccumulator(self._grid,'topographic__elevation',flow_director='D8')
         fr.run_one_step()
+        
+        df_4 = DepressionFinderAndRouter(self._grid)
+        df_4.map_depressions()
 
     def run_one_step(self, dt):
         """Run MassWastingRouter forward in time.
@@ -1589,10 +1105,6 @@ class MassWastingRouter(Component):
 
 
         """
-
-
-        self._time += dt  # update mass wasting router time
-        self._time_idx += 1  # update time index
         self.mwprob = self.grid.at_node['MW__probability'] #  update mw probability variable
         self.hmwprob = self.grid.at_node['high__MW_probability']  #update boolean landslide field
         self._extractLSCells()
@@ -1608,12 +1120,13 @@ class MassWastingRouter(Component):
                 self._MassWastingRunout()
                 print('masswastingrounout')
                 # convert mass wasting deposit location and attributes to parcel attributes  
-                self._RasterOutputToLink()
+                self._parcelDFmaker()
                 print('rasteroutputtolink')
         
             else:
                 self.parcelDF = pd.DataFrame([])
                 print('No landslides to route this time step, checking for terrace deposits')
+        
         if self._method == 'ScourAndDeposition':
 
             if self._this_timesteps_landslides.any():
@@ -1640,9 +1153,12 @@ class MassWastingRouter(Component):
             # convert list of cells and volumes to a dataframe compatiable with
             # the sediment pulser utility
             self._parcelDFmaker()
+                        
             # re-run d8flowdirector for clumping and distance computations
             self._d8flowdirector()
+            print('reset flow directions to d8')
         
- 
+        self._time += dt  # cumulative modeling time (not time or time stamp)
+        self._time_idx += 1  # update iteration index 
             
             # terrace eroder

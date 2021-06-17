@@ -9,6 +9,7 @@ Created on Thu May  2 17:36:00 2019
           add parameter for using different router and option to have no terrace cells (for models with larger grid cells)
           clean up doc strings and comments
           tests (review Datacamp class), submittal to LANDLAB
+          debris flow erosion model that accounts for available regolith thickness
           
 
     WISH LIST  
@@ -19,23 +20,17 @@ Created on Thu May  2 17:36:00 2019
 
 """
 
-
+import os as os
 import numpy as np
 import pandas as pd
 from collections import OrderedDict
 import matplotlib.pyplot as plt
 
 from landlab import Component, FieldError
-from landlab.components import (FlowDirectorMFD, FlowAccumulator, 
-SinkFillerBarnes, DepressionFinderAndRouter)
+from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFinderAndRouter,FlowDirectorSteepest)
+from landlab import imshow_grid, imshow_grid_at_node
 
-from landlab import imshow_grid
-from landlab import imshow_grid_at_node
-
-import os as os
-
-os.chdir('C:/Users/keckj/Documents/GitHub/code/landlab/') # remove this line once code is placed in landlab
-from mass_wasting_router.grid_t_tools import GridTTools
+from landlab.utils.grid_t_tools import GridTTools
 
 
 class MassWastingRouter(GridTTools):
@@ -44,7 +39,17 @@ class MassWastingRouter(GridTTools):
 
     Parameters
     ----------
+    grid: ModelGrid 
+        Landlab Model Grid object with node fields: topographic__elevation, flow_reciever node, masswasting_nodes
+    nmgrid: NetworkModelGrid
+        Landlab Network Model Grid object
 
+    
+    -future Parameters-
+    movement_type: string
+        defines model used for clumping
+    material_type: string
+        defines model used for clumping
 
     
     Construction:
@@ -113,7 +118,7 @@ class MassWastingRouter(GridTTools):
             FluvialErosionRate = [[0.03,-0.43], [0.01,-0.43]],
             probability_threshold = 0.75,
             min_mw_cells = 1,
-            mass_wasting_type='debrisflow', # use these to use a pre-set set of parameters for router
+            parcel_volume = 0.2, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
             **kwds):
         
         """
@@ -143,7 +148,8 @@ class MassWastingRouter(GridTTools):
         """
         
         # call __init__ from parent classes
-        super().__init__(grid, nmgrid, Ct, BCt, MW_to_channel_threshold, PartOfChannel_buffer, TerraceWidth)
+        super().__init__(grid, nmgrid, Ct, BCt, MW_to_channel_threshold, 
+                         PartOfChannel_buffer, TerraceWidth)
                
 
         #   landslide probability
@@ -210,12 +216,16 @@ class MassWastingRouter(GridTTools):
         
         self.ErRate = 0 # debris flow scour depth for simple runout model
         
+        # minimum parcel size (parcels smaller than this are aggregated into a single parcel this size)
+        self.parcel_volume = parcel_volume
+        
         # dictionaries of variables for each iteration, for plotting
-        self.DFcells_dict = {} # dictionary of all computational cells during the debris flow routing algorithm
-        self.parcelDF_dict = {} # dictionary of the parcel dataframe
+        self.DFcells_dict = {} # dictionary of all computational cells during the debris flow routing algorithm, runs only when runout function called
+        self.parcelDF_dict = {} # dictionary of the parcel dataframe, run each time _parcelDFmaker is called
         self.LS_df_dict = {}
         self.LSclump_dict = {}        
-        
+        self.FED_all = {}
+        self.FENodes_all = {}     
         
         #### Define the raster model grid representation of the network model grid
         out = self._LinktoNodes(linknodes = self.linknodes, 
@@ -229,10 +239,18 @@ class MassWastingRouter(GridTTools):
         ## define bedload and debris flow channel nodes       
         ## channel
         self._ChannelNodes()        
+        
         ## terrace
         self._TerraceNodes()
+        
         ## define fluvial erosion rates of channel and terrace nodes (no fluvial erosion on hillslopes)
         self._DefineErosionRates()
+        
+        ## create the nmg to rmg node mapper
+        self._NMG_node_to_RMG_node_mapper()
+        
+        ## define nmg node elevation based on rmg channel nodes
+        self._update_NMG_nodes()
         
         
         ### create initial values
@@ -247,11 +265,12 @@ class MassWastingRouter(GridTTools):
     
     def _DefineErosionRates(self):
         '''
-        sets the erosion rate of the terrace and channel cells.
+        defines the coefficient and exponent of a negative power function that
+        predicts fluvial erosion rate per storm [L/storm] as a funciton of time 
+        since the last disturbance. 
         
-        channel cells include the debris flow channels.
-        
-        terrace nodes are all nodes adjacent to the bedload channel cells.
+        function is defined for all channel nodes, including the debris flow channel
+        nodes. 
         
         Erosion rate is specified as the parameters of a negative power function       
         that predicts fluvial erosion rate [m/storm] relative to time since 
@@ -495,7 +514,7 @@ class MassWastingRouter(GridTTools):
         self.LS_df = LS_df
         self.LSclump = LSclump
         self.LS_df_dict[self._time_idx] = LS_df.copy()
-        self.LSclump_dict[self._time_idx] = LSclump.copy()        
+        self.LSclump_dict[self._time_idx] = LSclump.copy(); print('SAVED A CLUMP')     
         # return groupALS_l,LSclump,LS_df #clumps around a single cell, clumps for each landslide, summary of landslide
 
 
@@ -600,13 +619,17 @@ class MassWastingRouter(GridTTools):
         # release parameters for landslide
         nps = 8 # number of pulses, list for each landslide
         nid = 5 # delay between pulses (iterations), list for each landslide
-                
+        
+        # max erosion depth per perception coefficient
+        dc = 0.02
+        
+        
         if self.LS_df.empty is True:
             print('no debris flows to route')
         else:
             
-            ivL = self.LS_df['vol [m^3]'][0::2].values.astype('int')
-            innL = self.LS_df['cell'][0::2].values.astype('int')       
+            ivL = self.LS_df['vol [m^3]'][0::1].values.astype('int')
+            innL = self.LS_df['cell'][0::1].values.astype('int')       
         
             cL = {}
             
@@ -643,6 +666,8 @@ class MassWastingRouter(GridTTools):
                 c2=0
                 arn = rni
                 arv = rvi
+                cs = 1.5e-5
+                enL = []
                 while len(arn)>0:# or c <300:
             
                     
@@ -664,8 +689,7 @@ class MassWastingRouter(GridTTools):
                     # print(arn)
                     for n in np.unique(arn):
                         n = int(n)
-                        # 
-                        dmx = self.dem_dz_cumulative[n]+self.Soil_h[n]
+                        
                         # slope at cell (use highes slope)
                         slpn = self._grid.at_node['topographic__steepest_slope'][n].max()
                         
@@ -676,12 +700,31 @@ class MassWastingRouter(GridTTools):
                         # since using volume (rather than volume/dx), L is (1-(slpn/slpc)**2) 
                         # rather than mg.dx/(1-(slpn/slpc)**2)           
                         Lnum = np.max([(1-(slpn/slpc)**2),0])
-                        dpd = vin*Lnum # deposition
                         
-                        #determine erosion volume (function of slope)
-                        er = dmx-dmx*Lnum
+                        # deposition volume
+                        df_depth = vin/(self._grid.dx*self._grid.dx) #df depth
                         
+                        dpd = vin*Lnum # deposition volume
                         
+                        # max erosion depth
+                        # dmx = dc*self._grid.at_node['soil__thickness'][n]
+                        
+                        # determine erosion volume (function of slope)
+                        # change this to be a function of preciption depth
+                        # er = (dmx-dmx*Lnum)*self.dx*self.dy
+                        
+                        T_df = 1700*9.81*df_depth*slpn # shear stress from df
+                        
+                                    # max erosion depth equals regolith (soil) thickness
+                        dmx = self._grid.at_node['soil__thickness'][n]
+                        
+                        # erosion depth: 
+                        er = min(dmx, cs*T_df)
+                        
+                        enL.append(er)
+                        
+                        # erosion volume
+                        ev = er*self._grid.dx*self._grid.dy
                         # volumetric balance at cell
                         
                         # determine volume sent to downslope cells
@@ -698,17 +741,24 @@ class MassWastingRouter(GridTTools):
                             deta = (dpd)/(self.dx*self.dy) # (deposition)/cell area
             
                         else:
-                            vo = vin-dpd+er # vol out = vol in - vol deposited + vol eroded
+                            vo = vin-dpd+ev # vol out = vol in - vol deposited + vol eroded
                             
                             # determine change in cell height
-                            deta = (dpd-er)/(self.dx*self.dy) # (deposition-erosion)/cell area
+                            deta = (dpd-ev)/(self.dx*self.dy) # (deposition-erosion)/cell area
             
                         # print(deta)
-                        # update raster model grid
+                        # update raster model grid regolith thickness and dem elevation
+
+                        # if deta larger than regolith thickness, deta equals regolith thickness (fresh bedrock is not eroded)
+                        if self._grid.at_node['soil__thickness'][n]+deta <0:
+                            deta = - self._grid.at_node['soil__thickness'][n]    
+                        
+                        # Regolith - difference between the fresh bedrock surface and the top surface of the dem
+                        self._grid.at_node['soil__thickness'][n] = self._grid.at_node['soil__thickness'][n]+deta                         
+
+                        # Topographic elevation - top surface of the dem
                         self._grid.at_node['topographic__elevation'][n] = self._grid.at_node['topographic__elevation'][n]+deta
-                        # print(mg.at_node['topographic__elevation'][n])
-                
-                
+                                                       
                         # build list of receiving nodes and receiving volumes for next iteration        
                 
                         # material stops at node if transport volume is 0 OR node is a 
@@ -734,8 +784,7 @@ class MassWastingRouter(GridTTools):
                             arn_ns =np.concatenate((arn_ns,rn), axis = 0) # next step receiving node list
                             arv_ns = np.concatenate((arv_ns,rv), axis = 0) # next steip receiving node incoming volume list
                             
-            
-                        
+                                    
                     # once all cells in iteration have been evaluated, temporary receiving
                     # node and node volume arrays become arrays for next iteration
                     arn = arn_ns
@@ -747,9 +796,7 @@ class MassWastingRouter(GridTTools):
                                     partition_method = 'slope')
                     fd.run_one_step()
                     
-                    
-    
-                    
+                                            
                     if c%self.RunoutPlotInterval == 0:
                         cL[i].append(c)
                         
@@ -771,17 +818,29 @@ class MassWastingRouter(GridTTools):
                     # print(c)
                     # print(c2)
                
-        # determine change in dem caused by mass wasting since last time step (fluvial erosion is not counted)
-        self.dem_mw_dzdt = self._grid.at_node['topographic__elevation'] - self.dem_previous_time_step
-        print('max change dem')
-        print(self.dem_mw_dzdt.max())
+
         self.DFcells_dict[self._time_idx] = self.DFcells
                    
     
-    def _TimeSinceDisturbance(self,dt):
+    def _dem_dz(self):
         '''
-        All cells move foward amount dt years
+        determine change in dem since the last time step
+
+        Returns
+        -------
+        None.
+
+        '''
         
+        self.dem_mw_dzdt = self._grid.at_node['topographic__elevation'] - self.dem_previous_time_step
+        # print('max change dem due to debris flows')
+        # print(self.dem_mw_dzdt.max())
+    
+    
+    def _TimeSinceDisturbance(self, dt):
+        '''
+        Years since a cell was disturbed advance in time increases period of 
+        time since the storm event and the last storm event (ts_n - ts_n-1)
         if landslides, time since disturbance in any cell that has a change 
         in elevation caused by the debris flows is set to 0 (fluvial erosion does not count)
 
@@ -794,7 +853,7 @@ class MassWastingRouter(GridTTools):
             self.years_since_disturbance[self.dem_mw_dzdt != 0] = 13/365 # 13 days selected to match max observed single day sediment transport following disturbance
               
     
-    def _FluvialErosion(self):
+    def _FluvialErosion(self, erosion_model = 'time'):
         '''
         determine pulse location based on the time since mw caused disturbance
         small changes in cell elevation are ignored
@@ -808,16 +867,23 @@ class MassWastingRouter(GridTTools):
         of sediment is determined independently of flow magnitude
         '''
         # change in dpeth less than this is ignored
-        dmin = 0.1
+        # dmin = 0.1
             
         # rnodes = self._grid.nodes.reshape(mg.shape[0]*mg.shape[1]) # reshame mg.nodes into 1d array
         
-
+        if erosion_model == 'shear_stress':
+            if np.any(self.dem_mw_dzdt > 0):
+                DistMask = self.dem_mw_dzdt > 0
+                self.FENodes = self.rnodes[DistMask]
+                self.FED = self.dem_mw_dzdt[DistMask] #change to this as maximum for shear stress based estimate
+                self.FEV = self.FED*self._grid.dx*self._grid.dx
+                
+        if erosion_model == 'time':
         
-        if np.any(np.abs(self.dem_mw_dzdt) > dmin): # if there are no disturbed cells
-            # disturbance (dz>0) mask
-            DistMask = np.abs(self.dem_mw_dzdt) > dmin # deposit/scour during last debris flow was greater than threhsold value. 
-            self.NewDistNodes = self.rnodes[DistMask]
+            # if np.any(np.abs(self.dem_mw_dzdt) > 0): # if there are no disturbed cells
+                # disturbance (dz>0) mask
+            DistMask = np.abs(self.dem_mw_dzdt) > 0 # deposit/scour during last debris flow was greater than threhsold value. 
+            self.NewDistNodes = self.rnodes[DistMask] # all node ids that have disturbance larger than minimum value
             
             #new deposit and scour cell ids are appeneded to list of disturbed cells
             self.DistNodes = np.unique(np.concatenate((self.DistNodes,self.rnodes[DistMask]))).astype(int)            
@@ -826,55 +892,91 @@ class MassWastingRouter(GridTTools):
             self.FERateC = FERateC[cnd_msk] # coefficients of erosion function for channel nodes
             
             self.FENodes = self.DistNodes[cnd_msk] 
-
-        if len(self.FENodes)>0:
-            
-            FERateCs = np.stack(self.FERateC) # change format
-            # determine erosion depth
-            
-            # max fluvial erosion depth (same as max fluvial erosion depthj)
-            FEDmax = self.dem_dz_cumulative[self.FENodes]+self._grid.at_node['soil__thickness'][self.FENodes] # deposition since initial dem + soil depth 
-            
-            # erosion rate in router is not tied to soil depth and may be less than zero, set to zero if that is the case
-            FEDmax[FEDmax<0] = 0
-            
-            # time since distubrance [years]
-            YSD = self.years_since_disturbance[self.FENodes]
-            
-            # fluvial erosion rate (depth for storm) = a*x**b, x is time since distubrance #TODO: apply this to terrace cells only
-            FED = FERateCs[:,0]*YSD**FERateCs[:,1]
-            
-            # TODO make new erosion function for channel cells that erodes as a function of flow shear stress
-            # FED
-            
-            # apply criteria erosion can't exceed maximum, i.e., regolith depth
-            FED[FED>FEDmax] = FEDmax[FED>FEDmax]
-            
-            # apply minimum depth conditional
-            FEDMask = np.abs(FED) > dmin # scour depth during storm must be greater than threhsold value. 
-            FED = FED[FEDMask]
-            self.FEDMask = FEDMask
-            self.FENodes = self.FENodes[FEDMask]
-
-            # store as class variable
-            self.FED = FED
-            self.FEDmax = FEDmax
-            
-            # convert depth to volume        
-            self.FEV = FED*self._grid.dx*self._grid.dx
-            
-            # TODO SUBTRACT FED FROM DEM
-            
-            
-        else:
-            print('no disturbed cells to fluvially erode')
-            self.FENodes = np.array([])
-        
-        # print(self.FEV)
-        # print(self.FENodes)
-        # return (FENodes, FEV)
-        
+            # print('no disturbed cells')
+                
+            if len(self.FENodes)>0:
+                
+                FERateCs = np.stack(self.FERateC) # change format
+                # determine erosion depth
     
+                
+                # time since distubrance [years]
+                self.YSD = self.years_since_disturbance[self.FENodes]
+                
+                # fluvial erosion rate (depth for storm) = a*x**b, x is time since distubrance #TODO: apply this to terrace cells only
+                self.FED = FERateCs[:,0]*self.YSD**FERateCs[:,1]
+                
+                # force cells that have not been disturbed longer than ___ years to have no erosion
+                # FED[YSD>3] = 0
+    
+                # Where FED larger than regolith thickness, FED equals regolith thickness (fresh bedrock is not eroded)
+                MxErMask = self._grid.at_node['soil__thickness'][self.FENodes]< self.FED
+                self.FED[MxErMask] = self._grid.at_node['soil__thickness'][self.FENodes][MxErMask]
+                
+                # update regolith depth : 
+                self._grid.at_node['soil__thickness'][self.FENodes] = self._grid.at_node['soil__thickness'][self.FENodes]-self.FED
+    
+                # update dem       
+                self._grid.at_node['topographic__elevation'][self.FENodes] = self._grid.at_node['topographic__elevation'][self.FENodes]-self.FED
+                
+          
+                self.FED_all[self._time_idx] = self.FED
+                self.FENodes_all[self._time_idx] = self.FENodes
+                
+                 
+                # convert depth to volume        
+                self.FEV = self.FED*self._grid.dx*self._grid.dx
+                
+            else:
+                print('no disturbed cells to fluvially erode')
+                self.FENodes = np.array([])
+            
+
+    
+    
+    def _parcelAggregator(self):
+        '''
+        reduces the number of parcels entered into a channel network by aggregating
+        parcels into larger parcels 
+        
+        TODO: make self.parcel_volume automatically determined based on a maxmum
+        number of parcels per iteration
+
+        Returns
+        -------
+        None.
+
+        '''
+        if len(self.FENodes)>0:
+            # aggregates parcels into
+            FEV_ag = []
+            FENodes_ag = []
+            c = 0 # advance through FED using counter c
+            while c < len(self.FEV):
+                v = self.FEV[c]
+                if v < self.parcel_volume:
+                    vsum = v
+                    ag_node_L = [] # list of nodes aggregated into one parcel
+                    while vsum < self.parcel_volume:
+                        vsum = vsum+v # add depth of nodes
+                        ag_node_L.append(self.FENodes[c])  #add node to list of nodes in parcel
+                        c+=1
+                        if c >= len(self.FEV):
+                            break
+                else:
+                    ag_node_L = [self.FENodes[c]] 
+                    vsum = v
+                    c+=1
+                
+                FEV_ag.append(vsum) # cumulative depth in each aggregated parcel (will be greater than d_min)
+                FENodes_ag.append(ag_node_L[-1]) # the last node in the list is designated as the deposition node
+            
+            self.FEV = np.array(FEV_ag)
+            self.FENodes = np.array(FENodes_ag)
+        else:
+            print('no disturbed cells to aggregate')
+         
+        
     
     def _parcelDFmaker(self):
         '''
@@ -943,6 +1045,26 @@ class MassWastingRouter(GridTTools):
         self.parcelDF_dict[self._time_idx] = self.parcelDF.copy() # save a copy of each pulse
 
 
+       
+    def _update_NMG_nodes(self):
+        '''
+        updates the elevation of the nmg nodes based on the closest channel rmg node
+        updates the link slopes based on the updated nmg node elevations
+
+        Returns
+        -------
+        None.
+
+        '''
+        
+        # update elevation
+        for i, node in enumerate(self.nmg_nodes):
+            RMG_node = self.NMGtoRMGnodeMapper[i]
+            self._nmgrid.at_node['topographic__elevation'][i] = self._grid.at_node['topographic__elevation'][RMG_node]
+        
+        # update slope
+        nmg_fd = FlowDirectorSteepest(self._nmgrid, "topographic__elevation")
+        nmg_fd.run_one_step()
         
     def _multidirectionflowdirector(self):
         '''
@@ -974,9 +1096,9 @@ class MassWastingRouter(GridTTools):
         
         # run flow director, add slope and receiving node fields
         # re-compute slope and flow directions
-        sfb = SinkFillerBarnes(self._grid,'topographic__elevation', method='D8',fill_flat = False, 
-                               ignore_overfill = False)
-        sfb.run_one_step()
+        # sfb = SinkFillerBarnes(self._grid,'topographic__elevation', method='D8',fill_flat = False, 
+        #                        ignore_overfill = False)
+        # sfb.run_one_step()
         
         fr = FlowAccumulator(self._grid,'topographic__elevation',flow_director='D8')
         fr.run_one_step()
@@ -1012,7 +1134,7 @@ class MassWastingRouter(GridTTools):
 
         """
         self.mwprob = self.grid.at_node['MW__probability'] #  update mw probability variable
-        self.hmwprob = self.grid.at_node['high__MW_probability']  #update boolean landslide field
+        # self.hmwprob = self.grid.at_node['high__MW_probability']  #update boolean landslide field
         self._extractLSCells()
 
         
@@ -1021,13 +1143,13 @@ class MassWastingRouter(GridTTools):
             
                 # determine extent of landslides
                 self._MassWastingExtent()
-                print('masswastingextent')            
+                # print('masswastingextent')            
                 # determine runout pathout
                 self._MassWastingRunout()
-                print('masswastingrounout')
+                # print('masswastingrounout')
                 # convert mass wasting deposit location and attributes to parcel attributes  
                 self._parcelDFmaker()
-                print('rasteroutputtolink')
+                # print('rasteroutputtolink')
         
             else:
                 self.parcelDF = pd.DataFrame([])
@@ -1040,31 +1162,55 @@ class MassWastingRouter(GridTTools):
                 # determine extent of landslides
                 self._MassWastingExtent()
                 print('masswastingextent')     
+                
                 # run multi-flow director needed for debris flow routing
                 self._multidirectionflowdirector()   
+                # print('multiflowdirection')
                 # route debris flows, update dem to account for scour and 
                 # deposition caused by debris flow and landslide processes
                 self._MassWastingScourAndDeposition()
-                print('scour and deposition') 
-            # determine time since each cell was disturbed
+                # print('scour and deposition')
+               
+                # subtract previous storm dem from this dem
+                self._dem_dz()
+                # print('dem differencing to determine mass-wasting deposition and scour zones')
+                
+                # update NMG node elevation
+                self._update_NMG_nodes()
+                # print('updated NMG node elevation')
+                
+                # reset landslide probability field
+                self._grid.at_node['MW__probability'] = np.zeros(self._grid.at_node['topographic__elevation'].shape[0])
+           
+            # determine time since each cell was disturbed by mass wasting process
             self._TimeSinceDisturbance(dt)
+            # print('determed time since last mass wasting disturbance')
             # fluvially erode any recently disturbed cells, create lists of 
             # cells and volume at each cell that enters the channel network
             self._FluvialErosion()
-            print('fluvial erosion')
+            # print('fluvial erosion')
+            
+            self._parcelAggregator()
+            # print('aggregating parcels')
+            
             # set dem as dem as dem representing the previous time timestep
             self.dem_previous_time_step = self._grid.at_node['topographic__elevation'].copy() # set previous time step elevation
+            
             # compute the cumulative vertical change of each grid cell
             self.dem_dz_cumulative = self._grid.at_node['topographic__elevation'] - self.dem_initial
+            
             # convert list of cells and volumes to a dataframe compatiable with
             # the sediment pulser utility
             self._parcelDFmaker()
                         
-            # re-run d8flowdirector for clumping and distance computations
+            # re-run d8flowdirector 
+            # (clumping and down-slope distance computations require d-8 flow direction)
             self._d8flowdirector()
-            print('reset flow directions to d8')
+            # print('reset flow directions to d8')
+            
+
         
         self._time += dt  # cumulative modeling time (not time or time stamp)
         self._time_idx += 1  # update iteration index 
             
-            # terrace eroder
+ 

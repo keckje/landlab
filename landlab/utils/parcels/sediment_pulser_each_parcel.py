@@ -129,11 +129,12 @@ class SedimentPulserTable(SedimentPulserBase):
             
             if SedimentPulseDF.empty == True: # if empty, pulser stops, returns the existing parcels, call stops
                 return self._parcels
+                print('PulserDF is EMPTY')
             
             variables, items = self._sediment_pulse_dataframe(time,  # create variabels and and items needed to create the data record
                 SedimentPulseDF,
                 point_pulse = True)
-               
+            print('created parcel dictionary')
         
         if self._parcels is None: # if no parcels, create parcels
             self._parcels = DataRecord(
@@ -143,9 +144,10 @@ class SedimentPulserTable(SedimentPulserBase):
                 data_vars=variables,
                 dummy_elements={"link": [_OUT_OF_NETWORK]},
             )
+            print('Parcels is NONE')
         else: # else use the add item method to add parcels
             self._parcels.add_item(time=[time], new_item=items, new_item_spec=variables)
-            
+            print('added parcels')
         return self._parcels
 
 
@@ -272,4 +274,6 @@ class SedimentPulserTable(SedimentPulserBase):
             "volume": (["item_id", "time"], new_volume),
         }
         
+        print('TOTAL PARCEL VOLUME ADDED THIS STEP')
+        print(np.nansum(new_volume))
         return variables,item_id

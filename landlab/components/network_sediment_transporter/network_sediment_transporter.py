@@ -813,7 +813,7 @@ class NetworkSedimentTransporter(Component):
         self._grid.at_link["sediment__active__volume"] = self._vol_act
         self._grid.at_link["sediment__active__sand_fraction"] = frac_sand
 
-    def _move_parcel_downstream(self, dt): #/jk/ this function should update the parcel velocity for each link, currently does not
+    def _move_parcel_downstream(self, dt): #/jk/ note, parcel velocity is updated when _calc_transport_wilcock_crowe is run in _run_one_step
         """Method to update parcel location for each parcel in the active
         layer.
         """

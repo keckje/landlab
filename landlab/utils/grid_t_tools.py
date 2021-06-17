@@ -9,11 +9,12 @@ from landlab import Component, FieldError
 import numpy as np
 import pandas as pd
 from collections import OrderedDict
+import scipy as sc
 
 
 class GridTTools(Component):    
     '''
-    base class for MWR and tools used for driving the MWR
+    base class for MWR and DHSVMtoLandlab
     
     set raster model grid and network model grid class variables
     
@@ -21,6 +22,7 @@ class GridTTools(Component):
     to the network model grid or vice versa 
     '''
 
+   
     def __init__(
             self, 
             grid,
@@ -30,22 +32,41 @@ class GridTTools(Component):
             MW_to_channel_threshold = 50,
             PartOfChannel_buffer = 10, # may not need this parameter
             TerraceWidth = 1,
-
             **kwds):
+        
+        # print('whhhhhhhhat')
+        super().__init__(grid)
+
+        if 'topographic__elevation' in grid.at_node:
+            self.dem = grid.at_node['topographic__elevation']
+        else:
+            raise FieldError(
+                'A topography is required as a component input!')
+        
+        #   flow receiver node
+        if 'flow__receiver_node' in grid.at_node:
+            self.frnode = grid.at_node['flow__receiver_node']
+        else:
+            raise FieldError(
+                'A flow__receiver_node field is required as a component input!')  
 
 
+        
         ### RM Grid characteristics
+        self.ncn = len(grid.core_nodes) # number core nodes
         self.gr = grid.shape[0] #number of rows
         self.gc = grid.shape[1] #number of columns
         self.dx = grid.dx #width of cell
         self.dy = grid.dy #height of cell
 
+        # receivers = self.frnode #receiver nodes (node that receives runoff from node) = self.frnode #receiver nodes (node that receives runoff from node)
+
         # nodes, reshaped in into m*n,1 array like other mg fields
         self.nodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1],1)
         self.rnodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1]) #nodes in single column array
                 
-        self.xdif = grid.node_x[receivers]-grid.node_x[self.rnodes] # change in x from node to receiver node
-        self.ydif = (grid.node_y[receivers]-grid.node_y[self.rnodes])*-1 #, change in y from node to receiver node...NOTE: flip direction of y axis so that up is positve
+        self.xdif = grid.node_x[self.frnode]-grid.node_x[self.rnodes] # change in x from node to receiver node
+        self.ydif = (grid.node_y[self.frnode]-grid.node_y[self.rnodes])*-1 #, change in y from node to receiver node...NOTE: flip direction of y axis so that up is positve
        
         # grid node coordinates, translated to origin of 0,0
         self.gridx = grid.node_x#-grid.node_x[0] 
@@ -58,40 +79,24 @@ class GridTTools(Component):
         self.ndys = self.gridy-self.dy/2
 
 
+
         ### NM Grid characteristics
         self._nmgrid = nmgrid
         # network model grid characteristics       
-        self.linknodes = self._nmgrid.nodes_at_link #links as ordered by read_shapefile       
+        self.linknodes = nmgrid.nodes_at_link #links as ordered by read_shapefile       
         # network model grid node coordinates, translated to origin of 0,0, used to map grid to nmg
-        self.nmgridx = self._nmgrid.x_of_node
-        self.nmgridy = self._nmgrid.y_of_node
+        self.nmgridx = nmgrid.x_of_node
+        self.nmgridy = nmgrid.y_of_node
         self.linklength = nmgrid.length_of_link 
+        self.nmg_nodes = nmgrid.nodes
         
+        ### Channel extraction parameters
         self.Ct = Ct # Channel initiation threshold [m2]   
-        self.MW_to_C_threshold = MW_to_channel_threshold # maximum distance [m] from channel for downslope clumping        
         self.POCbuffer = PartOfChannel_buffer # distance [m] from a channel cell that is considered part of the channel (used for determining distance between landslide and channel)
-
-
         self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
         self.TerraceWidth = TerraceWidth # distance from channel grid cells that are considered terrace grid cells [# cells] 
          
-
-        # out = self._LinktoNodes(linknodes = self.linknodes, 
-        #                         active_links = self._nmgrid.active_links,
-        #                         nmgx = self.nmgridx, nmgy = self.nmgridy)
-
-        # self.Lnodelist = out[0]
-        # self.Ldistlist = out[1]
-        # self.xyDf = pd.DataFrame(out[2])
-        
-        
-        
-        # ## define bedload and debris flow channel nodes       
-        # ## channel
-        # self._ChannelNodes()        
-        # ## terrace
-        # self._TerraceNodes()
-        
+      
 
     def _ChannelNodes(self):
         
@@ -99,7 +104,7 @@ class GridTTools(Component):
         ChannelNodeMask = self._grid.at_node['drainage_area'] > self.Ct
         df_x = self._grid.node_x[ChannelNodeMask]
         df_y = self._grid.node_y[ChannelNodeMask]
-        self.xyDf_d = pd.DataFrame({'x':df_x, 'y':df_y})
+        self.xyDf_df = pd.DataFrame({'x':df_x, 'y':df_y})
         self.ChannelNodes = self.rnodes[ChannelNodeMask] 
         
         # to top of bedload channels (~top cascade channels)
@@ -176,7 +181,7 @@ class GridTTools(Component):
             
                 
           
-           #match points along link (vals) with grid cells that coincide with link
+            #match points along link (vals) with grid cells that coincide with link
             
             nodelist = [] #list of nodes along link
             distlist = [] #list of distance along link corresponding to node
@@ -236,10 +241,11 @@ class GridTTools(Component):
                 LinkL.append(mdn)
             LinkMapL[i] = LinkL
             LinkMapper[i] = np.argmax(np.bincount(np.array(LinkL))) # dhsvm link that has most link ids in link list
-            print('nmg link '+ str(i)+' mapped')
+            print('nmg link '+ str(i)+' mapped to equivalent DHSVM link')
             
-        return (Mapper, MapL)
-
+        # return (Mapper, MapL)
+        self.LinkMapper = LinkMapper
+        self.LinkMapL = LinkMapL
 
     def _DHSVM_network_to_RMG_Mapper(self):
         
@@ -258,11 +264,30 @@ class GridTTools(Component):
             mdn = self.xyDf_d['linkID'].values[(nmg_d_dist == offset).values][0]# link id of minimum distance node
             NodeMapper[i] = mdn # dhsmve link for node i
             if i%20 == 0:
-                print(str((i/ncn)*100)+' % channel nodes mapped')
+                print(str(np.round((i/ncn)*100))+' % RMG nodes mapped to equivalent DHSVM link')
             
-        return NodeMapper
+        self.NodeMapper = NodeMapper
         
+
+    def _NMG_node_to_RMG_node_mapper(self):
         
+            
+        #compute distance between deposit and all network cells
+        def Distance(row):
+            return ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5        
+
+        # for each node in the channel node list record the equivalent nmg_d link id 
+
+        NodeMapper ={}
+        for i, node in enumerate(self.nmg_nodes):# for each node network modelg grid
+            XY = [self._nmgrid.node_x[i], self._nmgrid.node_y[i]] # get x and y coordinate of node
+            nmg_node_dist = self.xyDf_df.apply(Distance,axis=1) # compute the distance to all channel nodes
+            offset = nmg_node_dist.min() # find the minimum distance between node and channel nodes
+            mdn = self.xyDf_df.index[(nmg_node_dist == offset).values][0]# index of minimum distance node
+            NodeMapper[i] = self.ChannelNodes[mdn] # dhsmve link for node i
+            
+        self.NMGtoRMGnodeMapper = NodeMapper
+
     def _min_distance_to_network(self, cellid, ChType = 'debrisflow'):
         def distance_to_network(row):
             '''
@@ -277,9 +302,9 @@ class GridTTools(Component):
             return ((row['x']-self.gridx[cellid])**2+(row['y']-self.gridy[cellid])**2)**.5
         
         if ChType == 'debrisflow':
-            nmg_dist = self.xyDf_d.apply(distance_to_network,axis=1)
+            nmg_dist = self.xyDf_df.apply(distance_to_network,axis=1)
             offset = nmg_dist.min() # minimum distancce
-            mdn = self.xyDf_d[nmg_dist == offset] # minimum distance node and node x y        
+            mdn = self.xyDf_df[nmg_dist == offset] # minimum distance node and node x y        
         elif ChType == 'nmg':
             nmg_dist = self.xyDf.apply(distance_to_network,axis=1)
             offset = nmg_dist.min() # minimum distancce
@@ -301,7 +326,7 @@ class GridTTools(Component):
         use this to determine 
         
         (1) check if clump meets distance threshold (is close enough to channel network)
-         to causethe hillslope below to fail         
+          to causethe hillslope below to fail         
         
         (2) if it does, get list of all unique cells and add to clump
         
@@ -318,7 +343,7 @@ class GridTTools(Component):
         
         while flow == True:
             
-            slope  = self.grid.at_node['topographic__slope'][loc[c]]
+            slope  = self._grid.at_node['topographic__slope'][loc[c]]
             #compute distance between deposit and all debris flow network cells
             cdist, nc = self._min_distance_to_network(loc[c],  ChType = 'debrisflow')
             #TO DO need to change so that if distance to network is less than minimum, then stop
@@ -327,8 +352,8 @@ class GridTTools(Component):
             #if loc[c] not in self.xyDf['node'].values: # channel network doesnt always match DEM
             # print(cdist)
             if cdist > self.POCbuffer: # downslope distance measured to POCbuffer from channel    
-                loc.append(self.grid.at_node['flow__receiver_node'][loc[c]])
-                dist.append((self.xdif[self.grid.at_node['flow__receiver_node'][loc[c]]]**2+self.ydif[self.grid.at_node['flow__receiver_node'][loc[c]]]**2)**.5)
+                loc.append(self._grid.at_node['flow__receiver_node'][loc[c]])
+                dist.append((self.xdif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2+self.ydif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2)**.5)
                 c=c+1
                 if loc[-1] == loc[-2]: # check that runout is not stuck at same node # NEED TO DEBUG
                     break
@@ -560,5 +585,37 @@ class GridTTools(Component):
         
         return ac_m
 
-
+    #interplate function used by other functions
+    def intp(self, x,y,x1,message = None): 
+        '''
+        Parameters
+        ----------
+        x : list, np.array, pd.series of float or int
+            x values used for interpolation
+        y : list, np.array, pd.series of float or int
+            x values used for interpolation
+        x1 : float or int within domain of x
+            interpolate at x1
+    
+        Returns
+        -------
+        float
+            y1, interpolated value at x1
+    
+        '''  
+        if x1 <= min(x):
+            y1 = min(y)
+            # print('TRIED TO INTERPOLATE AT '+str(x1)+' BUT MINIMUM INTERPOLATION RANGE IS: '+str(min(x)))
+            if message:
+                print(message)
+        elif x1 >= max(x):
+            y1 = max(y)
+            # print('TRIED TO INTERPOLATE AT '+str(x1)+' BUT MAXIMUM INTERPOLATION RANGE IS: '+str(max(x)))
+            if message:
+                print(message)
+        else:            
+            f = sc.interpolate.interp1d(x,y)   
+            y1 = f(x1)
+        return y1
+    
         
