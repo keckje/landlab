@@ -257,8 +257,8 @@ class DHSVMtoLandlab(GridTTools):
         
     def _storm_date_maker(self):
         '''
-        creates a date time index for the ranomdly generated storm events
-        that can be used for tracking changes in sediment transport with time
+        creates a date time index for the randomdly generated storm events
+        that can be used for tracking changes in sediment dynamics with time
 
         Returns
         -------
@@ -293,7 +293,16 @@ class DHSVMtoLandlab(GridTTools):
             date = str(int(YEAR[i]))+'-'+d
             dates.append(date)
         
-        self.storm_dates = pd.to_datetime(np.sort(pd.to_datetime(dates)))
+        Tx = pd.to_datetime(np.sort(pd.to_datetime(dates)))
+        # add random bit of time to each date to make sure no duplicates
+        # Tx_new = []
+        # for c,v in enumerate(Tx):
+        #     Tx_new.append(Tx[c] + pd.to_timedelta(np.random.uniform(0,1,1),'h')[0])
+            
+        # Tx_new = pd.Series(Tx_new)
+        # Tx = pd.to_datetime(Tx_new.values)
+        
+        self.storm_dates = Tx
                 # time
 
         
@@ -312,14 +321,13 @@ class DHSVMtoLandlab(GridTTools):
         fig, ax = plt.subplots(figsize=(8, 4))
         n, bins, patches = plt.hist(pds_doy, 15, density=True, histtype='step', # emperical cdf
                            cumulative=True, label='Empirical')
+        plt.xlabel('day of year')
+        plt.ylabel('quantile')
         
         self.date_quantile = np.concatenate((np.array([0]),n))
         self.date_day = bins
         
-        
-        
-    
-    
+  
     
     def _flow_at_link_cdf(self):
         
@@ -703,11 +711,11 @@ class DHSVMtoLandlab(GridTTools):
                 self.q_i = np.random.uniform(self.P_Fx.min(),self.P_Fx.max(),1)[0]
                 
                 # get the P rate for quantile q_i
-                self.P_i = self.intp(self.P_Fx,self.P_x1,self.q_i, message = None)
+                self.P_i = self.intp(self.P_Fx, self.P_x1, self.q_i, message = None)
                 
                 # get the return interval for the P [yrs]:
                 try:
-                    self.q_yrs_i = self.intp(self.Pam_x1,self.Pam_Fx,self.P_i, message = None)
+                    self.q_yrs_i = self.intp(self.Pam_x1, self.Pam_Fx, self.P_i, message = None)
                     self.P_ri = 1/(1-self.q_yrs_i)
                 except: # may be below the 1 year event
                     self.P_ri = 0.5
@@ -719,7 +727,7 @@ class DHSVMtoLandlab(GridTTools):
                        
                 self._variable_channel_tau()
                 
-                if self.P_ri > self.ls_ri: # update depth to water table if 
+                if self.P_ri > self.ls_ri: # update depth to water table if this is true, updating water table is slow
                     self.get_depth_to_water_table_at_node(self.q_yrs_i)
         
             else:

@@ -657,7 +657,7 @@ class ChannelProfiler(_BaseProfiler):
         # add the reciever of j to the channel segment if it is not j.
         # but only do this when j is not the watershed outlet.
         recieving_node = self._flow_receiver[j]
-        if (recieving_node != j) and (j not in self._outlet_nodes):
+        if (recieving_node.any() != j) and (j not in self._outlet_nodes):
             channel_segment.append(recieving_node)
 
         while channel_upstream:
