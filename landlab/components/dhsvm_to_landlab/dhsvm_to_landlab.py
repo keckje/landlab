@@ -1,10 +1,3 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Oct 26 15:45:26 2020
-
-@author: keckj
-"""
-#%% SETUP WORKSPACE
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -21,14 +14,14 @@ from landlab.plot import graph
 
 import os as os
 
-# os.chdir('C:/Users/keckj/Documents/GitHub/code/landlab/') # remove this line once code is placed in landlab
-# from mass_wasting_router.grid_t_tools import GridTTools
 from landlab.utils.grid_t_tools import GridTTools
 
-#%%  
 class DHSVMtoLandlab(GridTTools):
 
     """
+    this component 
+    
+    
     TODO width and depth approximations are also updated based on parker 2007
          storm duration generator
     

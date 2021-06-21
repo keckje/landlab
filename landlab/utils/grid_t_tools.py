@@ -14,12 +14,39 @@ import scipy as sc
 
 class GridTTools(Component):    
     '''
-    base class for MWR and DHSVMtoLandlab
+    base class for MassWastingRouter and DHSVMtoLandlab. This class contains
+    methods for converting field values on the network model grid to equivalent
+    raster model grid node values. Both the MassWastingRouter and DHSVMtoLandlab
+    components rely on these methods to translate modeled values in the the 
+    raster model grid to the network model grid or vice versa.
     
-    set raster model grid and network model grid class variables
+    The run_one_step method is not implemented. Calling GridTTools establishes
+    class variables related to the dimensions and geometry of the raster model
+    grid and network model grid. Both the MassWastingRouter and DHSVMtoLandlab
+    call the GridTTools call method when instantiated
     
-    define functions related to translating data stored on the raster model grid
-    to the network model grid or vice versa 
+    
+    Parameters
+    ----------
+    grid : raster model grid
+        A grid.
+    nmgrid : network model grid
+        A network model grid
+    Ct: float
+        Contributing area threshold at which channel begin (colluvial channels)
+    BCt: float
+        Contributing area threshold at which cascade channels begin, which is 
+        assumed to be the upper limit of frequent bedload transport
+    MW_to_channel_threshold: float
+        A maximum distance, above which, cells downslope of a landslide do not
+        fail with the landslide. This threshold is set based on review of failure
+        behavoir in the basin
+    PartOfChannel_buffer: float
+        buffer distance from the centerline of the channel that is used to identify
+        nodes that are part of the channel network
+    
+        
+
     '''
 
    
@@ -30,11 +57,10 @@ class GridTTools(Component):
             Ct = 5000,
             BCt = 100000,
             MW_to_channel_threshold = 50,
-            PartOfChannel_buffer = 10, # may not need this parameter
+            PartOfChannel_buffer = 10,
             TerraceWidth = 1,
             **kwds):
         
-        # print('whhhhhhhhat')
         super().__init__(grid)
 
         if 'topographic__elevation' in grid.at_node:
@@ -618,4 +644,6 @@ class GridTTools(Component):
             y1 = f(x1)
         return y1
     
-        
+    def run_one_step(self):
+        """run_one_step is not implemented for this component."""
+        raise NotImplementedError("run_one_step()")       
