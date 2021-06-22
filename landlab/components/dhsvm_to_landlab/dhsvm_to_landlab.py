@@ -1,18 +1,14 @@
-import os
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import datetime
-
 import scipy as sc
 from scipy.stats import moment as lm
 from scipy.special import gamma
 
 import xarray as xr
-
 from landlab.plot import graph
-
-import os as os
 
 from landlab.utils.grid_t_tools import GridTTools
 

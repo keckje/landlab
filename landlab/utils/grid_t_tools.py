@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Sun Jun  6 17:59:13 2021
-
-@author: keckj
-"""
 
 from landlab import Component, FieldError
 import numpy as np
@@ -23,7 +18,7 @@ class GridTTools(Component):
     The run_one_step method is not implemented. Calling GridTTools establishes
     class variables related to the dimensions and geometry of the raster model
     grid and network model grid. Both the MassWastingRouter and DHSVMtoLandlab
-    call the GridTTools call method when instantiated
+    use the GridTTools call method when instantiated
     
     
     Parameters
@@ -44,6 +39,10 @@ class GridTTools(Component):
     PartOfChannel_buffer: float
         buffer distance from the centerline of the channel that is used to identify
         nodes that are part of the channel network
+    TerraceWidth: int
+        width from channel cells in number of cells considered terrace cells.
+        Defaul value is 1 (i.e. all cells directly adjacent to the channels
+                           cells are considered terrace cells)
     
         
 

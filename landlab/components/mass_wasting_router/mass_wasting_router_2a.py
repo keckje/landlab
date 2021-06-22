@@ -36,7 +36,20 @@ from landlab.utils.grid_t_tools import GridTTools
 class MassWastingRouter(GridTTools):
     
     '''
-
+    A component for modeling landslide derived debris flow re-
+    distribution of hillslope sediment into the channel network. The component is
+    designed to couple the hydology driven LandslideProbability component with the
+    NetworkSedimentTransporter component. Attributes of each landslide are used
+    to predict initial debris flow volume and grain size distribution. The landslide
+    is routed through the watershed as a debris flow. Debris flows scour and deposit
+    material using a cellular automata method. An emperical model for sediment
+    delivery to the channel network from the debris flow deposits and scour areas
+    determines the rate at which the debris flow material enter the fluvial network.
+    
+    This component is unit sensitive. Units specific to each required field are
+    listed below.
+    
+    
     Parameters
     ----------
     grid: ModelGrid 
@@ -932,9 +945,7 @@ class MassWastingRouter(GridTTools):
             else:
                 print('no disturbed cells to fluvially erode')
                 self.FENodes = np.array([])
-            
 
-    
     
     def _parcelAggregator(self):
         '''
