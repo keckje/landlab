@@ -28,6 +28,7 @@ from landlab import Component, FieldError
 from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFinderAndRouter,FlowDirectorSteepest)
 from landlab import imshow_grid, imshow_grid_at_node
 
+from landlab.components.mass_wasting_router import debris_flow_scour_and_deposition
 from landlab.utils.grid_t_tools import GridTTools
 
 

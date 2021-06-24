@@ -8,7 +8,7 @@ _OUT_OF_NETWORK = -2
 class SedimentPulserTable(SedimentPulserBase):
     
     '''
-    Send a pulse of sediment to specific locations of channel network and divide 
+    Send a pulse of sediment to specific locations of a channel network and divide 
     the pulse into parcels
     
     This utility prepares input for and runs the landlab DataRecord "add_item"
