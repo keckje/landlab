@@ -1,51 +1,32 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu May  2 17:36:00 2019
-
-@author: keckj
-
-    TODO: erode channel node elevations using flow rate at grid cell
-          record datetime of each timestep
-          add parameter for using different router and option to have no terrace cells (for models with larger grid cells)
-          clean up doc strings and comments
-          tests (review Datacamp class), submittal to LANDLAB
-          debris flow erosion model that accounts for available regolith thickness
-
-    WISH LIST
-    ADD entrainment model - See Frank et al., 2015, user parameterizes based on literature OR results of model runs in RAMMS
-        first draft done
-
-
-
-"""
-import os as os
 import numpy as np
 import pandas as pd
 from collections import OrderedDict
-import matplotlib.pyplot as plt
 
 from landlab import Component, FieldError
 from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFinderAndRouter,FlowDirectorSteepest)
 from landlab import imshow_grid, imshow_grid_at_node
 
-from landlab.components.mass_wasting_router import debris_flow_scour_and_deposition
+
+from landlab.components import MassWastingSED
 from landlab.utils.grid_t_tools import GridTTools
 
 
 class MassWastingRouter(GridTTools):
 
-    '''
-    Redistribute landslide derived sediment through a watershed and transfer
-    a portion of that sediment to the fluvial network
+    '''a component that redistributes mass wasting derived sediment through a 
+    watershed and determines what portion of and where the sediment enters 
+    the channel network
 
-    Landlab component for modeling landslide derived debris flow re-
-    distribution of landslide produced sediment into the channel network.
-
-    This component is designed to couple the LandslideProbability component with
-    the NetworkSedimentTransporter component.
-
-    Hillslope scale landslides are interpreted
-    from the a raster model grid "Landslide__Probability" field.
+    This component is designed to couple a mass-wasting model with a sediment
+    transport model. It has been written using the LandslideProbability component 
+    and NetworkSedimentTransporter component. Any other mass-wasting model
+    or network scale sediment transport model can be coupled with the mass wasting
+    router so lang as the input are formatted correctly.
+    
+    componenmt overview:
+        
+    Hillslope scale landslides are interpreted from the a raster model grid 
+    "Landslide__Probability" field.
 
     Attributes of each landslide are summarized from raster model grid fields values
     of all cells in each landslide and used to approximate initial debris flow
@@ -63,24 +44,17 @@ class MassWastingRouter(GridTTools):
     listed below.
 
 
-    Parameters
-    ----------
-    grid: ModelGrid
-        Landlab Model Grid object with node fields: topographic__elevation, flow_reciever node, masswasting_nodes
-    nmgrid: NetworkModelGrid
-        Landlab Network Model Grid object
 
+    TODO: erode channel node elevations using flow rate at grid cell
+          record datetime of each timestep
+          add parameter for using different router and option to have no terrace cells (for models with larger grid cells)
+          clean up doc strings and comments
+          tests (review Datacamp class), submittal to LANDLAB
+          debris flow erosion model that accounts for available regolith thickness
 
-    -future Parameters-
-    movement_type: string
-        defines model used for clumping
-    material_type: string
-        defines model used for clumping
-
-
-    Construction:
-
-        MWR = MassWastingRouter(grid, nmgrid)
+    WISH LIST
+    ADD entrainment model - See Frank et al., 2015, user parameterizes based on literature OR results of model runs in RAMMS
+        first draft done
 
     '''
 
@@ -94,41 +68,6 @@ class MassWastingRouter(GridTTools):
 
     _info = {}
 
-    # TO DO: move below to _info
-    _input_var_names = (
-        'topographic__elevation', 'flow__receiver_node','MW__probability'
-    )
-
-    _output_var_names = (
-    'high__MW_probability','mass__wasting_clumps'
-    )
-
-    _var_units = {
-    'topographic__elevation': 'm',
-    'flow__receiver_node': 'node number',
-    'MW__probability': 'annual probability of occurance',
-    'high__MW_probability': 'binary',
-    'mass__wasting_clumps': 'number assigned to mass wasting clump',
-    }
-
-    _var_mapping = {
-    'topographic__elevation': 'node',
-    'flow__receiver_node': 'node',
-    'MW__probability': 'node',
-    'high__MW_probability':'node',
-    'mass__wasting_clumps': 'node'
-    }
-
-    _var_doc = {
-    'topographic__elevation':
-        'elevation of the ground surface relative to some datum',
-    'flow__receiver_node': 'node that receives flow from each node',
-    'MW__probability':
-        'annual probability of shallow landslide occurance',
-    'high__MW_probability':'nodes input into mass wasting clumping component',
-    'mass__wasting_clumps':
-        'unstable grid cells that are assumed to fail as one, single mass'
-    }
 
 #%%
     def __init__(
