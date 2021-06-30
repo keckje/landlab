@@ -1,10 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Jun 24 00:24:19 2021
-
-@author: keckj
-"""
-
 
 import numpy as np
 from landlab import RasterModelGrid
@@ -17,17 +11,17 @@ from landlab.components import(FlowDirectorD8,
 
 
 
-class MassWastingSED(Component):
+class MassWastingRunout(Component):
     
     '''a cellular automata mass wasting model that routes an initial mass wasting  
     volume (e.g., a landslide) through a watershed, determines Scour, Entrainment
-    and Depostion depths and updates the dem. 
+    and Depostion depths and updates the DEM. 
         
     
     '''
     
     
-    _name = 'MassWastingSED'
+    _name = 'MassWastingRunout'
     
     _unit_agnostic = False
     
@@ -257,10 +251,10 @@ class MassWastingSED(Component):
             arn = rni
             arv = rvi
             enL = []
-            while len(arn)>0 or c < self.itL:
+            while len(arn)>0 and c < self.itL:
         
                 # add pulse (fraction) of total landslide volume
-                # at interval "nid" until total number of pulses is less than total
+                # at interval "nid" until total number of pulses is equal to total
                 # for landslide volume (nps*nid)
         
                 if ((c+1)%nid ==0) & (c2<=nps*nid):
@@ -293,10 +287,7 @@ class MassWastingSED(Component):
                     # debris flow depth over cell    
                     df_depth = vin/(self._grid.dx*self._grid.dx) #df depth
                     
-                    #determine erosion volume (function of slope)
-                    # dmx = dc*mg.at_node['soil__thickness'][n]
-                    # er = (dmx-dmx*Lnum)*mg.dx*mg.dy
-                    
+                    #determine erosion volume (function of slope)                   
                     # depth-slope product approximation of total shear stress on channel bed [kPa]
                     T_df = 1700*9.81*df_depth*slpn/1000
          

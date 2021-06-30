@@ -7,7 +7,7 @@ from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFind
 from landlab import imshow_grid, imshow_grid_at_node
 
 
-from landlab.components.mass_wasting_router.mass_wasting_SED import MassWastingSED
+from landlab.components import MassWastingSED
 from landlab.utils.grid_t_tools import GridTTools
 
 
@@ -79,15 +79,9 @@ class MassWastingRouter(GridTTools):
             MW_to_channel_threshold = 50,
             PartOfChannel_buffer = 10, # may not need this parameter
             TerraceWidth = 1,
-            probability_threshold = 0.75,  # landslide mapping parameters
+            FluvialErosionRate = [[0.03,-0.43], [0.01,-0.43]],
+            probability_threshold = 0.75,
             min_mw_cells = 1,
-            release_dict = {'number of pulses':8, # MassWastingSED parameters 
-                            'iteration delay':5 },
-            df_dict = {'critical slope':0.1, 
-                       'minimum flux':3,
-                       'scour coefficient':0.025},
-            FluvialErosionRate = [[0.03,-0.43], [0.01,-0.43]], # Fluvial erosion rate parameters
-
             parcel_volume = 0.2, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
             **kwds):
 
@@ -233,13 +227,7 @@ class MassWastingRouter(GridTTools):
         self.dem_dz_cumulative = self.dem - self.dem_initial
         self.dem_mw_dzdt = self.dem_dz_cumulative # initial cells of deposition and scour - none, TODO, make this an optional input
         self.DistNodes = np.array([])
-        self._grid.at_node['mass__wasting_events'] = np.zeros(self.nodes.shape[0]).astype(int)
-        self._grid.at_node['mass__wasting_volumes'] = np.zeros(self.nodes.shape[0])
 
-        ### instantiate MassWastingSED
-        self.DebrisFlows = MassWastingSED(self._grid,release_dict,df_dict)
-
-        
 
     def _DefineErosionRates(self):
         '''
@@ -494,22 +482,229 @@ class MassWastingRouter(GridTTools):
         self.LSclump = LSclump
         self.LS_df_dict[self._time_idx] = LS_df.copy()
         self.LSclump_dict[self._time_idx] = LSclump.copy(); print('SAVED A CLUMP')
- 
-        # prepare MassWastingSED rmg inputs "mass__wasting_events" and "mass__wasting_volumes"
+        # return groupALS_l,LSclump,LS_df #clumps around a single cell, clumps for each landslide, summary of landslide
 
-        mw_events = np.zeros(np.hstack(self._grid.nodes).shape[0])
-        mw_events_volumes = np.zeros(np.hstack(self._grid.nodes).shape[0])
-        
 
-        ivL = self.LS_df['vol [m^3]'][0::1].values # initial volume list
-        innL = self.LS_df['cell'][0::1].values.astype('int') # initial node number list        
-        
-        mw_events[innL] = 1
-        mw_events_volumes[innL] = ivL 
-        
-        self._grid.at_node["mass__wasting_events"] = mw_events.astype(int)
-        self._grid.at_node["mass__wasting_volumes"] = mw_events_volumes
-        
+
+    # def _MassWastingScourAndDeposition(self):
+
+    #     SavePlot = True
+
+
+    #     self.DFcells = {}
+    #     self.RunoutPlotInterval = 5
+
+
+
+    #     # debris flow runout parameters
+
+    #     # release parameters for landslide
+    #     nps = 8 # number of pulses, list for each landslide
+    #     nid = 5 # delay between pulses (iterations), list for each landslide
+
+
+    #     # critical slope at which debris flow stops
+    #     # higher reduces spread and runout distance
+    #     slpc = 0.1
+
+    #     # forced stop volume threshold
+    #     # material stops at cell when volume is below this,
+    #     # higher increases spread and runout distance
+    #     SV = 3.3
+
+    #     # entrainment coefficient
+    #     # very sensitive to entrainment coefficient
+    #     # higher causes higher entrainment rate, longer runout, larger spread
+    #     cs = 3.9e-5
+
+
+
+    #     if self.LS_df.empty is True:
+    #         print('no debris flows to route')
+    #     else:
+
+    #         ivL = self.LS_df['vol [m^3]'][0::1].values.astype('int') # initial volume list
+    #         innL = self.LS_df['cell'][0::1].values.astype('int') # initial node number list
+
+    #         cL = {}
+    #         dem_dif_L = []
+    #         # ivL and innL can be a list of values. For each value in list:
+    #         for i,inn in enumerate(innL):
+    #             # print(i)
+    #             cL[i] = []
+
+
+    #             # set up initial landslide cell
+    #             iv =ivL[i]/nps# initial volume (total volume/number of pulses)
+
+    #             # initial receiving nodes (cells) from landslide
+    #             rn = self._grid.at_node.dataset['flow__receiver_node'].values[inn]
+    #             self.rn = rn
+    #             rni = rn[np.where(rn != -1)]
+
+    #             # initial receiving proportions from landslide
+    #             rp = self._grid.at_node.dataset['flow__receiver_proportions'].values[inn]
+    #             rp = rp[np.where(rp > 0)]
+    #             rvi = rp*iv # volume sent to each receving cell
+
+    #             # now loop through each receiving node,
+    #             # determine next set of recieving nodes
+    #             # repeat until no more receiving nodes (material deposits)
+
+    #             self.DFcells[inn] = []
+    #             slpr = []
+    #             c = 0
+    #             c2 = 0
+    #             arn = rni
+    #             arv = rvi
+
+    #             enL = []
+    #             while len(arn)>0:# or c <300:
+
+
+    #                 # time to pulse conditional statement
+    #                 # add pulse (fraction) of total landslide volume
+    #                 # at interval "nid" until total number of pulses is less than total
+    #                 # for landslide volume (nps*nid)
+
+    #                 if ((c+1)%nid ==0) & (c2<=nps*nid):
+    #                     arn = np.concatenate((arn,rni))
+    #                     arv = np.concatenate((arv,rvi))
+
+    #                 arn_ns = np.array([])
+    #                 arv_ns = np.array([])
+
+    #                 # for each unique cell in receiving node list arn
+    #                 for n in np.unique(arn):
+    #                     n = int(n)
+
+    #                     # slope at cell (use highes slope)
+    #                     slpn = self._grid.at_node['topographic__steepest_slope'][n].max()
+
+    #                     # incoming volume: sum of all upslope volume inputs
+    #                     vin = np.sum(arv[arn == n])
+
+    #                     # determine deposition volume following Campforts, et al., 2020
+    #                     # since using volume (rather than volume/dx), L is (1-(slpn/slpc)**2)
+    #                     # rather than mg.dx/(1-(slpn/slpc)**2)
+    #                     Lnum = np.max([(1-(slpn/slpc)**2),0])
+
+    #                     # deposition volume
+    #                     df_depth = vin/(self._grid.dx*self._grid.dx) #df depth
+
+    #                     dpd = vin*Lnum # deposition volume
+
+    #                     # max erosion depth
+
+    #                     # determine erosion volume (function of slope, shear stress)
+    #                     T_df = 1700*9.81*df_depth*slpn # shear stress from df
+
+    #                     # max erosion depth equals regolith (soil) thickness
+    #                     dmx = self._grid.at_node['soil__thickness'][n]
+
+    #                     # erosion depth:
+    #                     er = min(dmx, cs*T_df)
+
+    #                     # erosion volume
+    #                     ev = er*self._grid.dx*self._grid.dy
+    #                     # volumetric balance at cell
+
+    #                     # determine volume sent to downslope cells
+
+    #                     # additional constraint to control debris flow behavoir
+    #                     # if flux*cell width sent to a cell is below threshold, debris is forced to stop
+    #                     if vin <=SV:
+    #                         dpd = vin # all volume that enter cell is deposited
+    #                         vo = 0 # debris stops, so volume out is 0
+
+    #                         # determine change in cell height
+    #                         deta = (dpd)/(self.dx*self.dy) # (deposition)/cell area
+
+    #                     else:
+    #                         vo = vin-dpd+ev # vol out = vol in - vol deposited + vol eroded
+
+    #                         # determine change in cell height
+    #                         deta = (dpd-ev)/(self.dx*self.dy) # (deposition-erosion)/cell area
+
+
+    #                     # update raster model grid regolith thickness and dem elevation
+    #                     # if deta larger than regolith thickness, deta equals regolith thickness (fresh bedrock is not eroded)
+    #                     if self._grid.at_node['soil__thickness'][n]+deta <0:
+    #                         deta = - self._grid.at_node['soil__thickness'][n]
+
+    #                     # Regolith - difference between the fresh bedrock surface and the top surface of the dem
+    #                     self._grid.at_node['soil__thickness'][n] = self._grid.at_node['soil__thickness'][n]+deta
+
+    #                     # Topographic elevation - top surface of the dem
+    #                     self._grid.at_node['topographic__elevation'][n] = self._grid.at_node['topographic__elevation'][n]+deta
+
+    #                     # build list of receiving nodes and receiving volumes for next iteration
+
+    #                     # material stops at node if transport volume is 0 OR node is a
+    #                     # boundary node
+    #                     if vo>0 and n not in self._grid.boundary_nodes:
+
+
+    #                         th = 0
+    #                         # receiving proportion of volume from cell n to each downslope cell
+    #                         rp = self._grid.at_node.dataset['flow__receiver_proportions'].values[n]
+    #                         rp = rp[np.where(rp > th)]
+    #                         # print(rp)
+
+    #                         # receiving nodes (cells)
+    #                         rn = self._grid.at_node.dataset['flow__receiver_node'].values[n]
+    #                         rn = rn[np.where(rn != -1)]
+    #                         # rn = rn[np.where(rp > th)]
+
+    #                         # receiving volume
+    #                         rv = rp*vo
+
+    #                         # store receiving nodes and volumes in temporary arrays
+    #                         arn_ns =np.concatenate((arn_ns,rn), axis = 0) # next step receiving node list
+    #                         arv_ns = np.concatenate((arv_ns,rv), axis = 0) # next steip receiving node incoming volume list
+
+
+    #                 # once all cells in iteration have been evaluated, temporary receiving
+    #                 # node and node volume arrays become arrays for next iteration
+    #                 arn = arn_ns
+    #                 arv = arv_ns
+
+    #                 # update DEM slope
+    #                 # fd = FlowDirectorDINF(mg) # update slope
+    #                 fd = FlowDirectorMFD(self._grid, diagonals=True,
+    #                                 partition_method = 'slope')
+    #                 fd.run_one_step()
+
+
+    #                 # save dem difference and precipitions for illustration plots
+    #                 if c%self.RunoutPlotInterval == 0:
+
+    #                     cL[i].append(c)
+
+
+    #                     # save precipitions
+    #                     self.DFcells[inn].append(arn.astype(int))
+
+    #                     # save dem differencing
+    #                     dem_dif = self._grid.at_node['topographic__elevation']-self.dem_initial
+    #                     # dem_dif = np.expand_dims(dem_dif, axis=0)
+
+    #                     dem_dif_L.append(dem_dif)
+
+
+
+    #                 c+=1
+
+
+    #                 c2+=nid
+
+    #         self.DF_DEM_dif_dict[self._time_idx] = dem_dif_L
+
+    #         # all
+    #         self.DFcells_dict[self._time_idx] = self.DFcells
+
+    #         self.StormDEM_dict[self._time_idx] = self._grid.at_node['topographic__elevation'].copy()
+
 
     def _dem_dz(self):
         '''
@@ -847,11 +1042,11 @@ class MassWastingRouter(GridTTools):
                 # run multi-flow director needed for debris flow routing
                 self._multidirectionflowdirector()
                 # print('multiflowdirection')
-                # route debris flows, update dem
-                self.DebrisFlows.run_one_step(dt)
-                
-                self.DFcells_dict[self._time_idx] = self.DebrisFlows.DFcells
-                self.StormDEM_dict[self._time_idx] = self.DebrisFlows._grid.at_node['topographic__elevation'].copy()                
+                # route debris flows, update dem to account for scour and
+                # deposition caused by debris flow and landslide processes
+                DebrisFlows.run_one_step(dt)
+                self.DFcells_dict[self._time_idx] = DebrisFlows.DFcells
+                self.StormDEM_dict[self._time_idx] = DebrisFlows._grid.at_node['topographic__elevation'].copy()                
                 # print('scour and deposition')
 
                 # subtract previous storm dem from this dem

@@ -124,6 +124,9 @@ class GridTTools(Component):
       
 
     def _ChannelNodes(self):
+        """MWR, DtoL
+        change to 'fluvial channel' and 'channel'
+        """
         
         # to top of debris flow channel (top colluvial channel)
         ChannelNodeMask = self._grid.at_node['drainage_area'] > self.Ct
@@ -141,6 +144,9 @@ class GridTTools(Component):
 
 
     def _TerraceNodes(self):
+        """MWR
+
+        """
      
         for i in range(self.TerraceWidth):
             if i == 0:
@@ -168,7 +174,7 @@ class GridTTools(Component):
     
         
     def _LinktoNodes(self, linknodes, active_links, nmgx, nmgy):
-        '''
+        '''MWR, DtoL
         #convert links to coincident nodes
             #loop through all links in network grid to determine raster grid cells that coincide with each link
             #and equivalent distance from upstream node on link
@@ -240,7 +246,7 @@ class GridTTools(Component):
             
     def _DHSVM_network_to_NMG_Mapper(self):    
         
-        '''
+        '''DtoL
         determine the closest dhsvm nmg (nmg_d) link to each link in the landlab
         nmg. Note, the landlab nmg id of the dhsmv network is used, not the DHSVM
         network id (arcID) To translate the nmg_d link id to the DHSVM network id: 
@@ -273,6 +279,9 @@ class GridTTools(Component):
         self.LinkMapL = LinkMapL
 
     def _DHSVM_network_to_RMG_Mapper(self):
+        """DtoL
+
+        """
         
         #compute distance between deposit and all network cells
         def Distance(row):
@@ -295,7 +304,9 @@ class GridTTools(Component):
         
 
     def _NMG_node_to_RMG_node_mapper(self):
-        
+        """MWR, DtoL
+
+        """
             
         #compute distance between deposit and all network cells
         def Distance(row):
@@ -315,13 +326,15 @@ class GridTTools(Component):
 
     def _min_distance_to_network(self, cellid, ChType = 'debrisflow'):
         def distance_to_network(row):
-            '''
+            '''GTT only
             compute distance between a cell and the nearest debris flow network 
             cell used to determine clump distance to colluvial channel network
             for clumping algorithm
             
             ChType = debrisflow: uses debris flow network
             ChType = nmg: uses network model grid network
+            
+            TODO: change to "fluvial channel network" and "channel network" options
             
             '''
             return ((row['x']-self.gridx[cellid])**2+(row['y']-self.gridy[cellid])**2)**.5
@@ -339,7 +352,7 @@ class GridTTools(Component):
 
 
     def _downslopecells(self,StartCell):
-        '''
+        '''MWR
         compute distance between a given cell and the nearest downslope channel 
         network cell. distance is computed to POCbuffer distance from channel network
         cell. Track which cells are downslope
@@ -391,7 +404,7 @@ class GridTTools(Component):
 
         
     def AdjCells(self,n):
-        '''                
+        '''MWR                
         returns cell numbers of cells adjacent to cell (n) AND the flow direction indexes
         
         gr - number of rows in grid
@@ -448,7 +461,7 @@ class GridTTools(Component):
 
 
     def NotDivergent(self,n,ac,acn):
-        '''        
+        '''MWR        
         takes mass wasting cell and adjacent cell numbers as input
         returns boolian list of cells that are not divergent (convergent or planar)
         
@@ -612,7 +625,7 @@ class GridTTools(Component):
 
     #interplate function used by other functions
     def intp(self, x,y,x1,message = None): 
-        '''
+        '''ALL
         Parameters
         ----------
         x : list, np.array, pd.series of float or int

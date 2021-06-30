@@ -28,8 +28,10 @@ from .lateral_erosion import LateralEroder
 from .lithology import LithoLayers, Lithology
 from .marine_sediment_transport import SimpleSubmarineDiffuser
 from .mass_wasting_router import ( 
-	MassWastingRouter,
-	MassWastingSED
+	LandslideMapper,
+	MassWastingRunout,
+    MassWastingEroder,
+	MassWastingRouter
 )
 from .network_sediment_transporter import NetworkSedimentTransporter
 from .nonlinear_diffusion import PerronNLDiffuse
@@ -96,6 +98,7 @@ COMPONENTS = [
     KinwaveImplicitOverlandFlow,
     KinwaveOverlandFlowModel,
     LakeMapperBarnes,
+    LandslideMapper,
     LandslideProbability,
     LateralEroder,
     LinearDiffuser,
@@ -103,8 +106,9 @@ COMPONENTS = [
     LithoLayers,
     Lithology,
     LossyFlowAccumulator,
+	MassWastingEroder,
 	MassWastingRouter,
-	MassWastingSED,
+    MassWastingRunout,
     NetworkSedimentTransporter,
     NormalFault,
     OverlandFlow,
