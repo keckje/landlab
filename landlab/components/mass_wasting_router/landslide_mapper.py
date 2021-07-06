@@ -23,6 +23,8 @@ class LandslideMapper(GridTTools):
     probability and returns a table and raster model grid fields that indicate
     the location and summarize the attributes of each mapped landslide
     
+    author: Jeff Keck
+    
     """
 
     _name = 'LandslideMapper'
@@ -141,6 +143,7 @@ class LandslideMapper(GridTTools):
         self.LS_df = pd.DataFrame([])
         self.LSclump = {} # initial empty
 
+
     def _extractLSCells(self):
         '''extracts the node id numbers of all nodes that have a MW__probabiliity
         larger than the user specified threshold
@@ -150,28 +153,25 @@ class LandslideMapper(GridTTools):
         type(a) # np array
 
         # keep as (nxr)x1 array, convert to pd dataframe
-        a_df = pd.DataFrame(a)
+        # a_df = pd.DataFrame(a)
 
-        mask = a_df > self.mass_wasting_threshold
+        mask = a > self.mass_wasting_threshold
 
         # boolean list of which grid cells are landslides
-        self._this_timesteps_landslides = mask.values
+        self._this_timesteps_landslides = mask
 
-
-        a_th = a_df[mask] #Make all values less than threshold NaN
-
-        a_thg = a_th.values
+        a_th = a[mask] #Make all values less than threshold NaN
 
         #add new field to grid that contains all cells with annual probability greater than threshold
-        self.hmwprob = a_thg #consider removing this instance variable
+        self.hmwprob = a_th #consider removing this instance variable
 
-        self.grid.at_node['high__MW_probability'] = self.hmwprob # change to mass__wasting_potential
+        # self.grid.at_node['high__MW_probability'] = self.hmwprob # change to mass__wasting_potential
 
         #create mass wasting unit list
-        self.LS_cells = self.nodes[mask]
-        print(self.LS_cells)
-    
-            
+        self.LS_cells = self.nodes[mask].flatten()
+        # print(self.LS_cells)
+
+                
     def AdjCells(self,n):
             '''MWR                
             returns cell numbers of cells adjacent to cell (n) AND the flow direction indexes
@@ -200,7 +200,7 @@ class LandslideMapper(GridTTools):
             
             if n == 0:                      #top left corner
                 ac = [r,br,b]
-                acn = [2,3,4]               #flow directio index
+                acn = [2,3,4]               #flow direction index
             elif n == gc-1:                 #top right corner
                 ac = [b,bl,l]
                 acn = [4,5,6]
@@ -227,17 +227,17 @@ class LandslideMapper(GridTTools):
                 acn = [0,1,2,3,4,5,6,7]
                 
             return ac,acn #adjacent cell numbers and cell numbers for direction grid
-                    
-    
+
+                        
     def NotDivergent(self,n,ac,acn):
         '''takes mass wasting cell and adjacent cell numbers as input
         returns boolian list of cells that are not divergent (convergent or planar)
         
         xdif - change in x in slope direction to receiving cell
         ydif -  change in y in slope direciton to receiving cell
-        n - mass wasting unit cell
-        ac - grid number of adjacent cells
-        acn - adjacent cell number
+        n - int, mass wasting unit cell
+        ac - list of int, grid number of adjacent cells
+        acn - list of int, adjacent cell number
         '''
         
         xd = self.xdif[n]
@@ -421,6 +421,9 @@ class LandslideMapper(GridTTools):
         ac = Adj[0] #grid cell numbers of adjacent cells
         acn = Adj[1] #adjacent cell numbers based on local number schem
 
+        # print(ac)
+        # print(acn)
+        # print(lsc)
         #(2) mask for list of adject cells: keep only ones that are not divergent
         ac_m = self.NotDivergent(lsc,ac,acn)
         # print('notdivergent')
@@ -491,8 +494,6 @@ class LandslideMapper(GridTTools):
         return (Dist,loc)
 
 
-
-
     def _MassWastingExtent(self):
         """maps hillslope scale landslides from a raster model grid fields of
         topographic elevation and landslide factor of saftey or landslide probability
@@ -505,144 +506,146 @@ class LandslideMapper(GridTTools):
         #single cell clump
         groupALS_l = []
         for i, v in enumerate(self.LS_cells):
-
+            # print(v)
             group = self.GroupAdjacentLScells(v)
             if len(group) >= self.min_mw_cells: # at least this number of cells to be a clump
                 groupALS_l.append(group) # list of all single cell clumps
-
-        # print('groupadjacentcells')
-
-        groupALS_lc = groupALS_l*1  #copy of list, to keep original
-        self.groupALS_lc = groupALS_lc
-
-        #create the mass wasting clump
-        LSclump = {} # final mass wasting clump dicitonary,
-        #oantains a dataframe listing attributes of all cells in each clump
-
-        ll = len(groupALS_lc)
-        c=0
-        while ll > 0:
-
-            # first: clump single cell clumps into one clump if they share cells
-
-            # use first cell clump in list to searchps
-            df1 = pd.DataFrame({'cell':list(groupALS_lc[0])})
-            i =1
-            while i < ll: # for each cell clump in groupALS_lc
-                #print(i)
-                df2 = pd.DataFrame({'cell':list(groupALS_lc[i])}) # set cell list i as df2
-                # check if df1 and df2 share cells (if no shared cells, dfm.shape = 0)
-                dfm = pd.merge(df1,df2, on = 'cell', how= "inner")
-
-                if dfm.shape[0] > 0: # if shared cells
-                    groupALS_lc.remove(groupALS_lc[i]) # cell list i is removed from groupALS_lc
-                    ll = len(groupALS_lc)
-                    # cell list df2 is combined with df1, dupilicate cells are list onely once,
-                    # and the combined list becomes df1 using pd.merge method
-                    df1 = pd.merge(df1,df2, on = 'cell', how= "outer")
-
-                i+=1
-
-            # second, add downslope cells to mass wasting clump
-            # for each cell in df1
-                # determine downslope flow paths (cellsD)
-            # determine minimum downslope distance to channel network
-            distL = []
-            cellsD = {}
-            for cell in df1['cell'].values:
-                dist, cells = self._downslopecells(cell)
-                distL.append(dist)
-                cellsD[cell] = cells
-
-            md = np.array(distL).min() # minimum distance to downstream channel
-
-            # if md < MW_to_C_threshold, clump downslope cells
-            if md <= self.MW_to_C_threshold:
-            # downhill gridcells fail with landslide cells (added to clump)
-                for cell in list(cellsD.keys()): # for each list of downstream nodes
-
-                    # TODO may need to remove any ls cells that are in downslope path
-                    # lscls  = self.aLScell(cellsD[cell])
-                    # np.array(andc )[andc_m]
-
-                    # convert list to df
-                    df2 = pd.DataFrame({'cell':list(cellsD[cell])})
-
-                    # use pd merge to add unique cell values
-                    df1 = pd.merge(df1,df2, on = 'cell', how= "outer")
-
-
-            # from ids of all cells in clump df1, get attributes of each cell, organize into dataframe
-            # save in dictionary
-
-            dff = pd.DataFrame({'cell':list(df1.cell),
-                                'x location':list(self._grid.node_x[df1.cell]),
-                                'y location':list(self._grid.node_y[df1.cell]),
-                                'elevation [m]':list(self._grid.at_node['topographic__elevation'][df1.cell]),
-                                'soil thickness [m]':list(self._grid.at_node['soil__thickness'][df1.cell]),
-                                'slope [m/m]':list(self._grid.at_node['topographic__slope'][df1.cell])
-                                })
-            LSclump[c] = dff
-
-            # subtract 90% of soil depth from dem,
-            self._grid.at_node['topographic__elevation'][df1.cell] = self._grid.at_node['topographic__elevation'][df1.cell] - 0.9*self._grid.at_node['soil__thickness'][df1.cell]
-
-
-            # set soil thickness to 0 at landslide cells
-            self._grid.at_node['soil__thickness'][df1.cell] =0
-
-            # once all lists that share cells are appended to clump df1
-            # remove initial cell list from list
-            groupALS_lc.remove(groupALS_lc[0])
-
-            #update length of remaining
+        
+        if len(groupALS_l) > 0: # if any landslide initial clumps, run the following:
+            
+            # print('groupadjacentcells')
+    
+            groupALS_lc = groupALS_l*1  #copy of list, to keep original
+            self.groupALS_lc = groupALS_lc
+    
+            #create the mass wasting clump
+            LSclump = {} # final mass wasting clump dicitonary,
+            #oantains a dataframe listing attributes of all cells in each clump
+    
             ll = len(groupALS_lc)
-
-            c=c+1
-
-
-        # LS_df  - a single dataframe, each clumps is a row, columns are average attributes of all cells in the clump
-        LS = OrderedDict({})
-        cellarea = self._grid.area_of_cell[0]#100 #m2
-
-        for key, df in LSclump.items():
-            slp = df['slope [m/m]'].mean() #mean slope of cells
-            st = df['soil thickness [m]'].mean() #mean soil thickness of cells
-            rc = df[df['elevation [m]']==df['elevation [m]'].min()] # choose cell with lowest elevation as initiation point of slide
-            rc = rc.iloc[0]
-            vol = st*cellarea*df.shape[0]
-            #rc = rc.set_index(pd.Index([0]))
-            LS[key] = [rc['cell'], rc['x location'], rc['y location'], rc['elevation [m]'], st, slp, vol]
-
-        try:
-            LS_df = pd.DataFrame.from_dict(LS, orient = 'index', columns = LSclump[0].columns.to_list()+['vol [m^3]'])
-        except: # high landslide potential cells may not meet clumping criteria
-            LS_df = pd.DataFrame([])
-
-        #create mass__wasting_clumps field
-        for c, nv in enumerate(LSclump.values()):
-            self.mwclump[list(nv['cell'].values)] = c+1 #plus one so that first value is 1
-
-        self.grid.at_node['mass__wasting_clumps'] = self.mwclump
-        self.LS_df = LS_df
-        self.LSclump = LSclump
-        # self.LS_df_dict[self._time_idx] = LS_df.copy()
-        # self.LSclump_dict[self._time_idx] = LSclump.copy(); print('SAVED A CLUMP')
- 
-        # prepare MassWastingSED rmg inputs "mass__wasting_events" and "mass__wasting_volumes"
-
-        mw_events = np.zeros(np.hstack(self._grid.nodes).shape[0])
-        mw_events_volumes = np.zeros(np.hstack(self._grid.nodes).shape[0])
-        
-
-        ivL = self.LS_df['vol [m^3]'][0::1].values # initial volume list
-        innL = self.LS_df['cell'][0::1].values.astype('int') # initial node number list        
-        
-        mw_events[innL] = 1
-        mw_events_volumes[innL] = ivL 
-        
-        self._grid.at_node["mass__wasting_events"] = mw_events.astype(int)
-        self._grid.at_node["mass__wasting_volumes"] = mw_events_volumes
+            c=0
+            while ll > 0:
+    
+                # first: clump single cell clumps into one clump if they share cells
+    
+                # use first cell clump in list to searchps
+                df1 = pd.DataFrame({'cell':list(groupALS_lc[0])})
+                i =1
+                while i < ll: # for each cell clump in groupALS_lc
+                    #print(i)
+                    df2 = pd.DataFrame({'cell':list(groupALS_lc[i])}) # set cell list i as df2
+                    # check if df1 and df2 share cells (if no shared cells, dfm.shape = 0)
+                    dfm = pd.merge(df1,df2, on = 'cell', how= "inner")
+    
+                    if dfm.shape[0] > 0: # if shared cells
+                        groupALS_lc.remove(groupALS_lc[i]) # cell list i is removed from groupALS_lc
+                        ll = len(groupALS_lc)
+                        # cell list df2 is combined with df1, dupilicate cells are list onely once,
+                        # and the combined list becomes df1 using pd.merge method
+                        df1 = pd.merge(df1,df2, on = 'cell', how= "outer")
+    
+                    i+=1
+    
+                # second, add downslope cells to mass wasting clump
+                # for each cell in df1
+                    # determine downslope flow paths (cellsD)
+                # determine minimum downslope distance to channel network
+                distL = []
+                cellsD = {}
+                for cell in df1['cell'].values:
+                    dist, cells = self._downslopecells(cell)
+                    distL.append(dist)
+                    cellsD[cell] = cells
+    
+                md = np.array(distL).min() # minimum distance to downstream channel
+    
+                # if md < MW_to_C_threshold, clump downslope cells
+                if md <= self.MW_to_C_threshold:
+                # downhill gridcells fail with landslide cells (added to clump)
+                    for cell in list(cellsD.keys()): # for each list of downstream nodes
+    
+                        # TODO may need to remove any ls cells that are in downslope path
+                        # lscls  = self.aLScell(cellsD[cell])
+                        # np.array(andc )[andc_m]
+    
+                        # convert list to df
+                        df2 = pd.DataFrame({'cell':list(cellsD[cell])})
+    
+                        # use pd merge to add unique cell values
+                        df1 = pd.merge(df1,df2, on = 'cell', how= "outer")
+    
+    
+                # from ids of all cells in clump df1, get attributes of each cell, organize into dataframe
+                # save in dictionary
+    
+                dff = pd.DataFrame({'cell':list(df1.cell),
+                                    'x location':list(self._grid.node_x[df1.cell]),
+                                    'y location':list(self._grid.node_y[df1.cell]),
+                                    'elevation [m]':list(self._grid.at_node['topographic__elevation'][df1.cell]),
+                                    'soil thickness [m]':list(self._grid.at_node['soil__thickness'][df1.cell]),
+                                    'slope [m/m]':list(self._grid.at_node['topographic__slope'][df1.cell])
+                                    })
+                LSclump[c] = dff
+    
+                # subtract 90% of soil depth from dem,
+                self._grid.at_node['topographic__elevation'][df1.cell] = self._grid.at_node['topographic__elevation'][df1.cell] - 0.9*self._grid.at_node['soil__thickness'][df1.cell]
+    
+    
+                # set soil thickness to 0 at landslide cells
+                self._grid.at_node['soil__thickness'][df1.cell] =0
+    
+                # once all lists that share cells are appended to clump df1
+                # remove initial cell list from list
+                groupALS_lc.remove(groupALS_lc[0])
+    
+                #update length of remaining
+                ll = len(groupALS_lc)
+    
+                c=c+1
+    
+    
+            # LS_df  - a single dataframe, each clumps is a row, columns are average attributes of all cells in the clump
+            LS = OrderedDict({})
+            cellarea = self._grid.area_of_cell[0]#100 #m2
+    
+            for key, df in LSclump.items():
+                slp = df['slope [m/m]'].mean() #mean slope of cells
+                st = df['soil thickness [m]'].mean() #mean soil thickness of cells
+                rc = df[df['elevation [m]']==df['elevation [m]'].min()] # choose cell with lowest elevation as initiation point of slide
+                rc = rc.iloc[0]
+                vol = st*cellarea*df.shape[0]
+                #rc = rc.set_index(pd.Index([0]))
+                LS[key] = [rc['cell'], rc['x location'], rc['y location'], rc['elevation [m]'], st, slp, vol]
+    
+            try:
+                LS_df = pd.DataFrame.from_dict(LS, orient = 'index', columns = LSclump[0].columns.to_list()+['vol [m^3]'])
+            except: # high landslide potential cells may not meet clumping criteria
+                LS_df = pd.DataFrame([])
+    
+            #create mass__wasting_clumps field
+            for c, nv in enumerate(LSclump.values()):
+                self.mwclump[list(nv['cell'].values)] = c+1 #plus one so that first value is 1
+    
+            self.grid.at_node['mass__wasting_clumps'] = self.mwclump
+            self.LS_df = LS_df
+            self.LSclump = LSclump
+            # self.LS_df_dict[self._time_idx] = LS_df.copy()
+            # self.LSclump_dict[self._time_idx] = LSclump.copy(); print('SAVED A CLUMP')
+     
+            # prepare MassWastingSED rmg inputs "mass__wasting_events" and "mass__wasting_volumes"
+    
+            mw_events = np.zeros(np.hstack(self._grid.nodes).shape[0])
+            mw_events_volumes = np.zeros(np.hstack(self._grid.nodes).shape[0])
+            
+    
+            ivL = self.LS_df['vol [m^3]'][0::1].values # initial volume list
+            innL = self.LS_df['cell'][0::1].values.astype('int') # initial node number list        
+            
+            mw_events[innL] = 1
+            mw_events_volumes[innL] = ivL 
+            
+            self._grid.at_node["mass__wasting_events"] = mw_events.astype(int)
+            self._grid.at_node["mass__wasting_volumes"] = mw_events_volumes
 
 
 

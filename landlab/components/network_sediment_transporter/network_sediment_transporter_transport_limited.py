@@ -398,8 +398,8 @@ class NetworkSedimentTransporter(Component):
         self._create_new_parcel_time()
         self._calculate_mean_D_and_rho()
 
-        self._partition_active_and_storage_layers()
-        self._adjust_node_elevation()
+        self._partition_active_and_storage_layers() #/jk/
+        # self._adjust_node_elevation() #/jk/
         self._update_channel_slopes()
 
     @property
@@ -514,97 +514,98 @@ class NetworkSedimentTransporter(Component):
             fill_value=0.0,
         )
 
-        if self._active_layer_method == "WongParker":
-            # Wong et al. (2007) approximation for active layer thickness.
-            # NOTE: calculated using grain size and grain density calculated for
-            # the active layer grains in each link at the **previous** timestep.
-            # This circumvents the need for an iterative scheme to determine grain
-            # size of the active layer before determining which grains are in the
-            # active layer.
+        #/jk/ comment out this section
+        # if self._active_layer_method == "WongParker":
+        #     # Wong et al. (2007) approximation for active layer thickness.
+        #     # NOTE: calculated using grain size and grain density calculated for
+        #     # the active layer grains in each link at the **previous** timestep.
+        #     # This circumvents the need for an iterative scheme to determine grain
+        #     # size of the active layer before determining which grains are in the
+        #     # active layer.
 
-            # calculate tau
-            tau = (
-                self._fluid_density
-                * self._g
-                * self._grid.at_link["channel_slope"]
-                * self._grid.at_link["flow_depth"]
-            )
+        #     # calculate tau
+        #     tau = (
+        #         self._fluid_density
+        #         * self._g
+        #         * self._grid.at_link["channel_slope"]
+        #         * self._grid.at_link["flow_depth"]
+        #     )
 
-            # calcuate taustar
-            taustar = tau / (
-                (self._rhos_mean_active - self._fluid_density)
-                * self._g
-                * self._d_mean_active
-            )
+        #     # calcuate taustar
+        #     taustar = tau / (
+        #         (self._rhos_mean_active - self._fluid_density)
+        #         * self._g
+        #         * self._d_mean_active
+        #     )
 
-            # calculate active layer thickness
-            self._active_layer_thickness = (
-                0.515 * self._d_mean_active * (3.09 * (taustar - 0.0549) ** 0.56)
-            )  # in units of m
+        #     # calculate active layer thickness
+        #     self._active_layer_thickness = (
+        #         0.515 * self._d_mean_active * (3.09 * (taustar - 0.0549) ** 0.56)
+        #     )  # in units of m
 
-        elif self._active_layer_method == "GrainSizeDependent":
-            # Set all active layers to a multiple of the lnk mean grain size
-            self._active_layer_thickness = (
-                self._d_mean_active * self._active_layer_d_multiplier
-            )
+        # elif self._active_layer_method == "GrainSizeDependent":
+        #     # Set all active layers to a multiple of the lnk mean grain size
+        #     self._active_layer_thickness = (
+        #         self._d_mean_active * self._active_layer_d_multiplier
+        #     )
 
-        elif self._active_layer_method == "Constant10cm":
-            # Set all active layers to 10 cm thickness.
-            self._active_layer_thickness = 0.1 * np.ones_like(self._d_mean_active)
+        # elif self._active_layer_method == "Constant10cm":
+        #     # Set all active layers to 10 cm thickness.
+        self._active_layer_thickness = 0.1 * np.ones_like(self._d_mean_active) #/jk/ keep this line
 
-        # If links have no parcels, we still need to assign them an active layer
-        # thickness..
-        links_with_no_active_layer = np.isnan(self._active_layer_thickness)
-        self._active_layer_thickness[links_with_no_active_layer] = np.mean(
-            self._active_layer_thickness[links_with_no_active_layer == 0]
-        )  # assign links with no parcels an average value
+        # # If links have no parcels, we still need to assign them an active layer
+        # # thickness..
+        # links_with_no_active_layer = np.isnan(self._active_layer_thickness)
+        # self._active_layer_thickness[links_with_no_active_layer] = np.mean(
+        #     self._active_layer_thickness[links_with_no_active_layer == 0]
+        # )  # assign links with no parcels an average value
 
-        if np.sum(np.isfinite(self._active_layer_thickness)) == 0:
-            self._active_layer_thickness.fill(_INIT_ACTIVE_LAYER_THICKNESS)
-            # handles the case of the first timestep -- assigns a modest value
+        # if np.sum(np.isfinite(self._active_layer_thickness)) == 0:
+        #     self._active_layer_thickness.fill(_INIT_ACTIVE_LAYER_THICKNESS)
+        #     # handles the case of the first timestep -- assigns a modest value
 
-        capacity = (
-            self._grid.at_link["channel_width"]
-            * self._grid.at_link["reach_length"]
-            * self._active_layer_thickness
-        )  # in units of m^3
+        # capacity = (
+        #     self._grid.at_link["channel_width"]
+        #     * self._grid.at_link["reach_length"]
+        #     * self._active_layer_thickness
+        # )  # in units of m^3
 
-        active_inactive = _INACTIVE * np.ones(self._num_parcels)
+        # active_inactive = _INACTIVE * np.ones(self._num_parcels)
 
-        current_link = self._parcels.dataset.element_id.values[:, -1].astype(int)
-        time_arrival = self._parcels.dataset.time_arrival_in_link.values[:, -1]
-        volumes = self._parcels.dataset.volume.values[:, -1]
+        # current_link = self._parcels.dataset.element_id.values[:, -1].astype(int)
+        # time_arrival = self._parcels.dataset.time_arrival_in_link.values[:, -1]
+        # volumes = self._parcels.dataset.volume.values[:, -1]
 
-        for i in range(self._grid.number_of_links):
+        # for i in range(self._grid.number_of_links):
 
-            if (
-                self._vol_tot[i] > 0
-            ):  # only do this check capacity if parcels are in link
+        #     if (
+        #         self._vol_tot[i] > 0
+        #     ):  # only do this check capacity if parcels are in link
 
-                # First In Last Out.
+        #         # First In Last Out.
 
-                # Find parcels on this link.
-                this_links_parcels = np.where(current_link == i)[0]
+        #         # Find parcels on this link.
+        #         this_links_parcels = np.where(current_link == i)[0]
 
-                # sort them by arrival time.
-                time_arrival_sort = np.flip(
-                    np.argsort(
-                        time_arrival[this_links_parcels],
-                        0,
-                    )
-                )
-                parcel_id_time_sorted = this_links_parcels[time_arrival_sort]
+        #         # sort them by arrival time.
+        #         time_arrival_sort = np.flip(
+        #             np.argsort(
+        #                 time_arrival[this_links_parcels],
+        #                 0,
+        #             )
+        #         )
+        #         parcel_id_time_sorted = this_links_parcels[time_arrival_sort]
 
-                # calculate the cumulative volume (in sorted order).
-                cumvol = np.cumsum(volumes[parcel_id_time_sorted])
+        #         # calculate the cumulative volume (in sorted order).
+        #         cumvol = np.cumsum(volumes[parcel_id_time_sorted])
 
-                # determine which parcels are within capacity and set those to
-                # active.
-                make_active = parcel_id_time_sorted[cumvol <= capacity[i]]
+        #         # determine which parcels are within capacity and set those to
+        #         # active.
+        #         make_active = parcel_id_time_sorted[cumvol <= capacity[i]]
 
-                active_inactive[make_active] = _ACTIVE
+        #         active_inactive[make_active] = _ACTIVE
 
-        self._parcels.dataset.active_layer[:, -1] = active_inactive
+        # self._parcels.dataset.active_layer[:, -1] = active_inactive
 
         # set active here. reference it below in wilcock crowe
         self._active_parcel_records = (
@@ -812,7 +813,7 @@ class NetworkSedimentTransporter(Component):
         self._grid.at_link["sediment__active__volume"] = self._vol_act
         self._grid.at_link["sediment__active__sand_fraction"] = frac_sand
 
-    def _move_parcel_downstream(self, dt):
+    def _move_parcel_downstream(self, dt): #/jk/ note, parcel velocity is updated when _calc_transport_wilcock_crowe is run in _run_one_step
         """Method to update parcel location for each parcel in the active
         layer.
         """
@@ -986,14 +987,14 @@ class NetworkSedimentTransporter(Component):
 
         if self._this_timesteps_parcels.any():
             self._partition_active_and_storage_layers()
-            self._adjust_node_elevation()
+            # self._adjust_node_elevation() #/jk/
             self._update_channel_slopes()
             self._update_transport_time()
             self._move_parcel_downstream(dt)
 
         else:
             msg = "No more parcels on grid"
-            raise RuntimeError(msg)
+            # raise RuntimeError(msg)
 
 
 # %% Methods referenced above, separated for purposes of testing

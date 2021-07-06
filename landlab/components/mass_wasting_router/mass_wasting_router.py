@@ -23,8 +23,8 @@ class MassWastingRouter(GridTTools):
     watershed and determines what portion of and where the sediment enters 
     the channel network
 
-    This component is designed to couple a mass-wasting model with a sediment
-    transport model. It has been written using the LandslideProbability component 
+    This component is designed to couple a mass-wasting model with a fluvial sediment
+    transport model. It was developed using the LandslideProbability component 
     and NetworkSedimentTransporter component. Any other mass-wasting model
     or network scale sediment transport model may be coupled with the mass wasting
     router so lang as the inputs and outputs are formatted correctly.
@@ -49,6 +49,7 @@ class MassWastingRouter(GridTTools):
     listed below.
 
 
+    author: Jeff Keck
 
     '''
 

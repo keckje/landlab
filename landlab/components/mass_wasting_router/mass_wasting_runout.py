@@ -17,7 +17,7 @@ class MassWastingRunout(Component):
     volume (e.g., a landslide) through a watershed, determines Scour, Entrainment
     and Depostion depths and updates the DEM. 
         
-    
+    author: Jeff Keck
     '''
     
     

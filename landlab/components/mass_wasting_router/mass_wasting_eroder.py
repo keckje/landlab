@@ -26,6 +26,7 @@ class MassWastingEroder(GridTTools):
           record datetime of each timestep
           add parameter for using different router and option to have no terrace cells (for models with larger grid cells)
 
+    author: Jeff Keck
     '''
 
     _name = 'MassWastingEroder'

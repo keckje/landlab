@@ -41,6 +41,7 @@ class GridTTools(Component):
         Width of terrace that boarders the fullvial channel network [cells]
     
         
+    author: Jeff Keck
 
     '''
 

@@ -44,7 +44,7 @@ class GridTTools(Component):
         Defaul value is 1 (i.e. all cells directly adjacent to the channels
                            cells are considered terrace cells)
     
-        
+    author: Jeff Keck
 
     '''
 

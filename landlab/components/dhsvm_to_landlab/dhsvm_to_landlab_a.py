@@ -14,42 +14,26 @@ from landlab.utils.grid_t_tools import GridTTools
 
 class DHSVMtoLandlab(GridTTools):
 
-    """
-    this component 
+    """this component takes the raw modeled flow and depth to soil water output 
+    from DHSVM. From the modeled flow, it parameterizes a probability distribution 
+    function (pdf) of flow rates at each link in a network model grid representation
+    of the channel network. From the mapped depth to soil water file, it parameterizes
+    a pdf of the depth to soil water at each node in the raster model grid 
+    representaiton of the watershed.
+    
+    The run one step function randomly picks a storm return interval and updates
+    the raster model grid depth to water table field and network model grid
+    flow depth fields. 
+
+    THe minimum return interval of the randomly selected storm intensities are specified
+    by the user.
     
     
-    TODO width and depth approximations are also updated based on parker 2007
+    TODO width and depth approximations are updated based on parker 2007
          storm duration generator
     
-    Parameters
-    ----------
-    path : 
-    StreamFlowOnly : time series of flow at each DHSVM link
-    grid : network model grid representation of DHSVM channel network 
-
-    TO DO: change to run on grid slope and d50 each time step
-            hydraulic geometry relation for width and depth updates with each time step - 90%
-            
     
-    # option 1
-    iterate over full DHSVM time series, if DHSVM is less than threshold flow,
-    NST is not run, ts advances. When DHSVM greater than threshold flow, NST
-    is run with hydrualic condtions computed by calling the class instance and
-    grid fields are computed.
-    
-    # option 2
-    same as above but hydraulic condtions are determined assuming fixed channel
-    condtions and read from self.DataArray to update grid fields.
-    
-
-    Examples
-    --------
-    >>> from landlab.utils.parcels import DhsvmToNST
-
-    >>> streamflowonly = 'D:/UW_PhD/dhsvm/projects/b694/output/Streamflow_B694_V1_2011to2015.Only'
-    >>> grid = example_network_model_grid 
-    
-
+    author: Jeff Keck
     """
 
     def __init__(self,
@@ -749,7 +733,8 @@ class DHSVMtoLandlab(GridTTools):
                        
                 self._variable_channel_tau()
                 
-                if self.P_ri > self.ls_ri: # update depth to water table if this is true, updating water table is slow
+                # update depth to water table if this is true, updating water table is slow
+                if self.P_ri > self.ls_ri: 
                     self.get_depth_to_water_table_at_node(self.q_yrs_i)
         
             else:
