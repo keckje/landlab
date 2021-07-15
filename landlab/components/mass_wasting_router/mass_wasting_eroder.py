@@ -359,6 +359,7 @@ class MassWastingEroder(GridTTools):
                         c+=1
                         if c >= len(self.FEV):
                             break
+                        v = clumps.DepositEroder.FEV[c]
                 else:
                     ag_node_L = [self.FENodes[c]]
                     vsum = v
@@ -463,7 +464,7 @@ class MassWastingEroder(GridTTools):
         self._FluvialErosion()
         # print('fluvial erosion')
 
-        self._parcelAggregator()
+        # self._parcelAggregator()
         # print('aggregating parcels')
         
         self.dem_previous_time_step = self._grid.at_node['topographic__elevation'].copy()
