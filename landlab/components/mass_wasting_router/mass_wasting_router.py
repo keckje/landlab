@@ -284,6 +284,7 @@ class MassWastingRouter(GridTTools):
              min_mw_cells = min_mw_cells,
              )
         
+        
         ### class instance of MassWastingRunout
         self.DebrisFlows = MWR(self._grid,
                                release_dict,

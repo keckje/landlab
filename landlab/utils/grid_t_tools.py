@@ -51,8 +51,8 @@ class GridTTools(Component):
    
     def __init__(
             self, 
-            grid,
-            nmgrid,
+            grid = None,
+            nmgrid = None,
             Ct = 5000,
             BCt = 100000,
             MW_to_channel_threshold = 50,
@@ -60,67 +60,76 @@ class GridTTools(Component):
             TerraceWidth = 1,
             **kwds):
         
-        super().__init__(grid)
-
-        if 'topographic__elevation' in grid.at_node:
-            self.dem = grid.at_node['topographic__elevation']
-        else:
-            raise FieldError(
-                'A topography is required as a component input!')
         
-        #   flow receiver node
-        if 'flow__receiver_node' in grid.at_node:
-            self.frnode = grid.at_node['flow__receiver_node']
-        else:
-            raise FieldError(
-                'A flow__receiver_node field is required as a component input!')  
-
-
         
-        ### RM Grid characteristics
-        self.ncn = len(grid.core_nodes) # number core nodes
-        self.gr = grid.shape[0] #number of rows
-        self.gc = grid.shape[1] #number of columns
-        self.dx = grid.dx #width of cell
-        self.dy = grid.dy #height of cell
+        if grid != None:
+            print('grid')
+            print(grid)
+            print('grid')
+            super().__init__(grid)
+    
+            if 'topographic__elevation' in grid.at_node:
+                self.dem = grid.at_node['topographic__elevation']
+            else:
+                raise FieldError(
+                    'A topography is required as a component input!')
+            
+            # this error goes to LandslideMapper
+            #   flow receiver node
+            # if 'flow__receiver_node' in grid.at_node:
+            #     self.frnode = grid.at_node['flow__receiver_node']
+            # else:
+            #     raise FieldError(
+            #         'A flow__receiver_node field is required as a component input!')  
+    
+    
+            
+            ### RM Grid characteristics
+            self.ncn = len(grid.core_nodes) # number core nodes
+            self.gr = grid.shape[0] #number of rows
+            self.gc = grid.shape[1] #number of columns
+            self.dx = grid.dx #width of cell
+            self.dy = grid.dy #height of cell
+    
+            # receivers = self.frnode #receiver nodes (node that receives runoff from node) = self.frnode #receiver nodes (node that receives runoff from node)
+    
+            # nodes, reshaped in into m*n,1 array like other mg fields
+            self.nodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1],1)
+            self.rnodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1]) #nodes in single column array
 
-        # receivers = self.frnode #receiver nodes (node that receives runoff from node) = self.frnode #receiver nodes (node that receives runoff from node)
-
-        # nodes, reshaped in into m*n,1 array like other mg fields
-        self.nodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1],1)
-        self.rnodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1]) #nodes in single column array
-                
-        self.xdif = grid.node_x[self.frnode]-grid.node_x[self.rnodes] # change in x from node to receiver node
-        self.ydif = (grid.node_y[self.frnode]-grid.node_y[self.rnodes])*-1 #, change in y from node to receiver node...NOTE: flip direction of y axis so that up is positve
-       
-        # grid node coordinates, translated to origin of 0,0
-        self.gridx = grid.node_x#-grid.node_x[0] 
-        self.gridy = grid.node_y#-grid.node_y[0]
-        
-        # extent of each cell in grid        
-        self.ndxe = self.gridx+self.dx/2
-        self.ndxw = self.gridx-self.dx/2
-        self.ndyn = self.gridy+self.dy/2
-        self.ndys = self.gridy-self.dy/2
+            if 'flow__receiver_node' in grid.at_node: # Landslide Mapper
+                self.frnode = grid.at_node['flow__receiver_node']
+                    
+                self.xdif = grid.node_x[self.frnode]-grid.node_x[self.rnodes] # change in x from node to receiver node
+                self.ydif = (grid.node_y[self.frnode]-grid.node_y[self.rnodes])*-1 #, change in y from node to receiver node...NOTE: flip direction of y axis so that up is positve
+               
+            # grid node coordinates, translated to origin of 0,0
+            self.gridx = grid.node_x#-grid.node_x[0] 
+            self.gridy = grid.node_y#-grid.node_y[0]
+            
+            # extent of each cell in grid        
+            self.ndxe = self.gridx+self.dx/2
+            self.ndxw = self.gridx-self.dx/2
+            self.ndyn = self.gridy+self.dy/2
+            self.ndys = self.gridy-self.dy/2
 
 
-
-        ### NM Grid characteristics
-        self._nmgrid = nmgrid
-        # network model grid characteristics       
-        self.linknodes = nmgrid.nodes_at_link #links as ordered by read_shapefile       
-        # network model grid node coordinates, translated to origin of 0,0, used to map grid to nmg
-        self.nmgridx = nmgrid.x_of_node
-        self.nmgridy = nmgrid.y_of_node
-        self.linklength = nmgrid.length_of_link 
-        self.nmg_nodes = nmgrid.nodes
-        
-        ### Channel extraction parameters
-        self.Ct = Ct # Channel initiation threshold [m2]   
-        self.POCbuffer = PartOfChannel_buffer # distance [m] from a channel cell that is considered part of the channel (used for determining distance between landslide and channel)
-        self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
-        self.TerraceWidth = TerraceWidth # distance from channel grid cells that are considered terrace grid cells [# cells] 
-         
+        if nmgrid != None:
+            ### NM Grid characteristics
+            self._nmgrid = nmgrid
+            # network model grid characteristics       
+            self.linknodes = nmgrid.nodes_at_link #links as ordered by read_shapefile       
+            # network model grid node coordinates, translated to origin of 0,0, used to map grid to nmg
+            self.nmgridx = nmgrid.x_of_node
+            self.nmgridy = nmgrid.y_of_node
+            self.linklength = nmgrid.length_of_link 
+            self.nmg_nodes = nmgrid.nodes
+            
+            ### Channel extraction parameters
+            self.Ct = Ct # Channel initiation threshold [m2]   
+            self.POCbuffer = PartOfChannel_buffer # distance [m] from a channel cell that is considered part of the channel (used for determining distance between landslide and channel)
+            self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
+            self.TerraceWidth = TerraceWidth # distance from channel grid cells that are considered terrace grid cells [# cells]          
       
 
     def _ChannelNodes(self):
@@ -278,6 +287,7 @@ class GridTTools(Component):
         self.LinkMapper = LinkMapper
         self.LinkMapL = LinkMapL
 
+
     def _DHSVM_network_to_RMG_Mapper(self):
         """DtoL
 
@@ -300,8 +310,8 @@ class GridTTools(Component):
             if i%20 == 0:
                 print(str(np.round((i/ncn)*100))+' % RMG nodes mapped to equivalent DHSVM link')
             
-        self.NodeMapper = NodeMapper
-        
+        self.NodeMapper = NodeMapper       
+
 
     def _NMG_node_to_RMG_node_mapper(self):
         """MWR, DtoL
@@ -323,6 +333,7 @@ class GridTTools(Component):
             NodeMapper[i] = self.ChannelNodes[mdn] # dhsmve link for node i
             
         self.NMGtoRMGnodeMapper = NodeMapper
+
 
     def _min_distance_to_network(self, cellid, ChType = 'debrisflow'):
         def distance_to_network(row):
@@ -401,8 +412,8 @@ class GridTTools(Component):
         Dista = np.array(dist)
         Dist = Dista.sum()
         return (Dist,loc)
+       
 
-        
     def AdjCells(self,n):
         '''MWR                
         returns cell numbers of cells adjacent to cell (n) AND the flow direction indexes
@@ -623,6 +634,7 @@ class GridTTools(Component):
         
         return ac_m
 
+
     #interplate function used by other functions
     def intp(self, x,y,x1,message = None): 
         '''ALL
@@ -655,6 +667,7 @@ class GridTTools(Component):
             f = sc.interpolate.interp1d(x,y)   
             y1 = f(x1)
         return y1
+    
     
     def run_one_step(self):
         """run_one_step is not implemented for this component."""

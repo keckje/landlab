@@ -116,6 +116,7 @@ class MassWastingRunout(Component):
         self.save = save_df_dem
         self.run_id = run_id
         self.itL = itL
+        self.df_evo_maps = {}
     
     
 
@@ -224,12 +225,12 @@ class MassWastingRunout(Component):
         for i,inn in enumerate(innL):
             # print(i)
             cL[i] = []
-            
+            self.df_evo_maps[i] = {}
     
     
             # set up initial landslide cell
-            iv =ivL[i]/nps# initial volume (total volume/number of pulses) 
-        
+            iv =ivL[i]/nps[i]# initial volume (total volume/number of pulses) 
+            print(iv)
             
             # initial receiving nodes (cells) from landslide
             rn = self._grid.at_node.dataset['flow__receiver_node'].values[inn]
@@ -238,7 +239,9 @@ class MassWastingRunout(Component):
             # initial receiving proportions from landslide
             rp = self._grid.at_node.dataset['flow__receiver_proportions'].values[inn]
             rp = rp[np.where(rp > 0)]
+            print(rp)
             rvi = rp*iv # volume sent to each receving cell
+            
         
             # now loop through each receiving node, 
             # determine next set of recieving nodes
@@ -251,19 +254,20 @@ class MassWastingRunout(Component):
             arn = rni
             arv = rvi
             enL = []
+            
             while len(arn)>0 and c < self.itL:
         
                 # add pulse (fraction) of total landslide volume
                 # at interval "nid" until total number of pulses is equal to total
                 # for landslide volume (nps*nid)
         
-                if ((c+1)%nid ==0) & (c2<=nps*nid):
+                if ((c+1)%nid[i] ==0) & (c2<=nps[i]*nid[i]):
                     arn = np.concatenate((arn,rni))
                     arv = np.concatenate((arv,rvi))
                     
                 arn_ns = np.array([])
                 arv_ns = np.array([])
-                # print('arn:'+str(arn))
+                df_dem = {} # dict to save array of node value for each iteration of flow
                 
                 # for each unique cell in receiving node list arn
                 for n in np.unique(arn):
@@ -362,7 +366,7 @@ class MassWastingRunout(Component):
                         arn_ns =np.concatenate((arn_ns,rn), axis = 0) # next step receiving node list
                         arv_ns = np.concatenate((arv_ns,rv), axis = 0) # next steip receiving node incoming volume list
                         
-        
+                
                     
                 # once all cells in iteration have been evaluated, temporary receiving
                 # node and node volume arrays become arrays for next iteration
@@ -381,10 +385,11 @@ class MassWastingRunout(Component):
                     cL[i].append(c)
                     
                     # save DEM 
-                    _ = self._grid.add_field( 'topographic__elevation_run_id_'+str(self.run_id)+str(i)+'_'+str(c),
-                                    self._grid.at_node['topographic__elevation'].copy(),
-                                    at='node')
-
+                    # _ = self._grid.add_field( 'topographic__elevation_run_id_'+str(self.run_id)+str(i)+'_'+str(c),
+                    #                 self._grid.at_node['topographic__elevation'].copy(),
+                    #                 at='node')
+                    
+                    self.df_evo_maps[i][c] = self._grid.at_node['topographic__elevation'].copy()
                     # save precipitions
                     DFcells[inn].append(arn.astype(int))
     
@@ -392,7 +397,7 @@ class MassWastingRunout(Component):
                 c+=1
                 
                 # update pulse counter
-                c2+=nid
+                c2+=nid[i]
                 
                 if c%20 ==0:
                     print(c)            
