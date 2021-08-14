@@ -265,7 +265,61 @@ class GridTTools(Component):
             
         self.NodeMapper = NodeMapper
 
+ 
+
+    def _DHSVM_grid_to_RMG_Mapper(self, grid_d)
+    """ maps the DHSVM grid cells that overlap with each landlab raster model grid cell
+    computs the weight of each DHSVM grid cell for each raster modelg grid cell.
+    computes the average Topmodel lambda value of the DHSVM grid cells.
+    for each raster model grid cell, outputs a dictionary with the following keys:
+        DSHVM cell ids
+        DHSVM cell weights
+        DHSVM average lamba value for each raster model grid value
+        """
         
+        # load masked DHSVM DEM as separate raster model grid
+
+        # determine topology of grid:
+                   ### RM Grid characteristics
+        self.ncn_d = len(grid_d.core_nodes) # number core nodes
+        self.gr_d = grid_d.shape[0] #number of rows
+        self.gc_d = grid_d.shape[1] #number of columns
+        self.dx_d = grid_d.dx #width of cell
+        self.dy_d = grid_d.dy #height of cell
+
+        # receivers = self.frnode #receiver nodes (node that receives runoff from node) = self.frnode #receiver nodes (node that receives runoff from node)
+
+        # nodes, reshaped in into m*n,1 array like other mg fields
+        self.nodes_d = grid_d.nodes.reshape(grid_d.shape[0]*grid_d.shape[1],1)
+        self.rnodes_d = grid_d.nodes.reshape(grid_d.shape[0]*grid_d.shape[1]) #nodes in single column array
+                
+        self.xdif_d = grid_d.node_x[self.frnode]-grid_d.node_x[self.rnodes] # change in x from node to receiver node
+        self.ydif_d = (grid_d.node_y[self.frnode]-grid_d.node_y[self.rnodes])*-1 #, change in y from node to receiver node...NOTE: flip direction of y axis so that up is positve
+       
+        # grid node coordinates, translated to origin of 0,0
+        self.gridx_d = grid_d.node_x#-grid_d.node_x[0] 
+        self.gridy_d = grid_d.node_y#-grid.node_y[0]
+        
+        # extent of each cell in grid        
+        self.ndxe = self.gridx+self.dx/2
+        self.ndxw = self.gridx-self.dx/2
+        self.ndyn = self.gridy+self.dy/2
+        self.ndys = self.gridy-self.dy/2
+
+            
+        # required inputs: length of DHSVM 1 d array; cell size; north, west,
+        # east, south coordinates
+        
+        # determine if squares intersect
+        # https://www.geeksforgeeks.org/find-two-rectangles-overlap/
+        
+        
+        
+        # determine area of overlapping squares
+        # https://francisco.github.io/blog/2014/02/02/finding-the-overlap-of-two-rectangles-in-ruby/
+        # determine x coordinates of each cell  
+    
+       
 
     def _min_distance_to_network(self, cellid, ChType = 'debrisflow'):
         def distance_to_network(row):

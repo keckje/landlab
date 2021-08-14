@@ -200,8 +200,16 @@ class MassWastingRunout(Component):
         
         
         # release parameters for landslide
-        nps = self.release_dict['number of pulses']
-        nid = self.release_dict['iteration delay']    
+        nps = list(self.release_dict['number of pulses'])
+        nid = list(self.release_dict['iteration delay'])
+        
+        # if nps is a single value (rather than list of values for each mass wasting event)
+        if (len(nps) ==1) & (len(nps) < len(innL)):
+            nps = np.ones(len(innL))*nps
+
+        # if nid is a single value (rather than list of values for each mass wasting event)            
+        if (len(nid) ==1) & (len(nid) < len(innL)):
+            nid = np.ones(len(innL))*nid
         
         # critical slope at which debris flow stops
         # higher reduces spread and runout distance

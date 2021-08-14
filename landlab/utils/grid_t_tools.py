@@ -313,6 +313,7 @@ class GridTTools(Component):
         self.NodeMapper = NodeMapper       
 
 
+
     def _NMG_node_to_RMG_node_mapper(self):
         """MWR, DtoL
 
@@ -362,277 +363,277 @@ class GridTTools(Component):
         return offset, mdn
 
 
-    def _downslopecells(self,StartCell):
-        '''MWR
-        compute distance between a given cell and the nearest downslope channel 
-        network cell. distance is computed to POCbuffer distance from channel network
-        cell. Track which cells are downslope
+    # def _downslopecells(self,StartCell):
+    #     '''MWR
+    #     compute distance between a given cell and the nearest downslope channel 
+    #     network cell. distance is computed to POCbuffer distance from channel network
+    #     cell. Track which cells are downslope
         
-        channel network is the colluvial channel network
+    #     channel network is the colluvial channel network
         
-        this function is used to determine the lower extent of a landslide.
+    #     this function is used to determine the lower extent of a landslide.
         
-        use this to determine 
+    #     use this to determine 
         
-        (1) check if clump meets distance threshold (is close enough to channel network)
-          to causethe hillslope below to fail         
+    #     (1) check if clump meets distance threshold (is close enough to channel network)
+    #       to causethe hillslope below to fail         
         
-        (2) if it does, get list of all unique cells and add to clump
+    #     (2) if it does, get list of all unique cells and add to clump
         
-        '''
+    #     '''
 
-        loc = []
-        dist = []
-        c = 0
+    #     loc = []
+    #     dist = []
+    #     c = 0
         
-        loc.append(int(StartCell))
-        dist.append((self.xdif[int(StartCell)]**2+self.ydif[int(StartCell)]**2)**.5)
+    #     loc.append(int(StartCell))
+    #     dist.append((self.xdif[int(StartCell)]**2+self.ydif[int(StartCell)]**2)**.5)
                        
-        flow = True
+    #     flow = True
         
-        while flow == True:
+    #     while flow == True:
             
-            slope  = self._grid.at_node['topographic__slope'][loc[c]]
-            #compute distance between deposit and all debris flow network cells
-            cdist, nc = self._min_distance_to_network(loc[c],  ChType = 'debrisflow')
-            #TO DO need to change so that if distance to network is less than minimum, then stop
+    #         slope  = self._grid.at_node['topographic__slope'][loc[c]]
+    #         #compute distance between deposit and all debris flow network cells
+    #         cdist, nc = self._min_distance_to_network(loc[c],  ChType = 'debrisflow')
+    #         #TO DO need to change so that if distance to network is less than minimum, then stop
             
             
-            #if loc[c] not in self.xyDf['node'].values: # channel network doesnt always match DEM
-            # print(cdist)
-            if cdist > self.POCbuffer: # downslope distance measured to POCbuffer from channel    
-                loc.append(self._grid.at_node['flow__receiver_node'][loc[c]])
-                dist.append((self.xdif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2+self.ydif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2)**.5)
-                c=c+1
-                if loc[-1] == loc[-2]: # check that runout is not stuck at same node # NEED TO DEBUG
-                    break
-            else:
-                flow = False
+    #         #if loc[c] not in self.xyDf['node'].values: # channel network doesnt always match DEM
+    #         # print(cdist)
+    #         if cdist > self.POCbuffer: # downslope distance measured to POCbuffer from channel    
+    #             loc.append(self._grid.at_node['flow__receiver_node'][loc[c]])
+    #             dist.append((self.xdif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2+self.ydif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2)**.5)
+    #             c=c+1
+    #             if loc[-1] == loc[-2]: # check that runout is not stuck at same node # NEED TO DEBUG
+    #                 break
+    #         else:
+    #             flow = False
         
-        Dista = np.array(dist)
-        Dist = Dista.sum()
-        return (Dist,loc)
+    #     Dista = np.array(dist)
+    #     Dist = Dista.sum()
+    #     return (Dist,loc)
        
 
-    def AdjCells(self,n):
-        '''MWR                
-        returns cell numbers of cells adjacent to cell (n) AND the flow direction indexes
+    # def AdjCells(self,n):
+    #     '''MWR                
+    #     returns cell numbers of cells adjacent to cell (n) AND the flow direction indexes
         
-        gr - number of rows in grid
-        gc - number of columns in grid
-        n - cell number other cells are adjacent to
-        ac - node numbers
-        acn - a
+    #     gr - number of rows in grid
+    #     gc - number of columns in grid
+    #     n - cell number other cells are adjacent to
+    #     ac - node numbers
+    #     acn - a
         
-        #change to use mg.adjacent_nodes_at_node[] and mg.diagonal_adjacent_nodes_at_node[]
+    #     #change to use mg.adjacent_nodes_at_node[] and mg.diagonal_adjacent_nodes_at_node[]
 
-        '''
-        gc = self.gc
-        gr = self.gr
+    #     '''
+    #     gc = self.gc
+    #     gr = self.gr
         
-        u = n-gc
-        ur = n-gc+1
-        r = n+1
-        br = n+gc+1
-        b = n+gc
-        bl = n+gc-1
-        l = n-1
-        ul = n-gc-1   
+    #     u = n-gc
+    #     ur = n-gc+1
+    #     r = n+1
+    #     br = n+gc+1
+    #     b = n+gc
+    #     bl = n+gc-1
+    #     l = n-1
+    #     ul = n-gc-1   
         
         
-        if n == 0:                      #top left corner
-            ac = [r,br,b]
-            acn = [2,3,4]               #flow directio index
-        elif n == gc-1:                 #top right corner
-            ac = [b,bl,l]
-            acn = [4,5,6]
-        elif n == gr*gc-1:              #bottom right corner
-            ac = [u,l,ul]  
-            acn = [0,6,7]
-        elif n == gr*gc-gc:             #bottom left corner
-            ac = [u,ur,r]
-            acn = [0,1,2]
-        elif n<gc-1 and n>0:            #top side
-            ac = [r,br,b,bl,l]
-            acn = [2,3,4,5,6]
-        elif n%gc == gc-1:              #right side
-            ac = [u,b,bl,l,ul]
-            acn = [0,4,5,6,7]
-        elif n<gr*gc-1 and n>gr*gc-gc:  #bottom side
-            ac = [u,ur,r,l,ul]
-            acn = [0,1,2,6,7]
-        elif n%gc == 0:                 #left side
-            ac = [u,ur,r,br,b]
-            acn = [0,1,2,3,4]
-        else:                           #inside grid
-            ac = [u,ur,r,br,b,bl,l,ul]
-            acn = [0,1,2,3,4,5,6,7]
+    #     if n == 0:                      #top left corner
+    #         ac = [r,br,b]
+    #         acn = [2,3,4]               #flow directio index
+    #     elif n == gc-1:                 #top right corner
+    #         ac = [b,bl,l]
+    #         acn = [4,5,6]
+    #     elif n == gr*gc-1:              #bottom right corner
+    #         ac = [u,l,ul]  
+    #         acn = [0,6,7]
+    #     elif n == gr*gc-gc:             #bottom left corner
+    #         ac = [u,ur,r]
+    #         acn = [0,1,2]
+    #     elif n<gc-1 and n>0:            #top side
+    #         ac = [r,br,b,bl,l]
+    #         acn = [2,3,4,5,6]
+    #     elif n%gc == gc-1:              #right side
+    #         ac = [u,b,bl,l,ul]
+    #         acn = [0,4,5,6,7]
+    #     elif n<gr*gc-1 and n>gr*gc-gc:  #bottom side
+    #         ac = [u,ur,r,l,ul]
+    #         acn = [0,1,2,6,7]
+    #     elif n%gc == 0:                 #left side
+    #         ac = [u,ur,r,br,b]
+    #         acn = [0,1,2,3,4]
+    #     else:                           #inside grid
+    #         ac = [u,ur,r,br,b,bl,l,ul]
+    #         acn = [0,1,2,3,4,5,6,7]
             
-        return ac,acn #adjacent cell numbers and cell numbers for direction grid
+    #     return ac,acn #adjacent cell numbers and cell numbers for direction grid
 
 
-    def NotDivergent(self,n,ac,acn):
-        '''MWR        
-        takes mass wasting cell and adjacent cell numbers as input
-        returns boolian list of cells that are not divergent (convergent or planar)
+    # def NotDivergent(self,n,ac,acn):
+    #     '''MWR        
+    #     takes mass wasting cell and adjacent cell numbers as input
+    #     returns boolian list of cells that are not divergent (convergent or planar)
         
-        xdif - change in x in slope direction to receiving cell
-        ydif -  change in y in slope direciton to receiving cell
-        n - mass wasting unit cell
-        ac - grid number of adjacent cells
-        acn - adjacent cell number
-        '''
+    #     xdif - change in x in slope direction to receiving cell
+    #     ydif -  change in y in slope direciton to receiving cell
+    #     n - mass wasting unit cell
+    #     ac - grid number of adjacent cells
+    #     acn - adjacent cell number
+    #     '''
         
-        xd = self.xdif[n]
-        yd = self.ydif[n]
+    #     xd = self.xdif[n]
+    #     yd = self.ydif[n]
         
-        '''       
-        functions that check if cell is not divergent based on center cell direction
+    #     '''       
+    #     functions that check if cell is not divergent based on center cell direction
         
-        Input to functions:
-        x - adjacent cell number (ordered 0 to 7, with 0 north of center, clockwise)
-        yda - change in y direction at adjacent cell to it's receiving cell
-        xda - change in x direction at adjacent cell to it's receiving cell
-            '''
+    #     Input to functions:
+    #     x - adjacent cell number (ordered 0 to 7, with 0 north of center, clockwise)
+    #     yda - change in y direction at adjacent cell to it's receiving cell
+    #     xda - change in x direction at adjacent cell to it's receiving cell
+    #         '''
     
-        def pyzx(x,yda,xda): #positve y zero x  (slopes north)
+    #     def pyzx(x,yda,xda): #positve y zero x  (slopes north)
     
-            return {            
-                0: True,
-                1: (yda > 0 and xda == 0) or (yda > 0 and xda < 0) or (yda == 0 and xda < 0),    
-                2: (yda > 0 and xda == 0) or (yda > 0 and xda < 0) or (yda == 0 and xda < 0),
-                3: (yda > 0 and xda == 0) or (yda > 0 and xda < 0),
-                4: (yda > 0 and xda == 0),
-                5: (yda > 0 and xda == 0) or (yda > 0 and xda > 0),
-                6: (yda > 0 and xda == 0) or (yda > 0 and xda > 0) or (yda == 0 and xda > 0),
-                7: (yda > 0 and xda == 0) or (yda > 0 and xda > 0) or (yda == 0 and xda > 0),
+    #         return {            
+    #             0: True,
+    #             1: (yda > 0 and xda == 0) or (yda > 0 and xda < 0) or (yda == 0 and xda < 0),    
+    #             2: (yda > 0 and xda == 0) or (yda > 0 and xda < 0) or (yda == 0 and xda < 0),
+    #             3: (yda > 0 and xda == 0) or (yda > 0 and xda < 0),
+    #             4: (yda > 0 and xda == 0),
+    #             5: (yda > 0 and xda == 0) or (yda > 0 and xda > 0),
+    #             6: (yda > 0 and xda == 0) or (yda > 0 and xda > 0) or (yda == 0 and xda > 0),
+    #             7: (yda > 0 and xda == 0) or (yda > 0 and xda > 0) or (yda == 0 and xda > 0),
                     
-            }[x]
+    #         }[x]
         
-        def nyzx(x,yda,xda): #negative y, zero x (slopes south)
+    #     def nyzx(x,yda,xda): #negative y, zero x (slopes south)
             
-            return {
-                0: (yda < 0 and xda == 0),
-                1: (yda < 0 and xda == 0) or (yda < 0 and xda < 0),
-                2: (yda < 0 and xda == 0) or (yda < 0 and xda < 0) or (yda == 0 and xda < 0),
-                3: (yda < 0 and xda == 0) or (yda < 0 and xda < 0) or (yda == 0 and xda < 0),
-                4: True,
-                5: (yda < 0 and xda == 0) or (yda < 0 and xda > 0) or (yda == 0 and xda > 0),
-                6: (yda < 0 and xda == 0) or (yda < 0 and xda > 0) or (yda == 0 and xda > 0),
-                7: (yda < 0 and xda == 0) or (yda < 0 and xda > 0),
+    #         return {
+    #             0: (yda < 0 and xda == 0),
+    #             1: (yda < 0 and xda == 0) or (yda < 0 and xda < 0),
+    #             2: (yda < 0 and xda == 0) or (yda < 0 and xda < 0) or (yda == 0 and xda < 0),
+    #             3: (yda < 0 and xda == 0) or (yda < 0 and xda < 0) or (yda == 0 and xda < 0),
+    #             4: True,
+    #             5: (yda < 0 and xda == 0) or (yda < 0 and xda > 0) or (yda == 0 and xda > 0),
+    #             6: (yda < 0 and xda == 0) or (yda < 0 and xda > 0) or (yda == 0 and xda > 0),
+    #             7: (yda < 0 and xda == 0) or (yda < 0 and xda > 0),
                 
-            }[x]
+    #         }[x]
             
-        def zypx(x,yda,xda): #zero y, positive x (slopes east)
+    #     def zypx(x,yda,xda): #zero y, positive x (slopes east)
             
-            return {
-                0: (yda == 0 and xda > 0) or (yda < 0 and xda > 0) or (yda < 0 and xda == 0),
-                1: (yda == 0 and xda > 0) or (yda < 0 and xda > 0) or (yda < 0 and xda == 0),
-                2: True,
-                3: (yda == 0 and xda > 0) or (yda > 0 and xda > 0) or (yda > 0 and xda == 0),
-                4: (yda == 0 and xda > 0) or (yda > 0 and xda > 0) or (yda > 0 and xda == 0),
-                5: (yda == 0 and xda > 0) or (yda > 0 and xda > 0),
-                6: (yda == 0 and xda > 0),
-                7: (yda == 0 and xda > 0) or (yda < 0 and xda > 0),
+    #         return {
+    #             0: (yda == 0 and xda > 0) or (yda < 0 and xda > 0) or (yda < 0 and xda == 0),
+    #             1: (yda == 0 and xda > 0) or (yda < 0 and xda > 0) or (yda < 0 and xda == 0),
+    #             2: True,
+    #             3: (yda == 0 and xda > 0) or (yda > 0 and xda > 0) or (yda > 0 and xda == 0),
+    #             4: (yda == 0 and xda > 0) or (yda > 0 and xda > 0) or (yda > 0 and xda == 0),
+    #             5: (yda == 0 and xda > 0) or (yda > 0 and xda > 0),
+    #             6: (yda == 0 and xda > 0),
+    #             7: (yda == 0 and xda > 0) or (yda < 0 and xda > 0),
                 
-            }[x]
+    #         }[x]
         
-        def zynx(x,yda,xda): #zero y, negative x (slopes west)
+    #     def zynx(x,yda,xda): #zero y, negative x (slopes west)
             
-            return {
-                0: (yda == 0 and xda < 0) or (yda < 0 and xda < 0) or (yda < 0 and xda == 0),
-                1: (yda == 0 and xda < 0) or (yda < 0 and xda < 0),
-                2: (yda == 0 and xda < 0),
-                3: (yda == 0 and xda < 0) or (yda > 0 and xda < 0),
-                4: (yda == 0 and xda < 0) or (yda > 0 and xda < 0) or (yda > 0 and xda == 0), 
-                5: (yda == 0 and xda < 0) or (yda > 0 and xda < 0) or (yda > 0 and xda == 0),
-                6: True,
-                7: (yda == 0 and xda < 0) or (yda < 0 and xda < 0) or (yda < 0 and xda == 0),
+    #         return {
+    #             0: (yda == 0 and xda < 0) or (yda < 0 and xda < 0) or (yda < 0 and xda == 0),
+    #             1: (yda == 0 and xda < 0) or (yda < 0 and xda < 0),
+    #             2: (yda == 0 and xda < 0),
+    #             3: (yda == 0 and xda < 0) or (yda > 0 and xda < 0),
+    #             4: (yda == 0 and xda < 0) or (yda > 0 and xda < 0) or (yda > 0 and xda == 0), 
+    #             5: (yda == 0 and xda < 0) or (yda > 0 and xda < 0) or (yda > 0 and xda == 0),
+    #             6: True,
+    #             7: (yda == 0 and xda < 0) or (yda < 0 and xda < 0) or (yda < 0 and xda == 0),
                 
-            }[x]
+    #         }[x]
         
-        def pypx(x,yda,xda): #positive y, positive x (slopes northeast)
+    #     def pypx(x,yda,xda): #positive y, positive x (slopes northeast)
             
-            return {
-                0: (yda > 0 and xda > 0) or (yda == 0 and xda > 0) or (yda < 0 and xda > 0), 
-                1: True,
-                2: (yda > 0 and xda > 0) or (yda > 0 and xda == 0) or (yda > 0 and xda < 0),
-                3: (yda > 0 and xda > 0) or (yda > 0 and xda == 0) or (yda > 0 and xda < 0), 
-                4: (yda > 0 and xda > 0) or (yda > 0 and xda == 0), 
-                5: (yda > 0 and xda > 0), 
-                6: (yda > 0 and xda > 0) or (yda == 0 and xda > 0), 
-                7: (yda > 0 and xda > 0) or (yda == 0 and xda > 0) or (yda < 0 and xda > 0), 
+    #         return {
+    #             0: (yda > 0 and xda > 0) or (yda == 0 and xda > 0) or (yda < 0 and xda > 0), 
+    #             1: True,
+    #             2: (yda > 0 and xda > 0) or (yda > 0 and xda == 0) or (yda > 0 and xda < 0),
+    #             3: (yda > 0 and xda > 0) or (yda > 0 and xda == 0) or (yda > 0 and xda < 0), 
+    #             4: (yda > 0 and xda > 0) or (yda > 0 and xda == 0), 
+    #             5: (yda > 0 and xda > 0), 
+    #             6: (yda > 0 and xda > 0) or (yda == 0 and xda > 0), 
+    #             7: (yda > 0 and xda > 0) or (yda == 0 and xda > 0) or (yda < 0 and xda > 0), 
                 
-            }[x]
+    #         }[x]
         
-        def pynx(x,yda,xda): # positive y, negative x (slopes northwest)
+    #     def pynx(x,yda,xda): # positive y, negative x (slopes northwest)
             
-            return {
-                0: (yda > 0 and xda < 0) or (yda == 0 and xda < 0) or (yda < 0 and xda < 0), 
-                1: (yda > 0 and xda < 0) or (yda == 0 and xda < 0) or (yda < 0 and xda < 0), 
-                2: (yda > 0 and xda < 0) or (yda == 0 and xda < 0), 
-                3: (yda > 0 and xda < 0),  
-                4: (yda > 0 and xda < 0) or (yda > 0 and xda == 0), 
-                5: (yda > 0 and xda < 0) or (yda > 0 and xda == 0) or (yda > 0 and xda > 0), 
-                6: (yda > 0 and xda < 0) or (yda > 0 and xda == 0) or (yda > 0 and xda > 0), 
-                7: True, 
+    #         return {
+    #             0: (yda > 0 and xda < 0) or (yda == 0 and xda < 0) or (yda < 0 and xda < 0), 
+    #             1: (yda > 0 and xda < 0) or (yda == 0 and xda < 0) or (yda < 0 and xda < 0), 
+    #             2: (yda > 0 and xda < 0) or (yda == 0 and xda < 0), 
+    #             3: (yda > 0 and xda < 0),  
+    #             4: (yda > 0 and xda < 0) or (yda > 0 and xda == 0), 
+    #             5: (yda > 0 and xda < 0) or (yda > 0 and xda == 0) or (yda > 0 and xda > 0), 
+    #             6: (yda > 0 and xda < 0) or (yda > 0 and xda == 0) or (yda > 0 and xda > 0), 
+    #             7: True, 
                 
-            }[x]
+    #         }[x]
         
-        def nypx(x,yda,xda): #negative y, postive x (slopes southeast)
+    #     def nypx(x,yda,xda): #negative y, postive x (slopes southeast)
             
-            return {
-                0: (yda < 0 and xda > 0) or (yda < 0 and xda == 0),  
-                1: (yda < 0 and xda > 0) or (yda < 0 and xda == 0) or (yda < 0 and xda < 0), 
-                2: (yda < 0 and xda > 0) or (yda < 0 and xda == 0) or (yda < 0 and xda < 0), 
-                3: True, 
-                4: (yda < 0 and xda > 0) or (yda == 0 and xda > 0) or (yda > 0 and xda > 0),
-                5: (yda < 0 and xda > 0) or (yda == 0 and xda > 0) or (yda > 0 and xda > 0), 
-                6: (yda < 0 and xda > 0) or (yda == 0 and xda > 0), 
-                7: (yda < 0 and xda > 0), 
+    #         return {
+    #             0: (yda < 0 and xda > 0) or (yda < 0 and xda == 0),  
+    #             1: (yda < 0 and xda > 0) or (yda < 0 and xda == 0) or (yda < 0 and xda < 0), 
+    #             2: (yda < 0 and xda > 0) or (yda < 0 and xda == 0) or (yda < 0 and xda < 0), 
+    #             3: True, 
+    #             4: (yda < 0 and xda > 0) or (yda == 0 and xda > 0) or (yda > 0 and xda > 0),
+    #             5: (yda < 0 and xda > 0) or (yda == 0 and xda > 0) or (yda > 0 and xda > 0), 
+    #             6: (yda < 0 and xda > 0) or (yda == 0 and xda > 0), 
+    #             7: (yda < 0 and xda > 0), 
                 
-            }[x]
+    #         }[x]
         
-        def nynx(x,yda,xda): #negative y, negative x (slopes southwest)
+    #     def nynx(x,yda,xda): #negative y, negative x (slopes southwest)
             
-            return {
-                0: (yda < 0 and xda < 0) or (yda < 0 and xda == 0), 
-                1: (yda < 0 and xda < 0), 
-                2: (yda < 0 and xda < 0) or (yda == 0 and xda < 0), 
-                3: (yda < 0 and xda < 0) or (yda == 0 and xda < 0) or (yda > 0 and xda < 0), 
-                4: (yda < 0 and xda < 0) or (yda == 0 and xda < 0) or (yda > 0 and xda < 0), 
-                5: True, 
-                6: (yda < 0 and xda < 0) or (yda < 0 and xda == 0) or (yda < 0 and xda > 0),
-                7: (yda < 0 and xda < 0) or (yda < 0 and xda == 0) or (yda < 0 and xda > 0), 
+    #         return {
+    #             0: (yda < 0 and xda < 0) or (yda < 0 and xda == 0), 
+    #             1: (yda < 0 and xda < 0), 
+    #             2: (yda < 0 and xda < 0) or (yda == 0 and xda < 0), 
+    #             3: (yda < 0 and xda < 0) or (yda == 0 and xda < 0) or (yda > 0 and xda < 0), 
+    #             4: (yda < 0 and xda < 0) or (yda == 0 and xda < 0) or (yda > 0 and xda < 0), 
+    #             5: True, 
+    #             6: (yda < 0 and xda < 0) or (yda < 0 and xda == 0) or (yda < 0 and xda > 0),
+    #             7: (yda < 0 and xda < 0) or (yda < 0 and xda == 0) or (yda < 0 and xda > 0), 
                 
-            }[x]
+    #         }[x]
         
             
-        ydal = self.ydif[ac]
-        xdal = self.xdif[ac]
+    #     ydal = self.ydif[ac]
+    #     xdal = self.xdif[ac]
         
-        #create mask for adjacent cells using  check if not divergent (True) or divergent (false)
-        if yd > 0 and xd == 0:
-            ac_m = np.array(list(map(pyzx,acn,ydal,xdal)))
-        elif yd < 0 and xd == 0:
-            ac_m = np.array(list(map(nyzx,acn,ydal,xdal)))        
-        elif yd == 0 and xd > 0:
-            ac_m = np.array(list(map(zypx,acn,ydal,xdal)))
-        elif yd == 0 and xd < 0:
-            ac_m = np.array(list(map(zynx,acn,ydal,xdal)))
-        elif yd > 0 and xd > 0:
-            ac_m = np.array(list(map(pypx,acn,ydal,xdal)))
-        elif yd > 0 and xd < 0:
-            ac_m = np.array(list(map(pynx,acn,ydal,xdal)))
-        elif yd < 0 and xd > 0:
-            ac_m = np.array(list(map(nypx,acn,ydal,xdal)))
-        elif yd < 0 and xd < 0:
-            ac_m = np.array(list(map(nynx,acn,ydal,xdal)))
-        else: # if yd == 0 and xd == 0, flat ground? # NEED TO DETERMINE WHEN THIS ARISES
-            print('WARNING, CELL '+str(n)+'HAS INDETERMINANT FLOW DIRECTION')
-            ac_m = np.array(list(map(nynx,acn,ydal,xdal)))
+    #     #create mask for adjacent cells using  check if not divergent (True) or divergent (false)
+    #     if yd > 0 and xd == 0:
+    #         ac_m = np.array(list(map(pyzx,acn,ydal,xdal)))
+    #     elif yd < 0 and xd == 0:
+    #         ac_m = np.array(list(map(nyzx,acn,ydal,xdal)))        
+    #     elif yd == 0 and xd > 0:
+    #         ac_m = np.array(list(map(zypx,acn,ydal,xdal)))
+    #     elif yd == 0 and xd < 0:
+    #         ac_m = np.array(list(map(zynx,acn,ydal,xdal)))
+    #     elif yd > 0 and xd > 0:
+    #         ac_m = np.array(list(map(pypx,acn,ydal,xdal)))
+    #     elif yd > 0 and xd < 0:
+    #         ac_m = np.array(list(map(pynx,acn,ydal,xdal)))
+    #     elif yd < 0 and xd > 0:
+    #         ac_m = np.array(list(map(nypx,acn,ydal,xdal)))
+    #     elif yd < 0 and xd < 0:
+    #         ac_m = np.array(list(map(nynx,acn,ydal,xdal)))
+    #     else: # if yd == 0 and xd == 0, flat ground? # NEED TO DETERMINE WHEN THIS ARISES
+    #         print('WARNING, CELL '+str(n)+'HAS INDETERMINANT FLOW DIRECTION')
+    #         ac_m = np.array(list(map(nynx,acn,ydal,xdal)))
         
-        return ac_m
+    #     return ac_m
 
 
     #interplate function used by other functions

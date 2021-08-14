@@ -586,7 +586,8 @@ class LandslideProbability(Component):
         
         #/jk/
         if self._groundwater__recharge_distribution == 'modeled': #/jk/#
-            #/jk/ relative wetness is determined from the depth to water table and stochastically from soil depth for each iteration
+            #/jk/ relative wetness is determined from the modeled depth to water 
+            # table and randomly selected soil depth for each iteration
             #/jk/
             self._depth_to_water_table = np.float32(self._grid.at_node["depth__to_water_table"][i])
             Rw = (self._hs-self._depth_to_water_table) / self._hs #/jk/

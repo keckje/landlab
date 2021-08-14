@@ -10,7 +10,7 @@ from scipy.special import gamma
 import xarray as xr
 from landlab.plot import graph
 
-from landlab.utils.grid_t_tools import GridTTools
+from landlab.utils.grid_t_tools_a import GridTTools
 
 class DHSVMtoLandlab(GridTTools):
 
@@ -23,7 +23,8 @@ class DHSVMtoLandlab(GridTTools):
     
     The run one step function randomly picks a storm return interval and updates
     the raster model grid depth to water table field and network model grid
-    flow depth fields. 
+    flow depth fields assuming a uniform hydrologic frequency accross
+    the basin.
 
     THe minimum return interval of the randomly selected storm intensities are specified
     by the user.
@@ -43,14 +44,14 @@ class DHSVMtoLandlab(GridTTools):
                   parcels = None,
                   nmgrid_d = None, 
                   DHSVM_flow = None,
-                  DHSVM_dtw_dict = None,
+                  DHSVM_dtw_dict = None, # dtw maps must include at least as many maps as years in hydro time series.
                   precip = None,
                   method = 'storm_generator',
-                  time_aggregation = '24h',
+                  flow_aggregation = '24h',
                   begin_year = 2000,
                   end_year = 2010,
-                  metric='max',
-                  rep_reach = 0,
+                  flow_aggregation_metric='max',
+                  flow_representative_reach = 0,
                   bankfull_flow_RI = 1.5,
                   fluvial_sediment_RI = 0.25,
                   hillslope_sediment_RI = 2.5,
@@ -61,15 +62,16 @@ class DHSVMtoLandlab(GridTTools):
         # call __init__ from parent classes
         if (nmgrid != None) and (grid != None):
             super().__init__(grid, nmgrid)
+            if DHSVM_dtw_dict != None:
+                self.opt = 1
+            elif DHSVM_dtw_dict == None:
+                self.opt = 2                
         elif grid != None:
             super().__init__(grid)
-        elif nmgrid != None:
-            # GridTTools.__init__(nmgrid)
-            raise ValueError("a raster model grid is required to map the dhsvm" \
-                         " network model grid to the landlab network model grid")
+            self.opt = 3
         else:
-            raise ValueError("a network model grid or raster model grid required" \
-                             " to run DHSVMtoLandlab")
+            raise ValueError("a network model grid and raster model grid or a" \
+                             "raster model grid are required to run DHSVMtoLandlab")
 
 
         # check for network model grid inputs
@@ -111,6 +113,12 @@ class DHSVMtoLandlab(GridTTools):
         self.begin_year = begin_year
         self.end_year = end_year
         
+        # flow aggregation metric
+        self.flow_metric = flow_aggregation_metric
+        
+        # representative reach
+        self.rep_reach = flow_representative_reach
+        
         # bankfull flow return interval [yrs]
         self.Qbf_ri = bankfull_flow_RI
         
@@ -124,97 +132,29 @@ class DHSVMtoLandlab(GridTTools):
             raise ValueError("frequency of landslide storm events must be >= 1")
         
         # time aggregation
-        self.tag = time_aggregation
+        self.tag = flow_aggregation
 
         # tau_dict
         if tao_dict != None:
             self.tao_dict = tao_dict
         else:
             self.tao_dict = {'gHG':[0.15,-0.08], 'wHG':[2.205, 0.38], 'dHG':[0.274, 0.24]}       
-                                  
-        # map raster model grid cells to network model grid and dhsvm network
-        if (nmgrid != None) and (grid != None):
+        
+        # Run options:                          
+        # (1) FLOW and DTW 
+        if (nmgrid != None) and (DHSVM_dtw_dict != None):
+            self._prep_flow()
+            self._prep_depth_to_watertable()
+        
+        # (2) FLOW only
+        elif nmgrid != None:     
+            self._prep_flow()
+        
+        # (3) DTW only
+        elif DHSVM_dtw_dict: 
+            self._prep_depth_to_watertable()
 
-            # properties of raster model grid added as class variables in GridTTools      
-            # determine raster mg nodes that correspond to landlab network mg
-            linknodes = self._nmgrid.nodes_at_link
-            active_links = self._nmgrid.active_links
-            nmgx = self._nmgrid.x_of_node
-            nmgy = self._nmgrid.y_of_node
-    
-            out = self._LinktoNodes(linknodes, active_links, nmgx, nmgy)
-            
-            self.Lnodelist = out[0]
-            self.Ldistlist = out[1]
-            self.xyDf = pd.DataFrame(out[2])    
-        
 
-            # determine raster mg nodes that correspond to dhsvm network mg
-            linknodes = self.nmgrid_d.nodes_at_link
-            active_links = self.nmgrid_d.active_links
-            nmgx = self.nmgrid_d.x_of_node
-            nmgy = self.nmgrid_d.y_of_node
-    
-            out = self._LinktoNodes(linknodes, active_links, nmgx, nmgy)
-    
-            self.Lnodelist_d = out[0]
-            self.Ldistlist_d = out[1]
-            self.xyDf_d = pd.DataFrame(out[2])           
-        
-            ## define bedload and debris flow channel nodes       
-            ## channel
-            self._ChannelNodes() 
-        
-            # map dhsvm network model grid to landlab network model grid and prepare
-            # time series of flow at each landlab network model grid link
-        
-            # determine dhsvm network mg links that correspond to the landlab network mg
-            self._DHSVM_network_to_NMG_Mapper()
-            
-            # aggregate flow time series
-            if metric == 'max':
-                self._streamflowonly_ag = self._streamflowonly.resample(self.tag).max().fillna(method='ffill') #convert sub  hourly obs to hourly
-    
-            elif metric == 'mean':
-                self._streamflowonly_ag = self._streamflowonly.resample(self.tag).mean().fillna(method='ffill') #convert sub  hourly obs to hourly
-        
-            elif metric == 'min':
-                self._streamflowonly_ag = self._streamflowonly.resample(self.tag).min().fillna(method='ffill') #convert sub  hourly obs to hourly
-    
-            elif (type(metric) is float) or (type(metric) is int):
-                self._streamflowonly_ag = self._streamflowonly.groupby(pd.Grouper(freq='d')).quantile(metric,interpolation = 'nearest')
-                    
-            # create reduced size streamflow.only file with index according to nmg links
-            self.streamflowonly_nmg()
-            
-            # determine dhsvm network mg links that correspond to the landlab network mg
-            self._DHSVM_network_to_RMG_Mapper()    
-            
-            # compute partial duration series and bankful flow rate for each nmgrid_d link
-            # used by the nmgrid        
-            self.RI_flows()        
-        
-            # determine probability distribution for flow event magnitude for all events >= to fluvial_sediment_RI 
-            # use flow at location where frequency-magnitude relation is representative of hydrologic state of entire basin
-            # fit distribution to partial duration series ( may include return intervals less than 1; return interval is not [yrs])
-            Q_l = self._streamflowonly_ag[rep_reach]
-            
-            self.PDS = self.partial_duration_series(Q_l, self.sed_ri)
-            # self.AMS = self.partial_duration_series(Q_l, 1)
-            
-            self.Q_Fx, self.Q_x1, self.Q_T, self.Q_Ty, self.u_Q_ri  = self.fit_probability_distribution(AMS=self.PDS['value'],
-                                                                                             min_ri = self.PDS['RI [yr]'].min(), dist = 'LP3')
-            # fit distribution to annual maximum series, used to determine return interval in year
-            # self.Pam_Fx, self.Pam_x1, self.Pam_T, self.Pam_Q_ri  = self.fit_probability_distribution(AMS=self.AMS['value'], dist = 'LP3')
-
-       
-        # aggregate precip time series
-        if precip is not None:
-            # resample precip data to daily
-            self.precip = precip.resample(self.tag).sum().fillna(method='ffill')          
-        else:
-            self.precip = precip # no precip            
-        
 
         # initilize storm generator
         if self._method == 'storm_generator':
@@ -223,29 +163,103 @@ class DHSVMtoLandlab(GridTTools):
             self._storm_dates_emperical_cdf()
             
             self._storm_date_maker()
+            
 
             # initialize time
             self._time_idx = 0 # index
             self._time = self.storm_dates[0]  # duration of model run (hours, excludes time between time steps)
 
             
-            if nmgrid:
-                # approximate cdf of flow at each link
-                self._flow_at_link_cdf()
-               
-                # set initial depth to water table
-                # q_init = 0.5
-                # self.get_flow_at_links(q_init)
-                       
-                # self._variable_channel_tau()
-
-            if DHSVM_dtw_dict:
-                # approximate cdf of thickness of saturated zone at each cell 
-                self._saturated_zone_thickness_cdf()
-                
-                # self.get_depth_to_water_table_at_node(q_init)
                              
+    def _prep_flow(self):
+        """Prepare DHSVMtoLanlab for generating flow values at each link"""
         
+        # map raster model grid cells to network model grid and dhsvm network
+        # properties of raster model grid added as class variables in GridTTools      
+        # determine raster mg nodes that correspond to landlab network mg
+        linknodes = self._nmgrid.nodes_at_link
+        active_links = self._nmgrid.active_links
+        nmgx = self._nmgrid.x_of_node
+        nmgy = self._nmgrid.y_of_node
+
+        out = self._LinktoNodes(linknodes, active_links, nmgx, nmgy)
+        
+        self.Lnodelist = out[0]
+        self.Ldistlist = out[1]
+        self.xyDf = pd.DataFrame(out[2])    
+    
+
+        # determine raster mg nodes that correspond to dhsvm network mg
+        linknodes = self.nmgrid_d.nodes_at_link
+        active_links = self.nmgrid_d.active_links
+        nmgx = self.nmgrid_d.x_of_node
+        nmgy = self.nmgrid_d.y_of_node
+
+        out = self._LinktoNodes(linknodes, active_links, nmgx, nmgy)
+
+        self.Lnodelist_d = out[0]
+        self.Ldistlist_d = out[1]
+        self.xyDf_d = pd.DataFrame(out[2])           
+    
+        ## define bedload and debris flow channel nodes       
+        ## channel
+        self._ChannelNodes() 
+    
+        # map dhsvm network model grid to landlab network model grid and prepare
+        # time series of flow at each landlab network model grid link
+    
+        # determine dhsvm network mg links that correspond to the landlab network mg
+        self._DHSVM_network_to_NMG_Mapper()
+        
+        # aggregate flow time series
+        if self.flow_metric == 'max':
+            self._streamflowonly_ag = self._streamflowonly.resample(self.tag).max().fillna(method='ffill') #convert sub  hourly obs to hourly
+
+        elif self.flow_metric == 'mean':
+            self._streamflowonly_ag = self._streamflowonly.resample(self.tag).mean().fillna(method='ffill') #convert sub  hourly obs to hourly
+    
+        elif self.flow_metric == 'min':
+            self._streamflowonly_ag = self._streamflowonly.resample(self.tag).min().fillna(method='ffill') #convert sub  hourly obs to hourly
+
+        elif (type(metric) is float) or (type(metric) is int):
+            self._streamflowonly_ag = self._streamflowonly.groupby(pd.Grouper(freq='d')).quantile(metric,interpolation = 'nearest')
+                
+        # create reduced size streamflow.only file with index according to nmg links
+        self.streamflowonly_nmg()
+        
+        # determine dhsvm network mg links that correspond to the landlab network mg
+        self._DHSVM_network_to_RMG_Mapper()    
+        
+        # compute partial duration series and bankful flow rate for each nmgrid_d link
+        # used by the nmgrid        
+        self.RI_flows()        
+    
+        # parameterize pdf to flow at each link
+        self._flow_at_link_cdf()
+        
+        # parameterize pdf to flow at a representative reach 
+        # (used to represent basin average hydrologic condition)
+        self._rep_reach_flow_at_link_cdf()
+        
+
+    def _prep_depth_to_watertable(self):
+        """Prepare DHSVMtoLanlab for generating depth to soil water values at
+        each node"""
+        # load depth to water table maps into DHSVMtoLandlab as a 2-D
+        # np array
+        self._load_dtw()
+        
+        # determine the minimum return interval of the smallest relative
+        # wetness event
+        self._dtw_min_ri = self._min_return_interval(dates = self.map_dates)       
+       
+        # parameterize pdf of basin mean relative wetness from maps
+        self._mean_relative_wetness_cdf()
+        
+        # parameterize pdf to saturated zone thickness at each node
+        self._saturated_zone_thickness_cdf()
+
+
     def hydrograph_to_channel_hydraulics(self):
         """
         converts time series of flow at each link to a time series of hydraulic conditions
@@ -261,15 +275,10 @@ class DHSVMtoLandlab(GridTTools):
         
         
     def _storm_date_maker(self):
-        '''
+        """
         creates a date time index for the randomdly generated storm events
         that can be used for tracking changes in sediment dynamics with time
-
-        Returns
-        -------
-        None.
-
-        '''
+        """
         
         yrs = [0]
         c=0
@@ -313,14 +322,9 @@ class DHSVMtoLandlab(GridTTools):
 
        
     def _storm_dates_emperical_cdf(self):
-        '''
-        creates emperical cdf from partial duration series of precipitation events
-
-        Returns
-        -------
-        None.
-
-        '''
+        """creates emperical cdf from partial duration series of precipitation events
+        """
+        
         pds_doy = self.PDS.index.dayofyear #convert PDS dates to day-of-year equivalent
         fig, ax = plt.subplots(figsize=(8, 4))
         n, bins, patches = plt.hist(pds_doy, 15, density=True, histtype='step', # emperical cdf
@@ -349,9 +353,30 @@ class DHSVMtoLandlab(GridTTools):
             
             if c%3 == 0:
                 print('distribution fit to partial duration series of peak flows at link '+ str(Link))       
-                
+
+
+    def _rep_reach_flow_at_link_cdf(self):
+        # determine probability distribution for flow event magnitude for all events >= to fluvial_sediment_RI 
+        # use flow at location where frequency-magnitude relation is representative of hydrologic state of entire basin
+        # fit distribution to partial duration series ( may include return intervals less than 1; return interval is not [yrs])
+        Q_l = self._streamflowonly_ag[self.rep_reach]
+        
+        self.PDS = self.partial_duration_series(Q_l, self.sed_ri)
+        # self.AMS = self.partial_duration_series(Q_l, 1)
+        
+        self.Q_Fx, self.Q_x1, self.Q_T, self.Q_Ty, self.u_Q_ri  = self.fit_probability_distribution(AMS=self.PDS['value'],
+                                                                                         min_ri = self.PDS['RI [yr]'].min(), dist = 'LP3')
+        # fit distribution to annual maximum series, used to determine return interval in year
+        # self.Pam_Fx, self.Pam_x1, self.Pam_T, self.Pam_Q_ri  = self.fit_probability_distribution(AMS=self.AMS['value'], dist = 'LP3')
+               
     
     def _load_dtw(self):
+        """load raw depth to water table ascii file from DHSVM. 
+        NOTE, DHSVM mapped outputs are binary. To convert to ascii, use myconvert.c. 
+        See DHSVM documentation for use of myconvert.c
+        If running with storm generator, file should be a partial duration series
+        of the largest relative wetness (smallest depth to water table values)
+        """
         
         # open .asc version of DHSVM depth to soil water mapped output
         f = open(self.appended_maps_name, 'r')
@@ -367,36 +392,59 @@ class DHSVMtoLandlab(GridTTools):
         
         dtw_l_an = [] # depth to water table list, 
         st_l_an = [] # saturated zone thickness list
+        rw_l_an = [] # relative wetness list
         c=0
         for i in range(1,self.nd+1):
             dtw_d = M[c:c+self.rpm,:] # map, DHSVM orientation
             dtw_l = np.hstack(np.flipud(dtw_d))[self._grid.core_nodes] # map, converted to landlab orientation, keep only core nodes
             st_l = self._grid.at_node['soil__thickness'][self._grid.core_nodes]-dtw_l # thickness of saturated zone
+            rw_l = st_l/self._grid.at_node['soil__thickness'][self._grid.core_nodes]
             c = c+self.rpm
             
             dtw_l_an.append(dtw_l)
             st_l_an.append(st_l)
-            
-        self.dtw_l_an = np.array(dtw_l_an)
+            rw_l_an.append(rw_l)
+        
+        # save list of maps as a 2-d np array. each row 'i' is a 1-d representation
+        # of the map for date 'i'
+        self.dtw_l_an = np.array(dtw_l_an) 
         self.st_l_an = np.array(st_l_an)
-            
-    
-    
-    def _saturated_zone_thickness_cdf(self):
+        self.rw_l_an = np.array(rw_l_an)
+       
         
+    def _mean_saturated_zone_thickness_cdf(self):
+        """parammeterize a pdf to a partial duration series of the basin mean 
+        saturated zone thickness"""
+        
+        self.PDS_s = pd.Series(data = self.dtw_l_an.mean(axis=1), index = self.map_dates)
+        self.Fx_s, self.x1_s, self.T_s, self.Ty_s, self.Q_ri_s = self.fit_probability_distribution(self.PDS_s,dist = 'LN', print_figs = print_figs)
+                 
 
-        
+    def _mean_relative_wetness_cdf(self):
+        """parammeterize a pdf to a partial duration series of the basin mean 
+        relative wetness (staturated zone thickness / soil thickness)"""        
+
+        self.PDS_s = pd.Series(data = self.rw_l_an.mean(axis=1), index = self.map_dates)
+        self.Fx_s, self.x1_s, self.T_s, self.Ty_s, self.Q_ri_s = self.fit_probability_distribution(self.PDS_s,dist = 'LN')
+                 
+
+    
+    def _saturated_zone_thickness_cdf(self, print_figs = False):
+        """generate a cdf of the saturated water table thickness at each node"""
+              
         # compute cdf for each cell
         dtw_low_cv_nodes = [] # save node ids where water table changes little
         st_cdf = {} # dict to save saturated zone thickness cdf parameters for each node
-        print_figs = False
         for c, n in enumerate(self._grid.core_nodes):
-         
-            
+
+            # time series of saturated zone thickness at node 'c' is column 'c'
+            # from the 2-d array st_l_an
             pds = pd.Series(data = self.st_l_an[:,c], index = self.map_dates)
         
             Fx, x1, T, Ty, Q_ri = self.fit_probability_distribution(pds,dist = 'LN', print_figs = print_figs)
             st_cdf[n] = [Fx, x1]
+            
+            
             if Fx.std()/Fx.mean() < .05:
                 dtw_low_cv_nodes.append(n)
             
@@ -404,7 +452,7 @@ class DHSVMtoLandlab(GridTTools):
             if c%2000 == 0:
                 print('distribution fit to partial duration series of peak saturated zone thickness for '+ \
                       str(np.round((c/self.ncn)*100))+'% of core nodes' )
-                print_figs = True
+                # print_figs = True
                 
         self.st_cdf = st_cdf
         self.dtw_low_cv_nodes = dtw_low_cv_nodes
@@ -777,15 +825,23 @@ class DHSVMtoLandlab(GridTTools):
         self.Qlinks = pd.DataFrame.from_dict(Qlink_dict, orient = 'index')
         
         
-    def get_depth_to_water_table_at_node(self, q_i):
+    def get_depth_to_water_table_at_node(self, q_i): 
+        """at each nodelook up saturated zone thickness, convert to depth to 
+        water table. After cycling through all nodes, depth__to_water_table field
+        of raster model grid is updated"""
 
         dtw_field = (np.ones(self._grid.at_node['soil__thickness'].shape[0])*np.nan).astype(float)
-        st = []
-        dtw = []
+        st = [] # saturated thickness list
+        dtw = [] # deppth to water table list
+        # for each core node
         for c,n in enumerate(self._grid.core_nodes):
+            # look up domain and range of saturated thickness cdf for node 'c'
             Fx = self.st_cdf[n][0]; x1 = self.st_cdf[n][1]
+            # get saturated thickness for quantile 'q_i'
             st_i = self.intp(Fx,x1,q_i)#, message = '#######DTW#### at node '+str(n))
+            # convert saturated thickness to depth to soil water
             dtw_i = self._grid.at_node['soil__thickness'][n]-st_i
+            
             st.append(st_i)
             dtw.append(dtw_i)
         
@@ -796,7 +852,73 @@ class DHSVMtoLandlab(GridTTools):
         #updates depth__to_soil_water field
         self._grid.add_field('node', 'depth__to_water_table', dtw_field, clobber = True)
 
+    
+    def _run_one_step_flow(self, ts = None):
+        ## DETERMINE QUANTILE VALUE OF BASIN HYDROLOGIC STATE
+        # pick a random quantile (probability of non-exceedance) that 
+        # corrisponds to the event non-exceedance probability of the  
+        # flow magnitude 
+        # (NOTE: not the annual non-exceedance probability if
+        # flow rates used to parameterize basin pdf included < 1 yr RI
+        # flow rates)
+        if ts is None:
+            self.q_i = np.random.uniform(self.Q_Fx.min(), self.Q_Fx.max(),1)[0]
+            
+            # get the flow rate at representative link and equivalent 
+            # event return interval cdf of flow rates to get flow
+            self.Q_i = self.intp(self.Q_Fx, self.Q_x1, self.q_i, message = None)
+            
+            # cdf of flow rate in terms of annual return interval
+            self.Q_ri = self.intp(self.Q_Fx, self.Q_Ty, self.q_i, message = None)
+                            
+            ## GET FLOW RATES
+            # get flow value at each link for quantile self.q_i (self.Qlinks)
+            self.get_flow_at_links(self.q_i)
+            # convert to flow depth and effective flow depth       
+            self._variable_channel_tau()
 
+        else:
+ 
+            self.Qlinks = self._streamflowonly_ag.loc[ts] # flow rate in all links at time ts
+
+            self._variable_channel_tau()        
+
+        
+    def _run_one_step_DTW(self, ts = None, DTW_only = True):
+        """TODO write so that flow return interval is used if available or DTW
+        return interval if not available"""
+        
+        # convert return interval to to an annual quantile value if 
+        # return interval > 1 yr. Note: sub-annual return intervals 
+        # can not be converted to an annual quantile value
+        if ts is None:
+            
+            # if only updating the depth to water of the raster model grid
+            if DTW_only is True:
+                self.q_i = np.random.uniform(self.Fx_s.min(), self.Fx_s.max(),1)[0]
+    
+                # get the flow rate at representative link and equivalent 
+                # event return interval cdf of flow rates to get flow
+                self.s_i = self.intp(self.Fx_s, self.x1_s, self.q_i, message = None)
+                
+                # cdf of flow rate in terms of annual return interval (this is event
+                # return interval if dtw maps are same length as number of years)
+                self.s_ri = self.intp(self.Fx_s, self.Ty_s, self.q_i, message = None)
+    
+                # if annual return interval greater than return interval of smallest
+                # storm included in depth to water table partial duration series
+                # and larger than user specified minimum return period to update
+                # grid
+                if (self.s_ri > self._dtw_min_ri) & (self.s_ri > self.ls_ri):
+                    self.q_yrs_i = 1-1/self.s_ri
+                    self.get_depth_to_water_table_at_node(self.q_yrs_i)
+            
+            else:
+
+                    self.q_yrs_i = 1-1/self.Q_ri                
+                    self.get_depth_to_water_table_at_node(self.q_yrs_i)
+            
+            
     def run_one_step(self, ts = None):
         
         '''computes hydraulc condtions at time ts given the slope and d50 of
@@ -807,54 +929,63 @@ class DHSVMtoLandlab(GridTTools):
         
         output is a 1d np array of flow depth at each link of the landlab network mg
         
-        '''            
-        
+        '''                    
         if self._time_idx <= len(self.storm_dates):
         
-            if ts is None:
+
                
-                ## DETERMINE QUANTILE VALUE OF BASIN HYDROLOGIC STATE
-                # pick a random quantile (probability of non-exceedance) that 
-                # corrisponds to the event non-exceedance probability of the  
-                # flow magnitude 
-                # (NOTE: not the annual non-exceedance probability if
-                # flow rates used to parameterize basin pdf included < 1 yr RI
-                # flow rates)
+            # Run options:                          
+            # (1) FLOW and DTW 
+            if self.opt == 1:
+                self._run_one_step_flow(ts)
+                self._run_one_step_DTW(ts, DTW_only = False)
+            
+            # (2) FLOW only
+            elif self.opt == 2:     
+                self._run_one_step_flow(ts)
+            
+            # (3) DTW only
+            elif self.opt == 3: 
+                self._run_one_step_DTW(ts)  
+                    
+                # ## DETERMINE QUANTILE VALUE OF BASIN HYDROLOGIC STATE
+                # # pick a random quantile (probability of non-exceedance) that 
+                # # corrisponds to the event non-exceedance probability of the  
+                # # flow magnitude 
+                # # (NOTE: not the annual non-exceedance probability if
+                # # flow rates used to parameterize basin pdf included < 1 yr RI
+                # # flow rates)
                 
-                self.q_i = np.random.uniform(self.Q_Fx.min(), self.Q_Fx.max(),1)[0]
+                # self.q_i = np.random.uniform(self.Q_Fx.min(), self.Q_Fx.max(),1)[0]
                 
-                # get the flow rate at representative link and equivalent 
-                # event return interval cdf of flow rates to get flow
-                self.Q_i = self.intp(self.Q_Fx, self.Q_x1, self.q_i, message = None)
+                # # get the flow rate at representative link and equivalent 
+                # # event return interval cdf of flow rates to get flow
+                # self.Q_i = self.intp(self.Q_Fx, self.Q_x1, self.q_i, message = None)
                 
-                # cdf of flow rate in terms of annual return interval
-                self.Q_ri = self.intp(self.Q_Fx, self.Q_Ty, self.q_i, message = None)
+                # # cdf of flow rate in terms of annual return interval
+                # self.Q_ri = self.intp(self.Q_Fx, self.Q_Ty, self.q_i, message = None)
                                 
-                ## GET FLOW RATES
-                # get flow value at each link for quantile self.q_i (self.Qlinks)
-                self.get_flow_at_links(self.q_i)
-                # convert to flow depth and effective flow depth       
-                self._variable_channel_tau()
+                # ## GET FLOW RATES
+                # # get flow value at each link for quantile self.q_i (self.Qlinks)
+                # self.get_flow_at_links(self.q_i)
+                # # convert to flow depth and effective flow depth       
+                # self._variable_channel_tau()
                 
-                ## GET DEPTH TO SOIL WATER
-                # if depth to water tablesupdate depth to water table if this is true, 
-                # updating water table is slow                    
-                if self.rpm >0:
+                # ## GET DEPTH TO SOIL WATER
+                # # if depth to water tablesupdate depth to water table if this is true, 
+                # # updating water table is slow                    
+                # if self.rpm >0:
 
-                    # convert return interval to to an annual quantile value if 
-                    # return interval > 1 yr. Note: sub-annual return intervals 
-                    # can not be converted to an annual quantile value
-                    if self.Q_ri > 1:
-                        self.q_yrs_i = 1-1/self.Q_ri                    
+                #     # convert return interval to to an annual quantile value if 
+                #     # return interval > 1 yr. Note: sub-annual return intervals 
+                #     # can not be converted to an annual quantile value
+                #     if self.Q_ri > 1:
+                #         self.q_yrs_i = 1-1/self.Q_ri                    
 
-                    if self.Q_ri > self.ls_ri: 
-                        self.get_depth_to_water_table_at_node(self.q_yrs_i)
+                #     if self.Q_ri > self.ls_ri: 
+                #         self.get_depth_to_water_table_at_node(self.q_yrs_i)
         
-            else:
- 
-                self.Qlinks = self._streamflowonly_ag.loc[ts] # flow rate in all links at time ts
-    
-                self._variable_channel_tau()
+
                 
             # UPDATE TIME FOR NEXT ITERATION
             if self._time_idx < len(self.storm_dates): 
@@ -926,6 +1057,25 @@ class DHSVMtoLandlab(GridTTools):
         
         return AMS
 
+    def _min_return_interval(self, dates, plotting_position = 'Weibull'):
+        print(dates)
+        Yrs = max(dates.year)-min(dates.year)+1 # number of years in time series
+    
+        n = dates.shape[0]            
+        ranks = np.array(range(1,n+1)) 
+        
+        # plottting position (exceedance probability if ordered large to small)
+        if plotting_position == 'Cunnane':
+            PP = (ranks-.4)/(Yrs+.2) #compute plotting position 
+        elif plotting_position == 'Weibull':
+            PP = ranks/(Yrs+1)
+        elif plotting_position == 'Blom':
+            PP = (ranks - (3/8))/(Yrs+(1/4))
+        else:
+            PP = ranks/(n+1)
+        
+        T = 1/PP                        
+        return min(T)        
     
     def partial_duration_series(self, time_series, RI_cutoff = 1, plotting_position = 'Weibull',sep=30):
         '''
