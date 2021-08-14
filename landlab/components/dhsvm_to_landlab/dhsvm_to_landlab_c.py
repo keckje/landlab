@@ -21,6 +21,11 @@ class DHSVMtoLandlab(GridTTools):
     a pdf of the depth to soil water at each node in the raster model grid 
     representaiton of the watershed.
     
+    The dhsvm channel network and grid do not need to exactly match the landlab model.
+    Mapping functions convert determine which DHSVM network model grid links match
+    with the network model grid links and which DHSVM grid cells match the landlab
+    raster model grid cells.
+    
     The run one step function randomly picks a storm return interval and updates
     the raster model grid depth to water table field and network model grid
     flow depth fields assuming a uniform hydrologic frequency accross
@@ -45,6 +50,7 @@ class DHSVMtoLandlab(GridTTools):
                   nmgrid_d = None, 
                   DHSVM_flow = None,
                   DHSVM_dtw_dict = None, # dtw maps must include at least as many maps as years in hydro time series.
+                  DHSVM_dtw_mapping_dict = None
                   precip = None,
                   method = 'storm_generator',
                   flow_aggregation = '24h',
@@ -93,13 +99,27 @@ class DHSVMtoLandlab(GridTTools):
             self.rpm = DHSVM_dtw_dict['rows_per_map']
             self.map_dates = DHSVM_dtw_dict['map_dates']
             self.nd = self.map_dates.shape[0]  #number of days(maps)
+
+            if DHSVM_dtw_mapping_dict:
+                self.DHSVM_dem = DHSVM_dtw_mapping_dict['DHSVM_dem']
+                self.x_trans = DHSVM_dtw_mapping_dict['x_trans']
+                self.y_trans = DHSVM_dtw_mapping_dict['y_trans']
+                self.DHSVM_lambda = DHSVM_dtw_mapping_dict['DHSVM_lambda']
+                self.landlab_lambda = DHSVM_dtw_mapping_dict['landlab_lambda']
+                self.f = DHSVM_dtw_mapping_dict['f']
+            else:
+                val = input("DHSVM grid matches landlab grid? (y/n):")
+                if val != 'y':
+                    raise ValueError("DHSVM mapping dictionary needed to convert"\
+                                     " DHSVM grid values to landlab grid values")    
         else:
             self.rpm = 0
             val = input("depth to water table maps not provided, continue? (y/n):")
             if val != 'y':
                 raise ValueError("DHSVM depth to water table maps not provided")
         
-            
+        
+        
         # initial parcels
         if parcels != None:
             self.parcels = parcels
@@ -247,7 +267,11 @@ class DHSVMtoLandlab(GridTTools):
         each node"""
         # load depth to water table maps into DHSVMtoLandlab as a 2-D
         # np array
-        self._load_dtw()
+        
+        if DHSVM_dtw_mapping_dict: # if dhsmv gridding scheme does not match landlab
+            self._load_dtw_different_grids()
+        else: # dhsvm and landlab gridding schemes are the same
+            self._load_dtw()
         
         # determine the minimum return interval of the smallest relative
         # wetness event
@@ -411,7 +435,145 @@ class DHSVMtoLandlab(GridTTools):
         self.st_l_an = np.array(st_l_an)
         self.rw_l_an = np.array(rw_l_an)
        
+    
+    def DHSVM_to_RMG_cell_mapper(self):
         
+        
+        # first create a dataframe of the southwest (x1,y1) and northeast (x2,y2)
+        # corners of all grid cells in the landlab grid
+        self.df = pd.DataFrame(zip(self.ndxw,self.ndys,self.ndxe,self.ndyn),columns = ['x1','y1','x2','y2'])
+        
+        # required inputs:
+        # self variables: DHSVM_dem, x_trans, y_trans
+        # coarse DEM
+        self.grid_d, z_ = read_esri_ascii('D:/UW_PhD/PreeventsProject/NooksackGroupProject/dem_mapping/test_with_b694/b694dff33msc.asc', name='topographic__elevation')
+        
+        # x and y translation to apply to the coarse grid
+        self.x_trans = -50
+        self.y_trans = -50
+                
+        ## function
+        # first establishes coarse grid topology and applies translation
+        dx_d = self.grid_d.dx #width of cell
+        dy_d = self.grid_d.dy #height of cell
+        
+        # receivers = frnode #receiver nodes (node that receives runoff from node) = frnode #receiver nodes (node that receives runoff from node)
+        
+        # nodes, reshaped in into m*n,1 array like other mg fields
+        self.nodes_d = self.grid_d.nodes.reshape(self.grid_d.shape[0]*self.grid_d.shape[1],1)
+        self.rnodes_d = self.grid_d.nodes.reshape(self.grid_d.shape[0]*self.grid_d.shape[1]) #nodes in single column array
+     
+        gridx_d = self.grid_d.node_x+self.x_trans 
+        gridy_d = self.grid_d.node_y+self.y_trans
+        
+        # determine coordinates of southwest and northeast corners  
+        ndxe_d = gridx_d+dx_d/2
+        ndxw_d = gridx_d-dx_d/2
+        ndyn_d = gridy_d+dy_d/2
+        ndys_d = gridy_d-dy_d/2
+        
+        
+        # convert coordinantes into a dataframe
+        DF = pd.DataFrame(zip(ndxw_d,ndys_d,ndxe_d,ndyn_d),columns = ['X1','Y1','X2','Y2'])
+    
+    
+    
+    
+        def area_weights_overlapping_cells_df(row):
+            """determines area of overlap between two rectangles"""
+
+            DF['x1'] = row['x1']; DF['y1'] = row['y1']; DF['x2'] = row['x2']; DF['y2'] = row['y2'];
+            dx = DF[['x2','X2']].min(axis=1)-DF[['x1','X1']].max(axis=1)
+            dy = DF[['y2','Y2']].min(axis=1)-DF[['y1','Y1']].max(axis=1)
+            mask = (dx>0) & (dy>0)
+            overlapping_cells = rnodes_d[mask]
+            DFa = DF[mask]
+            overlapping_cells_area = dx[mask]*dy[mask]
+
+            return overlapping_cells, overlapping_cells_area
+   
+   
+        self.cells_areas = self.df.apply(area_weights_overlapping_cells_df, axis =1)
+
+
+
+    def dhsvm_dtw_to_landlab_dtw(self, DHSVM_dtw_map):
+        """given a map of dhsvm dtw values on a coarser griding schem, 
+        interpoltes dtw at the landlab gridding scheme"""
+    
+        # self variables: DHSVM_lambda, landlab_lambda, f
+        # note: minimum ca of 1 cell (rather than 0 for a single cell) used to determine lambda
+        # coarse lambda values
+        (mg1, lambda_coarse) = read_esri_ascii(self.DHSVM_lambda, name='lambda')
+        self.grid_d.add_field('node',  'lambda', lambda_coarse)
+        # fine lambda values
+        (mg2, lambda_fine) = read_esri_ascii(self.landlab_lambda, name='lambda')
+        self._grid.add_field('node', 'lambda',lambda_fine)
+        # topomodel f value
+        f = 2
+    
+        # value = cells_areas[nm]
+        def weighted_average_value_df(val_i, coarse_grid_values):
+            """given the cells and percent weight of each cell, determines the weighted
+            average value at a different cell"""
+            # computes weighted average lambda value of a cell
+            cells = val_i[0]
+            weights  = val_i[1].values
+            values = coarse_grid_values[cells]
+            wtvalue = sum(values*(weights/100))
+            return wtvalue
+        
+        lambda_fine = cells_areas.apply(weighted_average_value_df, args = (lambda_coarse,))
+    
+    
+        dtw_fine = DHSVM_dtw_map + (mg.at_node['LambdaCoarse']-mg.at_node['LambdaFine'])/f    
+    
+        return dtw_fine
+
+
+    
+    def _load_dtw_different_grids(self):
+        """if dhsvm grid does not match the landlab grid, use this function to
+        load the dtw maps into landlab.
+        
+        This function converts a coarse grid of modeled hydrology to a fine grid
+        useing the topmodel lambda approximation
+        """
+                # open .asc version of DHSVM depth to soil water mapped output
+        f = open(self.appended_maps_name, 'r')
+        M = np.genfromtxt(f)
+        f.close()
+                
+        # first determine overlapping dhsvm grid cells for each landlab grid cell
+        # for large grids this is slow
+        self.DHSVM_to_RMG_cell_mapper()
+        
+        
+        dtw_l_an = [] # depth to water table list, 
+        st_l_an = [] # saturated zone thickness list
+        rw_l_an = [] # relative wetness list
+        c=0
+        for i in range(1,self.nd+1):
+            dtw_d = M[c:c+self.rpm,:] # map, DHSVM orientation
+            dtw_l_coarse = np.hstack(np.flipud(dtw_d))[self._grid.core_nodes] # map, converted to landlab orientation, keep only core nodes
+            # convert dhsvm dtw map to landlab grid resolution 
+            dtw_l = self.dhsvm_dtw_to_landlab_dtw(dtw_l_coarse)
+            st_l = self._grid.at_node['soil__thickness'][self._grid.core_nodes]-dtw_l # thickness of saturated zone
+            rw_l = st_l/self._grid.at_node['soil__thickness'][self._grid.core_nodes]
+            c = c+self.rpm
+        
+            dtw_l_an.append(dtw_l)
+            st_l_an.append(st_l)
+            rw_l_an.append(rw_l)
+        
+        # save list of maps as a 2-d np array. each row 'i' is a 1-d representation
+        # of the map for date 'i'
+        self.dtw_l_an = np.array(dtw_l_an) 
+        self.st_l_an = np.array(st_l_an)
+        self.rw_l_an = np.array(rw_l_an)        
+        
+        
+    
     def _mean_saturated_zone_thickness_cdf(self):
         """parammeterize a pdf to a partial duration series of the basin mean 
         saturated zone thickness"""
