@@ -102,8 +102,6 @@ class GridTTools(Component):
 
 
         ### NM Grid characteristics
-        print('yyyyy')
-        print(nmgrid)
         if nmgrid is not None:
             self._nmgrid = nmgrid
             # network model grid characteristics       

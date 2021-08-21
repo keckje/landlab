@@ -6,6 +6,11 @@ import datetime
 import scipy as sc
 from scipy.stats import moment as lm
 from scipy.special import gamma
+try:
+    from tqdm import tqdm
+    tqdm.pandas()
+except:
+    print('tqdm module not available in this environment')
 
 import xarray as xr
 from landlab.plot import graph
@@ -14,7 +19,11 @@ from landlab.utils.grid_t_tools_a import GridTTools
 
 class DHSVMtoLandlab(GridTTools):
 
-    """this component takes the raw modeled flow and depth to soil water output 
+    """Generate a time series of flow rates and/or soil water conditions on the
+    network model grid and/or raster model grid from hydrology modeled by the 
+    Distributed Hydrology Soil Vegetation Model.
+    
+    This component takes the raw modeled flow and depth to soil water output 
     from DHSVM. From the modeled flow, it parameterizes a probability distribution 
     function (pdf) of flow rates at each link in a network model grid representation
     of the channel network. From the mapped depth to soil water file, it parameterizes
@@ -24,20 +33,18 @@ class DHSVMtoLandlab(GridTTools):
     The dhsvm channel network and grid do not need to exactly match the landlab model.
     Mapping functions determine which DHSVM network model grid links match
     with the network model grid links and which DHSVM grid cells match the landlab
-    raster model grid cells. NOTE, to map between model grids, the topmodel
-    wetness index for both the landlab grid and the DHSVM grid is needed. For the
+    raster model grid cells. NOTE: to map between raster model grids, the Topmodel
+    wetness index for both the Landlab grid and the DHSVM grid is needed. For the
     DHSVM grid (which is coarser), use a minimum contributing cell number of 1 cell.
     
-    The run one step function randomly picks a storm return interval and updates
-    the raster model grid depth to water table field and/or network model grid
-    flow depth fields assuming uniform hydrologic state (frequency-magnitude) accross
+    The run one step function randomly picks a storm intensity (return interval) and 
+    storm date and updates the raster model grid depth to water table field and/or 
+    network model grid flow depth fields. The return interval of the flow and 
+    soil-water condition at each link and/or grid cell is assumed uniform accross 
     the basin.
     
-    
-    The minimum return interval of the randomly selected storm is a user input
-    
-    
-    
+    TODO: make xarray versions of run_one_step and dtw_cdf functions
+        
     author: Jeff Keck
     """
 
@@ -99,14 +106,12 @@ class DHSVMtoLandlab(GridTTools):
             self.nd = self.map_dates.shape[0]  #number of days(maps)
 
             if DHSVM_dtw_mapping_dict:
-                self.DHSVM_dem = DHSVM_dtw_mapping_dict['DHSVM_dem']
+                self.grid_d = DHSVM_dtw_mapping_dict['DHSVM_grid']
                 self.x_trans = DHSVM_dtw_mapping_dict['x_trans']
                 self.y_trans = DHSVM_dtw_mapping_dict['y_trans']
-                self.DHSVM_lambda = DHSVM_dtw_mapping_dict['DHSVM_lambda']
-                self.landlab_lambda = DHSVM_dtw_mapping_dict['landlab_lambda']
                 self.f = DHSVM_dtw_mapping_dict['f']
             else:
-                self.DHSVM_dem = None
+                self.grid_d = None
                 val = input("DHSVM grid matches landlab grid? (y/n):")
                 if val != 'y':
                     raise ValueError("DHSVM mapping dictionary needed to convert"\
@@ -150,6 +155,7 @@ class DHSVMtoLandlab(GridTTools):
         if self.ls_ri < 1: #TODO change this to minimum return interval in dtw time series
             raise ValueError("frequency of landslide storm events must be >= 1")
         
+        
         # time aggregation
         self.tag = flow_aggregation
 
@@ -191,7 +197,7 @@ class DHSVMtoLandlab(GridTTools):
             
                              
     def _prep_flow(self):
-        """Prepare DHSVMtoLanlab for generating flow values at each link"""
+        """Prepare DHSVMtoLandlab for generating flow values at each link"""
         
         # map raster model grid cells to network model grid and dhsvm network
         # properties of raster model grid added as class variables in GridTTools      
@@ -262,7 +268,7 @@ class DHSVMtoLandlab(GridTTools):
         
 
     def _prep_depth_to_watertable(self):
-        """Prepare DHSVMtoLanlab for generating depth to soil water values at
+        """Prepare DHSVMtoLandlab for generating depth to soil water values at
         each node"""
         # load depth to water table maps into DHSVMtoLandlab as a 2-D
         # np array
@@ -270,7 +276,7 @@ class DHSVMtoLandlab(GridTTools):
         # initially set DHSVM grid wetness index as None
         self.lambda_coarse_wa = None
         
-        if self.DHSVM_dem: # if dhsmv gridding scheme does not match landlab
+        if self.grid_d: # if dhsvm gridding scheme does not match landlab
             self._load_dtw_different_grids()
         else: # dhsvm and landlab gridding schemes are the same
             self._load_dtw()
@@ -287,11 +293,9 @@ class DHSVMtoLandlab(GridTTools):
 
 
     def hydrograph_to_channel_hydraulics(self):
-        """
-        converts time series of flow at each link to a time series of hydraulic conditions
+        """Converts time series of flow at each link to a time series of hydraulic conditions
         including flow velocity, depth and effective depth. This method is called
-        before running a model on the network model grid. The network model grid
-        model then iterates through each time stamp of the channel hydraulics 
+        before running a model on the network model grid.  
         """
         
         # define Qlinks
@@ -301,8 +305,7 @@ class DHSVMtoLandlab(GridTTools):
         
         
     def _storm_date_maker(self):
-        """
-        creates a date time index for the randomdly generated storm events
+        """Creates a date time index for the randomdly generated storm events
         that can be used for tracking changes in sediment dynamics with time
         """
         
@@ -350,8 +353,11 @@ class DHSVMtoLandlab(GridTTools):
     def _storm_dates_emperical_cdf(self):
         """creates emperical cdf from partial duration series of precipitation events
         """
-        
-        pds_doy = self.PDS.index.dayofyear #convert PDS dates to day-of-year equivalent
+        try: 
+            pds_doy = self.PDS.index.dayofyear #convert PDS dates to day-of-year equivalent
+        except: # if run DTW only, then use the dates of the DTW maps
+            pds_doy = self.PDS_s.index.dayofyear
+            
         fig, ax = plt.subplots(figsize=(8, 4))
         n, bins, patches = plt.hist(pds_doy, 15, density=True, histtype='step', # emperical cdf
                            cumulative=True, label='Empirical')
@@ -439,22 +445,25 @@ class DHSVMtoLandlab(GridTTools):
        
     
     def DHSVM_to_RMG_cell_mapper(self):
-        """determines all core DHSVM cells and the area of each DHSVM core cell 
-        that overlap with each core landlab model grid cell"""
+        """determines all core (cells within watershed) DHSVM cells and the 
+        area of each DHSVM core cell that overlap with each core landlab model 
+        grid cell. This function is called in the function _load_dtw_different_grids"""
         
         # first create a dataframe of the southwest (x1,y1) and northeast (x2,y2)
         # corners of all core grid cells in the landlab grid
         self.df = pd.DataFrame(zip(self.ndxw[self._grid.core_nodes],
                                    self.ndys[self._grid.core_nodes],
                                    self.ndxe[self._grid.core_nodes],
-                                   self.ndyn),columns = ['x1','y1','x2','y2'])
+                                   self.ndyn[self._grid.core_nodes]),
+                               index = self.rnodes[self._grid.core_nodes],
+                               columns = ['x1','y1','x2','y2'])
         
-
+        np_df = self.df.values
         # next, load coarse (DHSVM) DEM and define the core nodes
-        grid_d, z_d = read_esri_ascii(self.DHSVM_dem, name='topographic__elevation')
-        grid_d.status_at_node[np.isclose(z_d, -9999.)] = grid_d.BC_NODE_IS_CLOSED
-        grid_d.set_watershed_boundary_condition(z_d) #finds lowest point in dem and sets it as an open node        
-        self.grid_d = grid_d
+        # grid_d, z_d = read_esri_ascii(self.DHSVM_dem, name='topographic__elevation')
+        # grid_d.status_at_node[np.isclose(z_d, -9999.)] = grid_d.BC_NODE_IS_CLOSED
+        # grid_d.set_watershed_boundary_condition(z_d) #finds lowest point in dem and sets it as an open node        
+        # self.grid_d = grid_d
 
                 
         # now create a dataframe of the southwest (x1,y1) and northeast (x2,y2)
@@ -464,10 +473,10 @@ class DHSVMtoLandlab(GridTTools):
         
         
         # nodes, reshaped in into m*n,1 array like other mg fields
-        self.rnodes_d = self.grid_d.nodes.reshape(self.grid_d.shape[0]*self.grid_d.shape[1])
+        self.rnodes_d = self.grid_d.nodes.reshape(self.grid_d.shape[0]*self.grid_d.shape[1])[self.grid_d.core_nodes]
      
-        gridx_d = self.grid_d.node_x[grid_d.core_nodes]+self.x_trans 
-        gridy_d = self.grid_d.node_y[grid_d.core_nodes]+self.y_trans
+        gridx_d = self.grid_d.node_x[self.grid_d.core_nodes]+self.x_trans 
+        gridy_d = self.grid_d.node_y[self.grid_d.core_nodes]+self.y_trans
         
         # determine coordinates of southwest and northeast corners  
         ndxe_d = gridx_d+dx_d/2
@@ -477,59 +486,87 @@ class DHSVMtoLandlab(GridTTools):
         
         
         # convert coordinantes into a dataframe
-        DF = pd.DataFrame(zip(ndxw_d,ndys_d,ndxe_d,ndyn_d),columns = ['X1','Y1','X2','Y2'])
+        self.DF = pd.DataFrame(zip(ndxw_d,ndys_d,ndxe_d,ndyn_d),columns = ['X1','Y1','X2','Y2'], index = self.rnodes_d)
     
-    
-    
-    
-        def area_weights_overlapping_cells_df(row):
+        np_DF = self.DF.values
+     
+           
+        def area_weights_overlapping_cells_array(row):
             """determines area of overlap between two rectangles defined by
             the soutwest and northeast coordinates of the rectangles. Here
-            DF is a dataframe of all possible rectangles in a raster model 
-            grid that might overlap with a rectangle described by the coordinates
-            listed in a row of dataframe, accessed by iterating over the 
-            rows of the dataframe"""
+            np_df is a dataframe of all possible rectangles in a raster model 
+            grid of the DHSVM model domain. DF is compared with a rectangle 
+            described by the coordinates listed in a row of dataframe df, which
+            is all possible rectangles in the landlab model domain.""" 
+            
+            x1 = row[0]; y1 = row[1]; x2 = row[2]; y2 = row[3];
 
-            DF['x1'] = row['x1']; DF['y1'] = row['y1']; DF['x2'] = row['x2']; DF['y2'] = row['y2'];
-            dx = DF[['x2','X2']].min(axis=1)-DF[['x1','X1']].max(axis=1)
-            dy = DF[['y2','Y2']].min(axis=1)-DF[['y1','Y1']].max(axis=1)
+            dx = np.where(ndxe_d<x2, ndxe_d,x2)-np.where(ndxw_d>x1,ndxw_d,x1)
+            dy = np.where(ndyn_d<y2, ndyn_d,y2)-np.where(ndys_d>y1,ndys_d,y1)
+            
             mask = (dx>0) & (dy>0)
-            overlapping_cells = self.rnodes_d[self.grid_d.core_nodes][mask]
-            DFa = DF[mask]
+            overlapping_cells = self.rnodes_d[mask]
             overlapping_cells_area = dx[mask]*dy[mask]
-
+            
             return overlapping_cells, overlapping_cells_area
-   
-   
-        self.cells_areas = self.df.apply(area_weights_overlapping_cells_df, axis =1)
 
+        ar = []
+        LL = np_df.shape[0]
+        halfp = round(LL/200) # print to screen evey 0.5 percent mapped
+        for i, x in enumerate(np_df):
+            ar.append(area_weights_overlapping_cells_array(x))
+            if i%halfp == 0:
+                print(str(round((i/LL)*100,1))+'% nodes mapped')
+        self.cells_areas = pd.Series(ar)
+        self.cells_areas.index = self.rnodes[self._grid.core_nodes]
 
 
     def dhsvm_dtw_to_landlab_dtw(self, DHSVM_dtw_map):
-        """given a 1d represenation of a map of dhsvm dtw values on a coarser 
-        griding schem, interpoltes dtw at the landlab gridding scheme"""
+        """given a 1d represenation of a map of dhsvm dtw values (coarser 
+        griding scheme), interpoltes dtw at the landlab gridding scheme. This
+        function is called in the function _load_dtw_different_grids """
     
 
         # value = cells_areas[nm]
         def weighted_average_value_df(val_i, coarse_grid_values, undefined = 2):
-            """given the cells and percent weight of each cell, determines the weighted
-            average value at a different cell"""
+            """determine the weighted average value of a raster model grid at 
+            in a square area given the cells and percent weight of each cell that
+            overlap the square area
+            
+            TODO how to deal with undefined grid cells?
+            """
             # computes weighted average lambda value of a cell
             cells = val_i[0]
             # if overlapping cells
             if cells.any(): 
-                weights  = val_i[1].values
+                weights  = val_i[1]/(self.grid.dx*self.grid.dy)
                 values = coarse_grid_values[cells]
-                wtvalue = sum(values*(weights/100))
+                values  = np.where(values < 0 ,undefined,values)
+                wtvalue = sum(values*weights)
             else: # use assumed value for all cells with no matching DHSVM cells
                 wtvalue = undefined            
             return wtvalue
         
         # DHSVM wetness index is interpolated to landlab grid only once
+        undefined = 5 # assume wetness index for undefined (boundary) DHSVM grid cells (assumed dry because most undefined cells are on edge of watershed, i.e., ridgetops)
         if self.lambda_coarse_wa is None:
-            self.lambda_coarse_wa = self.cells_areas.apply(weighted_average_value_df, args = (self.grid_d.at_node['lambda'],))
+            try:
+                print('determining weighted average DHSVM wetness index at each landlab grid cell')            
+                self.lambda_coarse_wa = self.cells_areas.progress_apply(weighted_average_value_df, args = (self.grid_d.at_node['lambda'],undefined))
+            except:
+                print('tqdm progress bar unavailable, determining weighted average ' \
+                      'DHSVM wetness index at each landlab grid cell') 
+                self.lambda_coarse_wa = self.cells_areas.apply(weighted_average_value_df, args = (self.grid_d.at_node['lambda'],undefined))   
         
-        DHSVM_dtw_map_wa = self.cells_areas.apply(weighted_average_value_df, args = (DHSVM_dtw_map,))
+        # determine dhsvm weighted average depth to water table
+        undefined = DHSVM_dtw_map[self.grid_d.core_nodes].mean() # use the mean dtw value for undefined (boundary) DHSVM cells
+        try:
+            print('determining weighted average DHSVM depth to water table at each landlab grid cell')  
+            DHSVM_dtw_map_wa = self.cells_areas.progress_apply(weighted_average_value_df, args = (DHSVM_dtw_map, undefined))
+        except:
+            print('tqdm progress bar unavailable, determining weighted average ' \
+                  'DHSVM depth to water table at each landlab grid cell')
+            DHSVM_dtw_map_wa = self.cells_areas.apply(weighted_average_value_df, args = (DHSVM_dtw_map, undefined))      
         
         # interpolate to finer grid following Doten et al., 2006
         dtw_fine = DHSVM_dtw_map_wa + (self.lambda_coarse_wa-self._grid.at_node['lambda'][self._grid.core_nodes])/self.f        
@@ -553,8 +590,8 @@ class DHSVMtoLandlab(GridTTools):
         """if dhsvm grid does not match the landlab grid, use this function to
         interpolate the dhsvm grid values to the the landlab grid.
         
-        This function converts a coarse grid of modeled hydrology to a fine grid
-        using the topmodel lambda approximation
+        This function converts a coarse grid of modeled depth to soil water 
+        to a fine grid using the topmodel lambda approximation
         """
         # load the raw .asc version of DHSVM depth to soil water mapped output
         f = open(self.appended_maps_name, 'r')
@@ -568,11 +605,11 @@ class DHSVMtoLandlab(GridTTools):
         
         
         # load the wetness index values for the landlab grid and the DHSVM grid
-        (mg1, lambda_coarse) = read_esri_ascii(self.DHSVM_lambda, name='lambda')
-        self.grid_d.add_field('node',  'lambda', lambda_coarse)
+        # (mg1, lambda_coarse) = read_esri_ascii(self.DHSVM_lambda, name='lambda')
+        # self.grid_d.add_field('node',  'lambda', lambda_coarse)
         # fine lambda values
-        (mg2, lambda_fine) = read_esri_ascii(self.landlab_lambda, name='lambda')
-        self._grid.add_field('node', 'lambda',lambda_fine)
+        # (mg2, lambda_fine) = read_esri_ascii(self.landlab_lambda, name='lambda')
+        # self._grid.add_field('node', 'lambda',lambda_fine)
     
         
         
@@ -582,7 +619,7 @@ class DHSVMtoLandlab(GridTTools):
         c=0
         for i in range(1,self.nd+1):
             dtw_d = M[c:c+self.rpm,:] # map, DHSVM orientation
-            dtw_l_coarse = np.hstack(np.flipud(dtw_d))[self._grid.core_nodes] # map, converted to landlab orientation, keep only core nodes
+            dtw_l_coarse = np.hstack(np.flipud(dtw_d))#[self.grid_d.core_nodes] # map, converted to landlab orientation, keep only core nodes
             # convert dhsvm dtw map to landlab grid resolution 
             dtw_l = self.dhsvm_dtw_to_landlab_dtw(dtw_l_coarse)
             st_l = self._grid.at_node['soil__thickness'][self._grid.core_nodes]-dtw_l # thickness of saturated zone
@@ -619,9 +656,14 @@ class DHSVMtoLandlab(GridTTools):
 
     
     def _saturated_zone_thickness_cdf(self, print_figs = False):
-        """generate a cdf of the saturated water table thickness at each node"""
+        """generate a cdf of the saturated water table thickness at each node
+        TODO dask delayed"""
               
         # compute cdf for each cell
+                
+        # empty dictionary to store information about nodes that pdf cann not
+        # parameterized to depth to water table at node
+        failed_to_fit_dist_nodes = {}
         dtw_low_cv_nodes = [] # save node ids where water table changes little
         st_cdf = {} # dict to save saturated zone thickness cdf parameters for each node
         for c, n in enumerate(self._grid.core_nodes):
@@ -631,9 +673,25 @@ class DHSVMtoLandlab(GridTTools):
             pds = pd.Series(data = self.st_l_an[:,c], index = self.map_dates)
         
             Fx, x1, T, Ty, Q_ri = self.fit_probability_distribution(pds,dist = 'LN', print_figs = print_figs)
-            st_cdf[n] = [Fx, x1]
-            
-            
+
+            # NOTE: a pdf may not be fit to all node dtw
+            # check if a distribution was fit to depth to water table data
+            if len(np.argwhere(np.isnan(Fx)))>0:
+                failed_to_fit_dist_nodes[n] = [Fx, x1]
+                
+                # node cdf domain set equal to basin average cdf
+                Fx = self.Fx_s
+                # if the node dtw cdf values are nan, assume constant
+                # dtw equal to the mean of the basin mean dtw values
+                if len(np.argwhere(np.isnan(x1)))>0:
+                    x1 = np.ones(len(self.Fx_s))*np.nanmean(self.x1_s)
+                # else, use the mean value at the node (this outcome occurs if dtw
+                # at node is constant)
+                else:
+                    x1 = np.ones(len(self.Fx_s))*np.nanmean(x1)
+
+            st_cdf[n] = [Fx, x1]   
+         
             if Fx.std()/Fx.mean() < .05:
                 dtw_low_cv_nodes.append(n)
             
@@ -645,16 +703,16 @@ class DHSVMtoLandlab(GridTTools):
                 
         self.st_cdf = st_cdf
         self.dtw_low_cv_nodes = dtw_low_cv_nodes
+        self.failed_to_fit_dist_nodes = failed_to_fit_dist_nodes
 
         
     def _DHSVM_network_to_NMG_Mapper(self):    
         
-        '''DtoL
-        determine the closest dhsvm nmg (nmg_d) link to each link in the landlab
-        nmg. Note, the landlab nmg id of the dhsmv network is used, not the DHSVM
-        network id (arcID) To translate the nmg_d link id to the DHSVM network id: 
+        """Determines the closest dhsvm nmg (nmg_d) link to each link in the landlab
+        nmg. Note, the landlab id of the dhsmv network is used, not the DHSVM
+        network id (arcID). To translate the nmg_d link id to the DHSVM network id: 
             self.nmg_d.at_link['arcid'][i], where i is the nmg_d link id.
-        '''
+        """
         
         #compute distance between deposit and all network cells
         def Distance(row):
@@ -731,12 +789,12 @@ class DHSVMtoLandlab(GridTTools):
                                                                                 
     
     def _constant_channel_tau(self):
-        '''
+        """
         computes a time series of hydraulic conditions using the hydrograph
         at each link assuming channel slope and grain size are constant with time
 
         tao_dict = {'gHG':[0.15,-0.08], 'wHG':[2.205, 0.38], 'dHG':[0.274, 0.24]}                 
-        '''
+        """
      
         # CHANGE TO: self.ComputeLinkHydraulics(Q = Q_) 
          
@@ -831,7 +889,7 @@ class DHSVMtoLandlab(GridTTools):
 
     
     def D50_hydraulic_geometry(self,drainage_area):
-        '''   
+        """ 
         Parameters
         ----------
         user_d50 : list
@@ -851,7 +909,7 @@ class DHSVMtoLandlab(GridTTools):
         ndarray of float
             D50.
     
-        '''
+        """
         user_D50 = self.tao_dict['gHG']
         
         if (type(user_D50) == list) and (len(user_D50)<=2) and (len(user_D50)>0):
@@ -937,7 +995,7 @@ class DHSVMtoLandlab(GridTTools):
     
         
     def RI_flows(self):
-        '''
+        """
         runs annual_maximum_series OR partial_duration_series for each link 
         in nmgrid and creates the RIflows dictionary, which has the bankfull 
         flow magnitude and partial duration series of each link
@@ -946,7 +1004,7 @@ class DHSVMtoLandlab(GridTTools):
         -------
         None.
 
-        '''
+        """
             
         RIflows = {}
         for Link in self.LinkMapper.keys():
@@ -992,7 +1050,7 @@ class DHSVMtoLandlab(GridTTools):
     
     
     def get_flow_at_links(self, q_i):
-        '''
+        """
         Parameters
         ----------
         q_i : float
@@ -1003,7 +1061,7 @@ class DHSVMtoLandlab(GridTTools):
         Q_i float
             flow rate for the given quantile
     
-        '''
+        """
         Qlink_dict = {}
         for Link in self.LinkMapper.keys():     
             dst = self.Q_l_dist[Link]
@@ -1029,10 +1087,28 @@ class DHSVMtoLandlab(GridTTools):
             # get saturated thickness for quantile 'q_i'
             st_i = self.intp(Fx,x1,q_i)#, message = '#######DTW#### at node '+str(n))
             # convert saturated thickness to depth to soil water
+            # saturated thickness cannot exceed soil depth
+            if st_i>self._grid.at_node['soil__thickness'][n]:
+                st_i = self._grid.at_node['soil__thickness'][n]
             dtw_i = self._grid.at_node['soil__thickness'][n]-st_i
             
             st.append(st_i)
             dtw.append(dtw_i)
+        
+        ## pandas series apply option does not speed up function
+        ## cnodes = pd.Series(self._grid.core_nodes)
+        ## def get_dtw(n,q_i):
+        ##     # look up domain and range of saturated thickness cdf for node 'c'
+        ##     Fx = self.st_cdf[n][0]; x1 = self.st_cdf[n][1]
+        ##     # get saturated thickness for quantile 'q_i'
+        ##     st_i = self.intp(Fx,x1,q_i)#, message = '#######DTW#### at node '+str(n))
+        ##     # convert saturated thickness to depth to soil water
+        ##     dtw_i = self._grid.at_node['soil__thickness'][n]-st_i
+            
+        ##     return dtw_i
+            
+            
+        ##cnodes.apply(get_dtw, args = (q_i,))
         
         dtw_cn = np.array(dtw) # depth to water at core nodes
         
@@ -1104,7 +1180,7 @@ class DHSVMtoLandlab(GridTTools):
             
     def run_one_step(self, ts = None):
         
-        '''computes hydraulc condtions at time ts given the slope and d50 of
+        """computes hydraulc condtions at time ts given the slope and d50 of
         an evolving network model nmgrid. D50 is computed from parcels in each link.
         slope is read from nmgrid, which is updated by NST. hydraulic condtions are 
         saved as attributes of the nmgrid.
@@ -1112,7 +1188,7 @@ class DHSVMtoLandlab(GridTTools):
         
         output is a 1d np array of flow depth at each link of the landlab network mg
         
-        '''                    
+        """                   
         if self._time_idx <= len(self.storm_dates):
         
 
@@ -1131,44 +1207,6 @@ class DHSVMtoLandlab(GridTTools):
             elif self.opt == 3: 
                 self._run_one_step_DTW(ts)  
                     
-                # ## DETERMINE QUANTILE VALUE OF BASIN HYDROLOGIC STATE
-                # # pick a random quantile (probability of non-exceedance) that 
-                # # corrisponds to the event non-exceedance probability of the  
-                # # flow magnitude 
-                # # (NOTE: not the annual non-exceedance probability if
-                # # flow rates used to parameterize basin pdf included < 1 yr RI
-                # # flow rates)
-                
-                # self.q_i = np.random.uniform(self.Q_Fx.min(), self.Q_Fx.max(),1)[0]
-                
-                # # get the flow rate at representative link and equivalent 
-                # # event return interval cdf of flow rates to get flow
-                # self.Q_i = self.intp(self.Q_Fx, self.Q_x1, self.q_i, message = None)
-                
-                # # cdf of flow rate in terms of annual return interval
-                # self.Q_ri = self.intp(self.Q_Fx, self.Q_Ty, self.q_i, message = None)
-                                
-                # ## GET FLOW RATES
-                # # get flow value at each link for quantile self.q_i (self.Qlinks)
-                # self.get_flow_at_links(self.q_i)
-                # # convert to flow depth and effective flow depth       
-                # self._variable_channel_tau()
-                
-                # ## GET DEPTH TO SOIL WATER
-                # # if depth to water tablesupdate depth to water table if this is true, 
-                # # updating water table is slow                    
-                # if self.rpm >0:
-
-                #     # convert return interval to to an annual quantile value if 
-                #     # return interval > 1 yr. Note: sub-annual return intervals 
-                #     # can not be converted to an annual quantile value
-                #     if self.Q_ri > 1:
-                #         self.q_yrs_i = 1-1/self.Q_ri                    
-
-                #     if self.Q_ri > self.ls_ri: 
-                #         self.get_depth_to_water_table_at_node(self.q_yrs_i)
-        
-
                 
             # UPDATE TIME FOR NEXT ITERATION
             if self._time_idx < len(self.storm_dates): 
@@ -1189,7 +1227,7 @@ class DHSVMtoLandlab(GridTTools):
 
     
     def annual_maximum_series(self, time_series, plotting_position = 'Weibull'):
-        '''
+        """
             
         Parameters
         ----------
@@ -1205,7 +1243,7 @@ class DHSVMtoLandlab(GridTTools):
         AMS : pandas dataframe
             a dataframe of the annual maximum series magnitude and return interval [yrs]
     
-        '''
+        """
         
     
         
@@ -1241,6 +1279,8 @@ class DHSVMtoLandlab(GridTTools):
         return AMS
 
     def _min_return_interval(self, dates, plotting_position = 'Weibull'):
+        """given the dates of a partial duration series, returns the minimum
+        annual return period"""
         print(dates)
         Yrs = max(dates.year)-min(dates.year)+1 # number of years in time series
     
@@ -1261,7 +1301,7 @@ class DHSVMtoLandlab(GridTTools):
         return min(T)        
     
     def partial_duration_series(self, time_series, RI_cutoff = 1, plotting_position = 'Weibull',sep=30):
-        '''
+        """
         Uses a peaks-over-threshold approach to create a partial duration series
         from a time series of hydrologic data. 
         
@@ -1291,7 +1331,7 @@ class DHSVMtoLandlab(GridTTools):
         PDS : pandas dataframe
             a dataframe of the partial duration series magnitude and return interval [yr]
     
-        '''
+        """
         
         ranks = {}
         RIp = {}
@@ -1352,13 +1392,14 @@ class DHSVMtoLandlab(GridTTools):
     def fit_probability_distribution(self, AMS, min_ri = 1, dist = 'LN', 
                        RI=[1.5], plotting_position = 'Weibull',
                        print_figs = False):
-        '''
+        """
         Fits distribution to annual maximum series or partial duration series of
-        data using methods and formulas described in: 
+        data using built in numpy function and methods described in: 
        
-             Maidment, 1992, Handbook of Hydrology, Chapter 
+             Maidment, 1992, Handbook of Hydrology, Chapter 18
              
         NOTE on interpreation of the fit distribution: 
+        
         IF the distribution is fit to an annual maximum series, the resultant pdf 
         gives the annual liklihood, the likelihood of a given magnitude occuring 
         during a single year. 
@@ -1372,7 +1413,8 @@ class DHSVMtoLandlab(GridTTools):
         flow magnitude during any 0.25 year and larger storm. 
         
         To convert the event return period to an annual return period, divide the 
-        event return period by (1 / min_ri)
+        event return period by the minimum return interval included in the partial
+        duration series (min_ri)
            
         Parameters
         ----------
@@ -1408,10 +1450,8 @@ class DHSVMtoLandlab(GridTTools):
         Ty : np.array
             annual return interval equivalent to quantile value [years]
         Q_ri : dictionary
-            key is each value in RI, value is magnitude
-    
-    
-        '''
+            key is each value in RI, value is magnitude        
+        """
         # compute moments
         
         mn = AMS.values.mean() # m1
@@ -1576,22 +1616,22 @@ class DHSVMtoLandlab(GridTTools):
     
     def depth_trapezoid(self, Q, S, b, m1 = 1, m2 = 1, n = 0.05):
         
-        '''
+        """
         A main channel = A_t(b,m1,m2,y)
         P main channel = P_t(b,m1,m2,y)
-        '''
+        """
     
         def A_t(b,m1,m2,y):
-            '''
+            """
             Area of trapezoid, use for all trapezoids in compound channel
-            '''
+            """
             A = (y/2)*(b+b+y*(m1+m2))
             return A
         
         def P_t(b,m1,m2,y):
-            '''
+            """
             Wetted perimeter of trapezoid, below flood plains
-            '''
+            """
             P = b+y*((1+m1**2)**(1/2)+(1+m2**2)**(1/2))
             return P
                 
@@ -1606,7 +1646,7 @@ class DHSVMtoLandlab(GridTTools):
             
                         
     def flow_resistance_Ferguson(self, D84,Rh):
-        '''
+        """
         Computes total Manning's roughness and Darcy Weisbach friction factor 
         as a function of relative depth (D/D84) using equation 20 and equation 1 
         of Ferguson, 2007
@@ -1619,7 +1659,7 @@ class DHSVMtoLandlab(GridTTools):
         OUTPUT
         (mannings roughness, darcy Weisbach friction factor)
         
-        '''
+        """
         a1 = 7.5
         a2 = 2.36 
         f_b = 8*((((a1**2)+(a2**2)*(Rh/D84)**(5/3))**0.5)/(a1*a2*Rh/D84))**2 #eq 20
@@ -1628,7 +1668,7 @@ class DHSVMtoLandlab(GridTTools):
             
     
     def flow_resistance_RR(self, q,d,S,D65,D84):
-        '''
+        """
         Computes Manning roughness using Rickenmann and Recking, 2011 form of
         the Ferguson, 2007 flow resistance equation
     
@@ -1667,7 +1707,7 @@ class DHSVMtoLandlab(GridTTools):
                 
         TODO width and depth approximations are updated based on parker 2007
    
-        '''
+        """
         g = 9.81 # m/s2
         ro = 1000 # kg/m3
         # q = Q/(b+d)
