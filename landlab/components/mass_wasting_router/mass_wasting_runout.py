@@ -249,7 +249,7 @@ class MassWastingRunout(Component):
         if (len(nid) ==1) & (len(nid) < len(innL)):
             nid = np.ones(len(innL))*nid
 
-        # material stops at cell when volume is below this,
+        # material stops at cell when flux / cell width is below this,
         self.SD = self.df_dict['minimum flux']
         
         # entrainment coefficient
@@ -335,11 +335,11 @@ class MassWastingRunout(Component):
                         
                     ## prepare receiving nodes for next iteration
                     
-                    # material stops at node if transport volume is 0 OR node is a 
+                    # material stops at node if flux / cell width is 0 OR node is a 
                     # boundary node
                     if qso>0 and n not in self._grid.boundary_nodes: 
                         
-                        # receiving proportion of volume from cell n to each downslope cell
+                        # receiving proportion of qso from cell n to each downslope cell
                         rp = self._grid.at_node.dataset['flow__receiver_proportions'].values[n]
                         rp = rp[np.where(rp > 0)] # only downslope cells considered
                         
@@ -433,15 +433,15 @@ class MassWastingRunout(Component):
         # additional constraint to control debris flow behavoir
         # if flux to a cell is below threshold, debris is forced to stop
         if qsi <=self.SD:
-            D = qsi # all volume that enter cell is deposited 
-            qso = 0 # debris stops, so volume out is 0
+            D = qsi # all material that enters cell is deposited 
+            qso = 0 # debris stops, so qso is 0
             E = 0 # no erosion
             # determine change in cell height
             deta = D # (deposition)/cell area
         else:
             ## deposition
             
-            # determine deposition volume following Campforts, et al., 2020            
+            # determine deposition depth following Campforts, et al., 2020            
             # since using flux per unit contour width (rather than flux), 
             # L is (1-(slpn/slpc)**2) rather than dx/(1-(slpn/slpc)**2)         
             
@@ -461,7 +461,7 @@ class MassWastingRunout(Component):
                 if zi<zo and qsi>(zo-zi) and self.opt3:
                     D = min(zo-zi+(qsi-(zo-zi))*Lnum,qsi*Lnum)
                 else:
-                    D = qsi*Lnum # deposition volume
+                    D = qsi*Lnum # deposition depth
             else:
                 D = qsi*Lnum
                 
@@ -568,7 +568,7 @@ class MassWastingRunout(Component):
                 sslp = sum(slpn)
                 pp = slpn/sslp
                 
-                # determine the total volume sent to S > Sc downslope cells
+                # determine the total flux / unit width sent to S > Sc downslope cells
                 # mean downslope cell elevation
                 zo = self._grid.at_node['topographic__elevation'][rn].mean()
                 
