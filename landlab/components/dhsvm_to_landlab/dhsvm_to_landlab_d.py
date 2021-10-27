@@ -43,8 +43,7 @@ class DHSVMtoLandlab(GridTTools):
     soil-water condition at each link and/or grid cell is assumed uniform accross 
     the basin.
     
-    TODO: make xarray versions of run_one_step and dtw_cdf functions
-        
+    TO DO: remove network mapping functions, turn into a utility
     author: Jeff Keck
     """
 
@@ -100,10 +99,9 @@ class DHSVMtoLandlab(GridTTools):
         
         # check for depth to soil water maps
         if DHSVM_dtw_dict:
-            self.appended_maps_name = DHSVM_dtw_dict['appended_maps_name']
-            self.rpm = DHSVM_dtw_dict['rows_per_map']
-            self.map_dates = DHSVM_dtw_dict['map_dates']
-            self.nd = self.map_dates.shape[0]  #number of days(maps)
+            self.appended_maps = DHSVM_dtw_dict['appended_maps']
+            self.map_dates = pd.to_datetime(DHSVM_dtw_dict['map_dates'])
+            self.nd = len(self.map_dates)  #number of days(maps)
 
             if DHSVM_dtw_mapping_dict:
                 self.grid_d = DHSVM_dtw_mapping_dict['DHSVM_grid']
@@ -117,7 +115,6 @@ class DHSVMtoLandlab(GridTTools):
                     raise ValueError("DHSVM mapping dictionary needed to convert"\
                                      " DHSVM grid values to landlab grid values")    
         else:
-            self.rpm = 0
             val = input("depth to water table maps not provided, continue? (y/n):")
             if val != 'y':
                 raise ValueError("DHSVM depth to water table maps not provided")
@@ -276,6 +273,13 @@ class DHSVMtoLandlab(GridTTools):
         # initially set DHSVM grid wetness index as None
         self.lambda_coarse_wa = None
         
+        # rows per map, used to iterate through appended map .asc file
+        self.rpm = self._grid.shape[0]
+        
+        # range of quantile files used to define cdf at each raster model
+        # grid node
+        self.quant = np.arange(0,1.01,0.01)
+        
         if self.grid_d: # if dhsvm gridding scheme does not match landlab
             self._load_dtw_different_grids()
         else: # dhsvm and landlab gridding schemes are the same
@@ -409,13 +413,16 @@ class DHSVMtoLandlab(GridTTools):
         If running with storm generator, file should be a partial duration series
         of the largest relative wetness (smallest depth to water table values)
         """
-        if type(self.appended_maps)
         
+        if type(self.appended_maps) == str:
         # open .asc version of DHSVM depth to soil water mapped output
-        f = open(self.appended_maps_name, 'r')
-        M = np.genfromtxt(f)
-        f.close()
+            f = open(self.appended_maps, 'r')
+            M = np.genfromtxt(f)
+            f.close()
                 
+        elif type(self.appended_maps) == xr.core.dataset.Dataset:
+            M = self.appended_maps
+
         # extract each map from appended map, convert nd row array of core nodes
         
         # NOTE!!!: DHSVM mapped outputs are oriented the same as the map i.e., top, 
@@ -427,9 +434,15 @@ class DHSVMtoLandlab(GridTTools):
         st_l_an = [] # saturated zone thickness list
         rw_l_an = [] # relative wetness list
         c=0
-        for i in range(1,self.nd+1):
-            dtw_d = M[c:c+self.rpm,:] # map, DHSVM orientation
-            dtw_l = np.hstack(np.flipud(dtw_d))[self._grid.core_nodes] # map, converted to landlab orientation, keep only core nodes
+        for i in range(0,self.nd):
+            # if an .asc file, extract each map sized chunk of the .asc file
+            if type(self.appended_maps) == str: 
+                dtw_d = M[c:c+self.rpm,:] # map, DHSVM orientation
+                dtw_l = np.hstack(np.flipud(dtw_d))[self._grid.core_nodes] 
+            # if a dataset, iterate over each time coordinate to acess data array
+            elif type(self.appended_maps) == xr.core.dataset.Dataset:  
+                dtw_d = np.squeeze(self.appended_maps.isel(time=[i])['wt'].values)
+                dtw_l = np.hstack(dtw_d)[self._grid.core_nodes]
             st_l = self._grid.at_node['soil__thickness'][self._grid.core_nodes]-dtw_l # thickness of saturated zone
             rw_l = st_l/self._grid.at_node['soil__thickness'][self._grid.core_nodes]
             c = c+self.rpm
@@ -600,9 +613,15 @@ class DHSVMtoLandlab(GridTTools):
         
         This function converts a coarse grid of modeled depth to soil water 
         to a fine grid using the topmodel lambda approximation
+        
+        NOTE: this function iterates over each grid cell and applyies a number 
+        of numpy functions to clip and interpolate the DHSVM grid to the landlab
+        grid.
+        For large grids, using the downscale_DTW_to_landlab_grid.py utility to
+        downscale and clip the DHSVM grid to the landlab grid is much quicker.
         """
         # load the raw .asc version of DHSVM depth to soil water mapped output
-        f = open(self.appended_maps_name, 'r')
+        f = open(self.appended_maps, 'r')
         M = np.genfromtxt(f)
         f.close()
                 
@@ -650,7 +669,7 @@ class DHSVMtoLandlab(GridTTools):
         """parammeterize a pdf to a partial duration series of the basin mean 
         saturated zone thickness"""
         
-        self.PDS_s = pd.Series(data = self.dtw_l_an.mean(axis=1), index = self.map_dates)
+        self.PDS_s = pd.Series(data = self.dtw_l_an.mean(axis=1), index = pd.to_datetime(self.map_dates))
         self.Fx_s, self.x1_s, self.T_s, self.Ty_s, self.Q_ri_s = self.fit_probability_distribution(self.PDS_s,dist = 'LN', print_figs = print_figs)
                  
 
@@ -658,60 +677,97 @@ class DHSVMtoLandlab(GridTTools):
         """parammeterize a pdf to a partial duration series of the basin mean 
         relative wetness (staturated zone thickness / soil thickness)"""        
 
-        self.PDS_s = pd.Series(data = self.rw_l_an.mean(axis=1), index = self.map_dates)
+        self.PDS_s = pd.Series(data = self.rw_l_an.mean(axis=1), index = pd.to_datetime(self.map_dates))
         self.Fx_s, self.x1_s, self.T_s, self.Ty_s, self.Q_ri_s = self.fit_probability_distribution(self.PDS_s,dist = 'LN')
                  
 
     
-    def _saturated_zone_thickness_cdf(self, print_figs = False):
-        """generate a cdf of the saturated water table thickness at each node
-        TODO use xarray"""
+    # def _saturated_zone_thickness_cdf(self, print_figs = False):
+    #     """generate a cdf of the saturated water table thickness at each node
+    #     TODO use xarray"""
               
-        # compute cdf for each cell
+    #     # compute cdf for each cell
                 
-        # empty dictionary to store information about nodes that pdf cann not
-        # parameterized to depth to water table at node
-        failed_to_fit_dist_nodes = {}
-        dtw_low_cv_nodes = [] # save node ids where water table changes little
-        st_cdf = {} # dict to save saturated zone thickness cdf parameters for each node
-        for c, n in enumerate(self._grid.core_nodes):
+    #     # empty dictionary to store information about nodes that pdf cann not
+    #     # parameterized to depth to water table at node
+    #     failed_to_fit_dist_nodes = {}
+    #     dtw_low_cv_nodes = [] # save node ids where water table changes little
+    #     st_cdf = {} # dict to save saturated zone thickness cdf parameters for each node
+    #     Fx_l = []
+    #     x1_l = []
+    #     for c, n in enumerate(self._grid.core_nodes):
 
-            # time series of saturated zone thickness at node 'c' is column 'c'
-            # from the 2-d array st_l_an
-            pds = pd.Series(data = self.st_l_an[:,c], index = self.map_dates)
+    #         # time series of saturated zone thickness at node 'c' is column 'c'
+    #         # from the 2-d array st_l_an
+    #         pds = pd.Series(data = self.st_l_an[:,c], index = pd.to_datetime(self.map_dates))
         
-            Fx, x1, T, Ty, Q_ri = self.fit_probability_distribution(pds,dist = 'LN', print_figs = print_figs)
+    #         Fx, x1, T, Ty, Q_ri = self.fit_probability_distribution(pds,dist = 'LN', print_figs = print_figs)
 
-            # NOTE: a pdf may not be fit to all node dtw
-            # check if a distribution was fit to depth to water table data
-            if len(np.argwhere(np.isnan(Fx)))>0:
-                failed_to_fit_dist_nodes[n] = [Fx, x1]
+    #         # NOTE: a pdf may not be fit to all node dtw
+    #         # check if a distribution was fit to depth to water table data
+    #         if len(np.argwhere(np.isnan(Fx)))>0:
+    #             failed_to_fit_dist_nodes[n] = [Fx, x1]
                 
-                # node cdf domain set equal to basin average cdf
-                Fx = self.Fx_s
-                # if the node dtw cdf values are nan, assume constant
-                # dtw equal to the mean of the basin mean dtw values
-                if len(np.argwhere(np.isnan(x1)))>0:
-                    x1 = np.ones(len(self.Fx_s))*np.nanmean(self.x1_s)
-                # else, use the mean value at the node (this outcome occurs if dtw
-                # at node is constant)
-                else:
-                    x1 = np.ones(len(self.Fx_s))*np.nanmean(x1)
+    #             # node cdf domain set equal to basin average cdf
+    #             Fx = self.Fx_s
+    #             # if the node dtw cdf values are nan, assume constant
+    #             # dtw equal to the mean of the basin mean dtw values
+    #             if len(np.argwhere(np.isnan(x1)))>0:
+    #                 x1 = np.ones(len(self.Fx_s))*np.nanmean(self.x1_s)
+    #             # else, use the mean value at the node (this outcome occurs if dtw
+    #             # at node is constant)
+    #             else:
+    #                 x1 = np.ones(len(self.Fx_s))*np.nanmean(x1)
 
-            st_cdf[n] = [Fx, x1]   
+    #         st_cdf[n] = [Fx, x1]
+    #         Fx_l.append(Fx)
+    #         x1_l.append(x1)
          
-            if Fx.std()/Fx.mean() < .05:
-                dtw_low_cv_nodes.append(n)
+    #         if Fx.std()/Fx.mean() < .05:
+    #             dtw_low_cv_nodes.append(n)
             
-            print_figs = False
-            if c%2000 == 0:
-                print('distribution fit to partial duration series of peak saturated zone thickness for '+ \
-                      str(np.round((c/self.ncn)*100))+'% of core nodes' )
-                # print_figs = True
+    #         print_figs = False
+    #         if c%2000 == 0:
+    #             print('distribution fit to partial duration series of peak saturated zone thickness for '+ \
+    #                   str(np.round((c/self.ncn)*100))+'% of core nodes' )
+    #             # print_figs = True
                 
-        self.st_cdf = st_cdf
-        self.dtw_low_cv_nodes = dtw_low_cv_nodes
-        self.failed_to_fit_dist_nodes = failed_to_fit_dist_nodes
+    #     self.Fx_l = Fx_l
+    #     self.x1_l = x1_l
+    #     self.st_cdf = st_cdf
+    #     self.dtw_low_cv_nodes = dtw_low_cv_nodes
+    #     self.failed_to_fit_dist_nodes = failed_to_fit_dist_nodes
+
+
+    def _saturated_zone_thickness_cdf(self):
+        """ at each core node, parameterize a cdf (pdf) to the partial duration series
+        ( or annual maximum series) of maximum saturated thickness, solve the cdf at 
+        1000 points along the domain of the cdf (0 to 1) and save as a row in an xarray 
+        dataaray. Each row of the data array corrisponds to one of the core nodes."""
+
+    
+        # version 2, handle constant saturated thickness cells (during extreme events)
+        def interpolate_q_val(x):
+            scale = np.exp(x[0]); s = x[1]
+            x1 = np.log(sc.stats.lognorm.ppf(self.quant,s,scale = scale))
+            if s ==0: # if standard deviation is 0 (constant)
+                x1 = np.ones(len(self.quant))*scale # cannont fit distribution, constant cdf.  
+            return x1
+        
+        sat_thick = self.st_l_an
+        mu_s = np.nanmean(self.st_l_an,axis=0) # nanmean(axis=0) # each column is a node
+        ss = np.nanstd(self.st_l_an, axis = 0) # .std(axis=0)
+        moments = np.array([mu_s,ss]).T
+    
+        st_cdf = [interpolate_q_val(x) for x in moments]  # only need x1, Fx is same for all    
+    
+        # change to DataArray
+        self.st_cdf = xr.DataArray(data = st_cdf,
+                        dims = ["node","quantile"],
+                        coords = dict(
+                                node=(["node"], self._grid.core_nodes ),
+                                quantile=(["quantile"],self.quant)))
+    
 
         
     def _DHSVM_network_to_NMG_Mapper(self):    
@@ -1080,50 +1136,76 @@ class DHSVMtoLandlab(GridTTools):
         self.Qlinks = pd.DataFrame.from_dict(Qlink_dict, orient = 'index')
         
         
-    def get_depth_to_water_table_at_node(self, q_i): 
-        """at each nodelook up saturated zone thickness, convert to depth to 
-        water table. After cycling through all nodes, depth__to_water_table field
-        of raster model grid is updated"""
+    # def get_depth_to_water_table_at_node(self, q_i): 
+    #     """at each nodelook up saturated zone thickness, convert to depth to 
+    #     water table. After cycling through all nodes, depth__to_water_table field
+    #     of raster model grid is updated"""
 
+    #     dtw_field = (np.ones(self._grid.at_node['soil__thickness'].shape[0])*np.nan).astype(float)
+    #     st = [] # saturated thickness list
+    #     dtw = [] # deppth to water table list
+    #     # for each core node
+    #     for c,n in enumerate(self._grid.core_nodes):
+    #         # look up domain and range of saturated thickness cdf for node 'c'
+    #         Fx = self.st_cdf[n][0]; x1 = self.st_cdf[n][1]
+    #         # get saturated thickness for quantile 'q_i'
+    #         st_i = self.intp(Fx,x1,q_i)#, message = '#######DTW#### at node '+str(n))
+    #         # convert saturated thickness to depth to soil water
+    #         # saturated thickness cannot exceed soil depth
+    #         if st_i>self._grid.at_node['soil__thickness'][n]:
+    #             st_i = self._grid.at_node['soil__thickness'][n]
+    #         dtw_i = self._grid.at_node['soil__thickness'][n]-st_i
+            
+    #         st.append(st_i)
+    #         dtw.append(dtw_i)
+        
+        
+    #     dtw_cn = np.array(dtw) # depth to water at core nodes
+        
+    #     dtw_field[self._grid.core_nodes] = dtw_cn
+        
+    #     #updates depth__to_soil_water field
+    #     self._grid.add_field('node', 'depth__to_water_table', dtw_field, clobber = True)
+
+    def get_depth_to_water_table_at_node(self, q_i):
+        """given the quantile value of a soil recharge event, look up the corrisponding
+        depth to water table at each node, update the depth__to_water_table field"""
+        
+        def interp1d_np(data, x, xi):
+            return np.interp(xi, x, data)
+    
+        #use xr.apply_ufunc to quickly look up quanntile value
+        # #%%time 
+        st = xr.apply_ufunc(
+            interp1d_np,  # first the function
+            self.st_cdf,  # now arguments in the order expected by 'interp1_np'
+            self.st_cdf.coords['quantile'],
+            q_i,
+            input_core_dims = [["quantile"],["quantile"],[]],
+            exclude_dims=set(("quantile",)),
+            vectorize = True
+        ) 
+      
+        # soild depth at core nodes
+        soild = self._grid.at_node['soil__thickness'][self._grid.core_nodes]
+        
+        # convert saturated thickness to depth to water table
+        dtw = soild-st.values
+        
+        # apply constraints
+        # depth to water table cannot be less than zero
+        dtw[dtw<0]  = 0
+    
+        # depth to water table cannot be greater than soil thickness
+        dtw[dtw>soild] = soild[dtw>soild]
+        
+        # update
+        #self._grid.at_node['depth__to_water_table'][self._grid.core_nodes] = dtw
+        
         dtw_field = (np.ones(self._grid.at_node['soil__thickness'].shape[0])*np.nan).astype(float)
-        st = [] # saturated thickness list
-        dtw = [] # deppth to water table list
-        # for each core node
-        for c,n in enumerate(self._grid.core_nodes):
-            # look up domain and range of saturated thickness cdf for node 'c'
-            Fx = self.st_cdf[n][0]; x1 = self.st_cdf[n][1]
-            # get saturated thickness for quantile 'q_i'
-            st_i = self.intp(Fx,x1,q_i)#, message = '#######DTW#### at node '+str(n))
-            # convert saturated thickness to depth to soil water
-            # saturated thickness cannot exceed soil depth
-            if st_i>self._grid.at_node['soil__thickness'][n]:
-                st_i = self._grid.at_node['soil__thickness'][n]
-            dtw_i = self._grid.at_node['soil__thickness'][n]-st_i
-            
-            st.append(st_i)
-            dtw.append(dtw_i)
-        
-        ## pandas series apply option does not speed up function
-        ## cnodes = pd.Series(self._grid.core_nodes)
-        ## def get_dtw(n,q_i):
-        ##     # look up domain and range of saturated thickness cdf for node 'c'
-        ##     Fx = self.st_cdf[n][0]; x1 = self.st_cdf[n][1]
-        ##     # get saturated thickness for quantile 'q_i'
-        ##     st_i = self.intp(Fx,x1,q_i)#, message = '#######DTW#### at node '+str(n))
-        ##     # convert saturated thickness to depth to soil water
-        ##     dtw_i = self._grid.at_node['soil__thickness'][n]-st_i
-            
-        ##     return dtw_i
-            
-            
-        ##cnodes.apply(get_dtw, args = (q_i,))
-        
-        dtw_cn = np.array(dtw) # depth to water at core nodes
-        
-        dtw_field[self._grid.core_nodes] = dtw_cn
-        
-        #updates depth__to_soil_water field
+        dtw_field[self._grid.core_nodes] = dtw
         self._grid.add_field('node', 'depth__to_water_table', dtw_field, clobber = True)
+
 
     
     def _run_one_step_flow(self, ts = None):
@@ -1289,7 +1371,7 @@ class DHSVMtoLandlab(GridTTools):
     def _min_return_interval(self, dates, plotting_position = 'Weibull'):
         """given the dates of a partial duration series, returns the minimum
         annual return period"""
-        print(dates)
+        dates = pd.to_datetime(dates)
         Yrs = max(dates.year)-min(dates.year)+1 # number of years in time series
     
         n = dates.shape[0]            
@@ -1401,6 +1483,10 @@ class DHSVMtoLandlab(GridTTools):
                        RI=[1.5], plotting_position = 'Weibull',
                        print_figs = False):
         """
+        TODO: use scipy functions lognorm.ppf(quantile,s= std, scale = exp(mean))
+        and pearson3.ppf(quantile, skew, scale = exp(mean))
+        apply to an array or dataarray, whichever faster
+        
         Fits distribution to annual maximum series or partial duration series of
         data using built in numpy function and methods described in: 
        

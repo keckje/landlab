@@ -135,7 +135,7 @@ class MassWastingRunout(Component):
         self._grid.at_node['topographic__initial_elevation'] = self._grid.at_node['topographic__elevation'].copy()
     
     """route an initial mass wasting volume through a watershed, determine Scour, 
-    Entrainment and Depostion depths and update the DEM
+    Entrainment and Depostion depths and update the dem
     
     
     Parameters
@@ -145,9 +145,9 @@ class MassWastingRunout(Component):
 
     release_dict : dictionary
         a dictionary of parameters that control the release of the mass wasting 
-        material into the watershed. A pulse (fraction) of the total landslide volume
-        is added at interval "nid" until the total number of pulses is equal to 
-        the total landslide volume             
+        material into the watershed. A pulse (fraction) of total the landslide volume
+        is added at interval "nid" until total number of pulses is equal to the total
+        landslide volume             
                 mw_release_dict = {
                     'number of pulses': 2, 
                     'iteration delay': 2
@@ -159,10 +159,9 @@ class MassWastingRunout(Component):
                         wasting volume
                     iteration delay: int
                         number of iterations between each pulse
-    
     df_dict : dictionary
-        a dictionary of parameters that control the behavoir of the cellular-automata 
-        debris flow model formatted as follows:
+        a dictionary of parameters that control 
+        the behavoir of the cellular-automata debris flow model formatted as follows:
                 df_dict = {
                     'critical slope':0.05, 'minimum flux':0.1,
                     'scour coefficient':0.03}
@@ -180,7 +179,7 @@ class MassWastingRunout(Component):
                     scour depth [m]
                         
     save : boolean
-        Save topographic elevation of watershed after each model iteration? 
+        Save topographic elevation of watershed after each model iteration?. 
         The default is False.
     itL : int
         maximum number of iterations the cellular-automata model runs before it
@@ -197,7 +196,7 @@ class MassWastingRunout(Component):
     opt2: boolean
         use topographic elevation + the thickness of the mass wasting material
         to route runout?
-        default is False
+        defaul is False
     
     opt3: boolean
         If downslope cells are higher than mass wasting cell, use downslope 
@@ -205,8 +204,8 @@ class MassWastingRunout(Component):
         default is False
     
     opt4: boolean
-         Allow settling after deposition during runout? Settling is applied each
-         iteration of the model run after outflow from all cells have been computed
+         allow settling after deposition during runout? settling is applied each
+         iteration of the modelrun after outflow from all cells has been computed
          default is False
 
     Returns
@@ -218,9 +217,8 @@ class MassWastingRunout(Component):
     def run_one_step(self, dt):
         """route a list of mass wasting volumes through a DEM and update
         the DEM based on the scour, entrainment and depostion depths at each 
-        cell        
+        cell        Parameters
         ----------
-        Parameters
         dt : foat
             duration of storm, in seconds
 
@@ -576,9 +574,12 @@ class MassWastingRunout(Component):
                 zi = self._grid.at_node['topographic__elevation'][n]
                 
                 # height of node n using Sc*dx above mean downslope elevation
-                slp_h = slpc*self._grid.dx             
+                slp_h = slpc*self._grid.dx 
+            
             
                 qso_s = (zi - (zo+slp_h))/2 # out going sediment depth
+                
+                
                 
                 if qso_s < 0: # no negative outflow
                     qso_s = 0
@@ -586,13 +587,16 @@ class MassWastingRunout(Component):
                 if qso_s > self.D_L[ii]: # settlement out can not exceed deposit
                     qso_s= self.D_L[ii]
                 
-                qso_s_i = qso_s*pp # proportion sent to each receiving cell                
+
                 
-                # update the topographic election
+                qso_s_i = qso_s*pp # proportion sent to each receiving cell
+                
+                
+                # 
                 self._grid.at_node['topographic__elevation'][n]=self._grid.at_node['topographic__elevation'][n]-qso_s
                 self._grid.at_node['topographic__elevation'][rn]=self._grid.at_node['topographic__elevation'][rn]+qso_s_i
                 
-                # update the soil thickness
+                # 
                 self._grid.at_node['soil__thickness'][n] = self._grid.at_node['soil__thickness'][n]-qso_s
                 self._grid.at_node['soil__thickness'][rn] = self._grid.at_node['soil__thickness'][rn]+qso_s_i
 

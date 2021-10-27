@@ -10,7 +10,7 @@ from landlab import imshow_grid, imshow_grid_at_node
 from landlab.utils.grid_t_tools import GridTTools
 
 from landlab.components.mass_wasting_router.landslide_mapper import LandslideMapper as LM
-from landlab.components.mass_wasting_router.mass_wasting_runout import MassWastingRunout as MWR
+from landlab.components.mass_wasting_router.mass_wasting_runout_sv7 import MassWastingRunout as MWR
 from landlab.components.mass_wasting_router.mass_wasting_eroder import MassWastingEroder as MWE
 
 
@@ -35,7 +35,7 @@ class MassWastingRouter(GridTTools):
     "Landslide__Probability" or "Factor__of_safety" field.
 
     Attributes of each landslide are summarized from all raster model grid cells 
-    within the landslide and used to approximate an initial debris flow
+    within the landslide and used to approximate an initial landslide 
     volume (and grain size).
 
     The landslide is routed through the watershed as a debris flow using a cellular
