@@ -317,11 +317,11 @@ class DHSVMtoLandlab(GridTTools):
         that can be used for tracking changes in sediment dynamics with time
         """
         
-        # first determine  the number of events in each year
+        # first determine the number of events in each year
         yrs = [0]
         c=0
         while yrs[c]<(self.end_year-self.begin_year+1):
-            dt = np.random.normal(self.sed_ri, self.sed_ri/6,1)[0]
+            dt = np.random.normal(self.sed_ri, self.sed_ri/2,1)[0]
             if dt<0: # change in time can only be positive
                 dt =0.05
             yrs.append(yrs[c]+dt)
@@ -333,8 +333,20 @@ class DHSVMtoLandlab(GridTTools):
         # an emperical cdf of the day of year large events occur        
         doy = []
         for i,y in enumerate(YEAR):
+            # inital random date
             q_i = np.random.uniform(0,1,1)
-            doy.append(int(self.intp(self.date_quantile, self.date_day, q_i)))
+            jd = int(self.intp(self.date_quantile, self.date_day, q_i)) # julian day
+            
+            # make sure date at least 30 days apart from all other dates
+            if i >0:
+                # while date is within 30 days of any other date, keep resampling a date.
+                while (np.abs(YEAR[0:i]*365+np.array(doy[0:i])-
+                            (YEAR[i]*365+jd))<30).all():
+                    q_i = np.random.uniform(0,1,1)
+                    jd = int(self.intp(self.date_quantile, self.date_day, q_i))
+     
+            doy.append(jd)
+            
 
         doy = pd.DataFrame(np.array(doy))
         doy.columns = ['day-of-year']
@@ -370,11 +382,12 @@ class DHSVMtoLandlab(GridTTools):
         except: # if run DTW only, then use the dates of the DTW maps
             pds_doy = self.PDS_s.index.dayofyear
             
-        fig, ax = plt.subplots(figsize=(8, 4))
-        n, bins, patches = plt.hist(pds_doy, 15, density=True, histtype='step', # emperical cdf
+        fig, ax = plt.subplots(figsize=(3, 3))
+        n, bins, patches = plt.hist(pds_doy, 30, density=True, histtype='step', # emperical cdf
                            cumulative=True, label='Empirical')
         plt.xlabel('day of year')
         plt.ylabel('quantile')
+        plt.xlim(bins.min()-1,bins.max())
         
         self.date_quantile = np.concatenate((np.array([0]),n))
         self.date_day = bins
@@ -464,8 +477,7 @@ class DHSVMtoLandlab(GridTTools):
         self.dtw_l_an = np.array(dtw_l_an) 
         self.st_l_an = np.array(st_l_an)
         self.rw_l_an = np.array(rw_l_an)
-       
-    
+           
     
     def _mean_saturated_zone_thickness_cdf(self):
         """parammeterize a pdf to a partial duration series of the basin mean 
@@ -482,8 +494,7 @@ class DHSVMtoLandlab(GridTTools):
         self.PDS_s = pd.Series(data = self.rw_l_an.mean(axis=1), index = pd.to_datetime(self.map_dates))
         self.Fx_s, self.x1_s, self.T_s, self.Ty_s, self.Q_ri_s = self.fit_probability_distribution(self.PDS_s,dist = 'LN')
                  
-
-    
+   
     def _saturated_zone_thickness_cdf(self):
         """ at each core node, parameterize a cdf (pdf) to the partial duration series
         ( or annual maximum series) of maximum saturated thickness, solve the cdf at 
@@ -513,7 +524,6 @@ class DHSVMtoLandlab(GridTTools):
                                 node=(["node"], self._grid.core_nodes ),
                                 quantile=(["quantile"],self.quant)))
     
-
         
     def _DHSVM_network_to_NMG_Mapper(self):    
         

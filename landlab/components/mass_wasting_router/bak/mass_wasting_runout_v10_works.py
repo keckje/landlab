@@ -316,23 +316,22 @@ class MassWastingRunout(Component):
                 
                 arn_ns = np.array([])
                 arv_ns = np.array([])
-                # mwh = [] # list of debris flow thickness at each cell that has
+                mwh = [] # list of debris flow thickness at each cell that has
                 # debris flow for iteration c
                 
                 # for each unique cell in receiving node list arn
                 arn_u = np.unique(arn) # unique arn list
                 self.D_L = []
 
-                # mass conintuity and next iteration precipitons
-                detaL = []
-                qsoL = []
-                rnL = []
                 for n in arn_u:
                     
                     n = int(n)        
 
+                    # mass continuity
                     deta, qso, rn = self._scour_entrain_deposit(n, arv, arn)
-                    detaL.append(deta); qsoL.append(qso); rnL.append(rn)
+                    
+                    # update dem
+                    mwh = self._update_dem(n, deta, qso, mwh)
                         
                     ## prepare receiving nodes for next iteration
                     
@@ -351,16 +350,8 @@ class MassWastingRunout(Component):
                         # store receiving nodes and volumes in temporary arrays
                         arn_ns = np.concatenate((arn_ns,rn), axis = 0) # next step receiving node list
                         arv_ns = np.concatenate((arv_ns,rv), axis = 0) # next steip receiving node incoming volume list
-
-                # update the dem
-                for ii, n in enumerate(arn_u):
-                    n = int(n)  
-                    
-                    # update dem
-                    self._update_dem(n, ii, detaL, qsoL)
-                
-
-
+                     
+             
                 if self.save:
                     cL[i].append(c)
                     self.df_evo_maps[i][c] = self._grid.at_node['topographic__elevation'].copy()
@@ -396,7 +387,7 @@ class MassWastingRunout(Component):
                     fd.run_one_step()
                                         
                     # remove debris flow depth from cells this iteration (depth returns next iteration)
-                    self._grid.at_node['topographic__elevation_MW_surface'][arn_u] = self._grid.at_node['topographic__elevation_MW_surface'][arn_u]-qsoL
+                    self._grid.at_node['topographic__elevation_MW_surface'][arn_u] = self._grid.at_node['topographic__elevation_MW_surface'][arn_u]-mwh
                         
                 DEMf = self._grid.at_node['topographic__elevation'].copy()
                 
@@ -468,8 +459,8 @@ class MassWastingRunout(Component):
                 zo = self._grid.at_node['topographic__elevation'][rn].min()
                 zi = self._grid.at_node['topographic__elevation'][n]
                 if zi<zo and qsi>(zo-zi) and self.opt3:
-                    # print('opt3')
-                    # print(str(zo-zi+(qsi-(zo-zi))*Lnum)+' ,'+str(qsi*Lnum))
+                    print('opt3')
+                    print(str(zo-zi+(qsi-(zo-zi))*Lnum)+' ,'+str(qsi*Lnum))
                     # D = min(zo-zi+(qsi-(zo-zi))*Lnum,qsi*Lnum)
                     D = zo-zi+(qsi-(zo-zi))*Lnum
                 else:
@@ -511,11 +502,9 @@ class MassWastingRunout(Component):
         return deta, qso, rn
                 
 
-    def _update_dem(self,n, ii, detaL, qsoL):
+    def _update_dem(self,n, deta, qso, mwh):
         """updates the topographic elevation and soil thickness fields at a
         grid cell"""
-        
-        deta = detaL[ii]; qso = qsoL[ii]; #mwh = qso
         
         # Regolith - difference between the fresh bedrock surface and the top surface of the dem
         self._grid.at_node['soil__thickness'][n] = self._grid.at_node['soil__thickness'][n]+deta 
@@ -531,13 +520,13 @@ class MassWastingRunout(Component):
             self._grid.at_node['topographic__elevation_MW_surface'][n] = self._grid.at_node['topographic__elevation'].copy()[n]+qso
             
             # mass wasting depth list, removed after slope determined
-            # mwh.append(qso)
+            mwh.append(qso)
         else:
   
             # Topographic elevation - top surface of the dem
             self._grid.at_node['topographic__elevation'][n] = self._grid.at_node['topographic__elevation'][n]+deta
         
-        # return mwh
+        return mwh
 
 
     def _deposit_settles(self, ii, n):
@@ -602,7 +591,7 @@ class MassWastingRunout(Component):
                 
                 qso_s_i = qso_s*pp # proportion sent to each receiving cell                
                 
-                # update the topographic elevation
+                # update the topographic election
                 self._grid.at_node['topographic__elevation'][n]=self._grid.at_node['topographic__elevation'][n]-qso_s
                 self._grid.at_node['topographic__elevation'][rn]=self._grid.at_node['topographic__elevation'][rn]+qso_s_i
                 

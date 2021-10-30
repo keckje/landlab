@@ -468,8 +468,8 @@ class MassWastingRunout(Component):
                 zo = self._grid.at_node['topographic__elevation'][rn].min()
                 zi = self._grid.at_node['topographic__elevation'][n]
                 if zi<zo and qsi>(zo-zi) and self.opt3:
-                    print('opt3')
-                    print(str(zo-zi+(qsi-(zo-zi))*Lnum)+' ,'+str(qsi*Lnum))
+                    # print('opt3')
+                    # print(str(zo-zi+(qsi-(zo-zi))*Lnum)+' ,'+str(qsi*Lnum))
                     # D = min(zo-zi+(qsi-(zo-zi))*Lnum,qsi*Lnum)
                     D = zo-zi+(qsi-(zo-zi))*Lnum
                 else:
@@ -602,7 +602,7 @@ class MassWastingRunout(Component):
                 
                 qso_s_i = qso_s*pp # proportion sent to each receiving cell                
                 
-                # update the topographic election
+                # update the topographic elevation
                 self._grid.at_node['topographic__elevation'][n]=self._grid.at_node['topographic__elevation'][n]-qso_s
                 self._grid.at_node['topographic__elevation'][rn]=self._grid.at_node['topographic__elevation'][rn]+qso_s_i
                 
