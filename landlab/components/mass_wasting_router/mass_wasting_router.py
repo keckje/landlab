@@ -10,7 +10,8 @@ from landlab import imshow_grid, imshow_grid_at_node
 from landlab.utils.grid_t_tools import GridTTools
 
 from landlab.components.mass_wasting_router.landslide_mapper import LandslideMapper as LM
-from landlab.components.mass_wasting_router.mass_wasting_runout_sv7 import MassWastingRunout as MWR
+# from landlab.components.mass_wasting_router.mass_wasting_runout_sv7 import MassWastingRunout as MWR
+from landlab.components.mass_wasting_router.mass_wasting_runout import MassWastingRunout as MWRu
 from landlab.components.mass_wasting_router.mass_wasting_eroder import MassWastingEroder as MWE
 
 
@@ -144,11 +145,11 @@ class MassWastingRouter(GridTTools):
             TerraceWidth = 1,
             mass_wasting_threshold = 0.75, 
             min_mw_cells = 1,
-            release_dict = {'number of pulses':8, # mass wasting runout
-                            'iteration delay':5 },
-            df_dict = {'critical slope':0.1, 
-                       'minimum flux':3,
-                       'scour coefficient':0.025},
+            release_dict = {'number of pulses':[2], # mass wasting runout
+                            'iteration delay':[2] },
+            df_dict = {'critical slope':[0.1], 
+                       'minimum flux':0.03,
+                       'scour coefficient':0.02},
             FluvialErosionRate = [[0.03,-0.43], [0.01,-0.43]], # mass wasting eroder
 
             parcel_volume = 0.2, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
@@ -286,9 +287,11 @@ class MassWastingRouter(GridTTools):
         
         
         ### class instance of MassWastingRunout
-        self.DebrisFlows = MWR(self._grid,
+        self.DebrisFlows = MWRu(self._grid,
                                release_dict,
-                               df_dict)
+                               df_dict, save_df_dem = True,
+                               opt1 = False, opt2 = True, 
+                               opt3 = True, opt4 = True)
         
         
         ### class instance of MassWastingEroder

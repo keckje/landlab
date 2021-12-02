@@ -591,7 +591,7 @@ class LandslideProbability(Component):
             #/jk/
             self._depth_to_water_table = np.float32(self._grid.at_node["depth__to_water_table"][i])
             Rw = (self._hs-self._depth_to_water_table) / self._hs #/jk/
-            self._rel_wetness = np.ones(self._n)*Rw #/jk/
+            self._rel_wetness = Rw#np.ones(self._n)*Rw #/jk/
         else:
             #/jk/ relative wetness is stochastically determined for each iteration
             self._rel_wetness = ((self._Re) / self._T) * ( #/jk/
