@@ -122,7 +122,7 @@ class MassWastingRunout(Component):
         self.itL = itL
         self.df_evo_maps = {}
         self.df_th_maps = {}
-    
+        self.partition_method = 'slope'# 'square_root_of_slope' #
         # set run options
         self.opt1 = opt1
         self.opt2 = opt2
@@ -371,7 +371,7 @@ class MassWastingRunout(Component):
                 ## update slope fields after DEM has been updated
                 # fd = FlowDirectorDINF(self._grid) # update slope including debris flow thickness                     
                 fd = FlowDirectorMFD(self._grid, surface="topographic__elevation" ,diagonals=True,
-                                partition_method = 'slope')
+                                partition_method = self.partition_method)
                 fd.run_one_step()
 
                 DEMf = self._grid.at_node['topographic__elevation'].copy()
@@ -392,7 +392,7 @@ class MassWastingRunout(Component):
                               
                     # update slope for next iteration using the mass wasting surface 
                     fd = FlowDirectorMFD(self._grid, surface="topographic__elevation_MW_surface", diagonals=True,
-                            partition_method = 'slope')
+                            partition_method = self.partition_method)
                     fd.run_one_step()
                                         
                     # remove debris flow depth from cells this iteration (depth returns next iteration)
@@ -482,14 +482,14 @@ class MassWastingRunout(Component):
             # debris flow depth over cell    
             df_depth = qsi #vin/(self._grid.dx*self._grid.dx) #df depth
             
-            # depth-slope product approximation of total shear stress on channel bed [kPa]
-            T_df = 1700*9.81*df_depth*slpn/1000
+            # depth-slope product approximation of total shear stress on channel bed [Pa]
+            Tb = 1700*9.81*df_depth*slpn
      
             # max erosion depth equals regolith (soil) thickness
             dmx = self._grid.at_node['soil__thickness'][n]
             
             # erosion depth: 
-            E = min(dmx, self.cs*T_df)
+            E = min(dmx, self.cs*Tb/1000) # convert Tb to kPa
             
             ## flow out
             qso = qsi-D+E
@@ -502,7 +502,7 @@ class MassWastingRunout(Component):
             
             self.dfdL.append(df_depth)
             
-            self.TdfL.append(T_df)
+            self.TdfL.append(Tb)
             
             
         # list of deposition depths at cells in iteration 
@@ -612,4 +612,50 @@ class MassWastingRunout(Component):
 
 
 
+    def scour(self, n, depth, slope, opt = 1):
+        """determines the scour depth based on user selected method
+        check for requied inputs at beginning of class
+        """
+        ro_df = 1700
+        ro_s = 2650
+        phi = 35
+        g = 9.81
+        Vs = 0.6
+        Ds = 0.25
+        dudz = 7.5/depth
+
+        # depth-slope product approximation of hydrostaic/quasi-static 
+        # shear stress on channel bed [Pa]
+        theta = np.atan(slope) # convert tan(theta) to theta
+        Tbs = ro_df*g*depth*np.sin(theta)
+        dmx = self._grid.at_node['soil__thickness'][n]
         
+        if opt ==1:
+            # following Frank et al., 2015, use a coulumb friction based rheology
+            # (quasi-static) to determine erosion depth is a linear function
+            
+            # erosion depth:
+            Ec = self.cs*Tbs/1000
+        
+        if opt == 2:
+            # following Medina et al., use a Voellmy based rheology to determine
+            # scour depth
+            Tres = depth*ro_df*9.81*np.cos(theta)*tan(phi)
+            Tbi = Vs*ro_s*(Ds**2)*(dudz**2)
+            Tb = Tbs+Tbi
+            
+            Ec = (Tres - Tb)/(1700*9.81*(np.sin(theta)-np.cos(theta)*tan(phi)))            # depth-slope product approximation of total shear stress on channel bed [Pa]
+
+     
+            # max erosion depth equals regolith (soil) thickness
+            dmx = self._grid.at_node['soil__thickness'][n]
+            
+            # erosion depth: 
+            E = min(dmx, self.cs*Tb/1000) # convert Tb to kPa
+
+            Tres = df_depth*1700*9.81*np.cos(theta)*tan(slpc)
+            hent = (Tb - Tres)/(1700*9.81)###NOT DONE YET            
+
+            E = min(dmx, Ec) # convert Tb to kPa
+        # if opt == 3:
+            

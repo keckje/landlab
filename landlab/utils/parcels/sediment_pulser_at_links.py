@@ -7,11 +7,14 @@ _OUT_OF_NETWORK = -2
 
 class SedimentPulserAtLinks(SedimentPulserBase):
     '''
-    Send a pulse of parcels into specific reaches of channel network
+    Send a pulse of parcels to specific links (reaches) of a channel network. 
+    Pulse location within each link is random.
     
-    This utility prepares input for and runs the landlab DataRecord "add_item"
-    method on a DataRecord that has been prepared for the NetworkSedimentTransporter. 
-    In the NetworkSedimentTransporter, the items are sediment "parcels"
+    This utility runs the landlab DataRecord "add_item" method on a DataRecord 
+    that has been prepared for the NetworkSedimentTransporter. 
+    
+    In the NetworkSedimentTransporter, sediment "parcels" are the items added
+    to the DataRecord
     
     SedimentPulserAtLinks is instantiated by specifying grain characteristics
     and the criteria for when a pulse accurs.
@@ -209,7 +212,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
         )
         
         # create times for DataRecord
-        variables, items = _sediment_pulse_stochastic(self,
+        variables, items = self._sediment_pulse_stochastic(
             time,
             links,
             n_parcels_at_link,

@@ -68,7 +68,7 @@ class MassWastingEroder(GridTTools):
             Ct = 5000,
             BCt = 100000,
             TerraceWidth = 1,
-            FluvialErosionRate = [[0.03,-0.43], [0.01,-0.43]], # Fluvial erosion rate parameters
+            FluvialErosionRate = [[1,1], [1,1]], # [[0.03,-0.43], [0.01,-0.43]], # Fluvial erosion rate parameters
             parcel_volume = 0.2, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
             **kwds):
 

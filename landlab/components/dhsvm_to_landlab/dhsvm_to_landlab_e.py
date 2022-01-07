@@ -64,7 +64,8 @@ class DHSVMtoLandlab(GridTTools):
                   bankfull_flow_RI = 1.5,
                   fluvial_sediment_RI = 0.25,
                   hillslope_sediment_RI = 2.5,
-                  tao_dict = None
+                  tao_dict = None,
+                  seed = None
                   ):        
 
 
@@ -119,6 +120,9 @@ class DHSVMtoLandlab(GridTTools):
                 raise ValueError("DHSVM depth to water table maps not provided")
         
         
+        # set the seed of the np random generator
+        self._maker(seed)
+        
         # initial parcels
         if parcels != None:
             self.parcels = parcels
@@ -151,8 +155,8 @@ class DHSVMtoLandlab(GridTTools):
         # Event return interval above which landslides occur
         self.ls_ri = hillslope_sediment_RI
     
-        if self.ls_ri < 1: #TODO change this to minimum return interval in dtw time series
-            raise ValueError("frequency of landslide storm events must be >= 1")
+        # if self.ls_ri < 1: #TODO change this to minimum return interval in dtw time series
+        #     raise ValueError("frequency of landslide storm events must be >= 1")
         
         
         # time aggregation
@@ -311,7 +315,13 @@ class DHSVMtoLandlab(GridTTools):
         
         self._constant_channel_tau()
         
+    
+    def _maker(self,seed):
+        """prepares the np random generator"""
         
+        self.maker = np.random.RandomState(seed=seed)
+
+    
     def _storm_date_maker(self):
         """Creates a date time index for the randomdly generated storm events
         that can be used for tracking changes in sediment dynamics with time
@@ -321,7 +331,7 @@ class DHSVMtoLandlab(GridTTools):
         yrs = [0]
         c=0
         while yrs[c]<(self.end_year-self.begin_year+1):
-            dt = np.random.normal(self.sed_ri, self.sed_ri/2,1)[0]
+            dt = self.maker.normal(self.sed_ri, self.sed_ri/2,1)[0]
             if dt<0: # change in time can only be positive
                 dt =0.05
             yrs.append(yrs[c]+dt)
@@ -334,7 +344,7 @@ class DHSVMtoLandlab(GridTTools):
         doy = []
         for i,y in enumerate(YEAR):
             # inital random date
-            q_i = np.random.uniform(0,1,1)
+            q_i = self.maker.uniform(0,1,1)
             jd = int(self.intp(self.date_quantile, self.date_day, q_i)) # julian day
             
             # make sure date at least 30 days apart from all other dates
@@ -342,7 +352,7 @@ class DHSVMtoLandlab(GridTTools):
                 # while date is within 30 days of any other date, keep resampling a date.
                 while (np.abs(YEAR[0:i]*365+np.array(doy[0:i])-
                             (YEAR[i]*365+jd))<30).all():
-                    q_i = np.random.uniform(0,1,1)
+                    q_i = self.maker.uniform(0,1,1)
                     jd = int(self.intp(self.date_quantile, self.date_day, q_i))
      
             doy.append(jd)
@@ -365,7 +375,7 @@ class DHSVMtoLandlab(GridTTools):
         #add random bit of time to each date to make sure no duplicates
         Tx_new = []
         for c,v in enumerate(Tx):
-            Tx_new.append(Tx[c] + pd.to_timedelta(np.random.uniform(0,1,1),'h')[0])
+            Tx_new.append(Tx[c] + pd.to_timedelta(self.maker.uniform(0,1,1),'h')[0])
             
         Tx_new = pd.Series(Tx_new)
         Tx = pd.to_datetime(Tx_new.values)
@@ -785,7 +795,7 @@ class DHSVMtoLandlab(GridTTools):
                 
         # grain size distribution based on d50 and assumed 
         # log normal distribution (Kondolf and Piegay 2006)
-        Gdist = pd.DataFrame(np.random.lognormal(np.log(D50),0.5,size=1000))            
+        Gdist = pd.DataFrame(self.maker.lognormal(np.log(D50),0.5,size=1000))            
         D65 = Gdist.quantile(0.65).values[0]                
         D84 = Gdist.quantile(0.84).values[0]             
         
@@ -936,7 +946,7 @@ class DHSVMtoLandlab(GridTTools):
         """updates the flow depth field of the network model grid"""
 
         if ts is None:
-            self.q_i = np.random.uniform(self.Q_Fx.min(), self.Q_Fx.max(),1)[0]
+            self.q_i = self.maker.uniform(self.Q_Fx.min(), self.Q_Fx.max(),1)[0]
             
             # get the flow rate at representative link and equivalent 
             # event return interval cdf of flow rates to get flow
@@ -968,7 +978,7 @@ class DHSVMtoLandlab(GridTTools):
             
             # if only updating the depth to water of the raster model grid
             if DTW_only is True:
-                self.q_i = np.random.uniform(self.Fx_s.min(), self.Fx_s.max(),1)[0]
+                self.q_i = self.maker.uniform(self.Fx_s.min(), self.Fx_s.max(),1)[0]
     
                 # get the flow rate at representative link and equivalent 
                 # event return interval cdf of flow rates to get flow
@@ -1240,7 +1250,7 @@ class DHSVMtoLandlab(GridTTools):
             mu_lognormal = np.log((mu ** 2)/ np.sqrt(sigma ** 2 + mu ** 2))
             
             sigma_lognormal = np.sqrt(np.log((sigma ** 2) / (mu ** 2) + 1))
-            s = np.random.lognormal(mu_lognormal, sigma_lognormal, 10000)
+            s = self.maker.lognormal(mu_lognormal, sigma_lognormal, 10000)
             
             x1 = np.linspace(s.min(), s.max(), 10000)
             

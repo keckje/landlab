@@ -482,4 +482,4 @@ def plot_network_and_parcels(
     # make axes equal
     ax.axis("equal")
 
-    return fig
+    return fig, X, Y

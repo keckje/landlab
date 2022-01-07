@@ -4,7 +4,7 @@ import pytest
 from landlab.components import FlowDirectorSteepest, NetworkSedimentTransporter
 from landlab.data_record import DataRecord
 from landlab.grid.network import NetworkModelGrid
-
+from landlab.utils.parcels import BedParcelInitializer
 
 @pytest.fixture()
 def example_nmg():
@@ -104,3 +104,11 @@ def example_flow_director(example_nmg):
     fd = FlowDirectorSteepest(example_nmg)
     fd.run_one_step()
     return fd
+
+
+@pytest.fixture()
+def example_parcel_initializer(example_nmg):
+    num_starting_parcels = 2
+    parcel_initializer = BedParcelInitializer(example_nmg,
+                                           median_number_of_starting_parcels = num_starting_parcels)
+    return parcel_initializer

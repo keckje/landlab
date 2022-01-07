@@ -1,7 +1,7 @@
 import numpy as np
 
 from landlab.data_record import DataRecord
-
+from landlab.grid.network import NetworkModelGrid
 
 _OUT_OF_NETWORK = -2
 
@@ -95,6 +95,9 @@ class SedimentPulserBase:
         self._parcel_volume = parcel_volume
         self._abrasion_rate = abrasion_rate
  
+        if not isinstance(grid, NetworkModelGrid):
+            msg = "NetworkSedimentTransporter: grid must be NetworkModelGrid"
+            raise ValueError(msg)
             
     # add checks, messages, prepare tests
     # see NST and Flow Director for test ideas

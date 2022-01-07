@@ -5,21 +5,21 @@ from landlab.utils.parcels.sediment_pulser_base import SedimentPulserBase
 
 _OUT_OF_NETWORK = -2
 
-class SedimentPulserTable(SedimentPulserBase):
+class SedimentPulserEachParcel(SedimentPulserBase):
     
     '''
-    Send a pulse of sediment to specific locations of a channel network and divide 
-    the pulse into parcels
+    Send a pulse of sediment to specific links and link locations of a channel 
+    network and divide the pulse into parcels
     
     This utility prepares input for and runs the landlab DataRecord "add_item"
     method on a DataRecord that has been prepared for the NetworkSedimentTransporter. 
     In the NetworkSedimentTransporter, the items are sediment "parcels"
     
-    SedimentPulserTable is instantiated by specifying general sediment 
+    SedimentPulserEachParcel is instantiated by specifying general sediment 
     characteritics of pulses of sediment
     
     
-    The sediment pulse dataframe is a pandas dataframe. It has columns for the link,
+    The sediment pulse table is a pandas dataframe. It has columns for the link,
     distance on link, volume of material in pulse, parcel volume that the pulse
     is divided into, and optionally grain characteristics specific to the material 
     in the pulse.

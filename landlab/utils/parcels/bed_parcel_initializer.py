@@ -138,12 +138,12 @@ class BedParcelInitializer:
             self._grid.at_link["reach_length"],
             d84 * self._sed_thickness,
         )
-        max_parcel_volume = _determine_approx_parcel_volume(
+        max_parcel_volume = determine_approx_parcel_volume(
             total_parcel_volume_at_link,
             self._median_number_of_starting_parcels
             )
 
-        variables, items = _parcel_characteristics(
+        variables, items = parcel_characteristics(
             total_parcel_volume_at_link,
             max_parcel_volume,
             self._median_number_of_starting_parcels,
@@ -205,7 +205,7 @@ class BedParcelInitializer:
             dummy_elements={"link": [_OUT_OF_NETWORK]},
         )
 
-def _parcel_characteristics(
+def parcel_characteristics(
     total_parcel_volume_at_link,
     max_parcel_volume,
     median_number_of_starting_parcels,
@@ -291,7 +291,7 @@ def _parcel_characteristics(
 
     return variables, {"grid_element": "link", "element_id": element_id}
 
-def _determine_approx_parcel_volume(
+def determine_approx_parcel_volume(
     total_parcel_volume_at_link,
     median_number_of_starting_parcels
     ):
