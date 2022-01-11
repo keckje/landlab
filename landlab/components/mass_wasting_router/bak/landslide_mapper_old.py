@@ -11,12 +11,12 @@ from landlab.components import(FlowDirectorD8,
                                 FlowDirectorDINF, 
                                 FlowDirectorMFD, 
                                 FlowDirectorSteepest)
-from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
-
-# from landlab.utils.grid_t_tools_a import GridTTools
 
 
-class LandslideMapper(Component):
+from landlab.utils.grid_t_tools_a import GridTTools
+
+
+class LandslideMapper(GridTTools):
 
     """ a component that maps hillslope scale landslides from a raster model grid
     of topographic elevation and landslide factor of saftey or landslide 
@@ -101,23 +101,9 @@ class LandslideMapper(Component):
 
         
         # call __init__ from parent classes
-        # super().__init__(grid, nmgrid, Ct, BCt)
-        
-        super().__init__(grid)
-
-        if 'topographic__elevation' in grid.at_node:
-            self.dem = grid.at_node['topographic__elevation']
-        else:
-            raise FieldError(
-                'A topography is required as a component input!')
+        super().__init__(grid, nmgrid, Ct, BCt)
 
 
-        #   flow receiver node
-        if 'flow__receiver_node' in grid.at_node:
-            self.frnode = grid.at_node['flow__receiver_node']
-        else:
-            raise FieldError(
-                'A flow__receiver_node field is required as a component input!')  
 
 
         if 'mass__wasting_potential' in grid.at_node:
@@ -139,47 +125,13 @@ class LandslideMapper(Component):
         else:
             self.mwclump = grid.add_zeros('node',
                                         'mass__wasting_clumps')                                          
-
-
-        ### RM Grid characteristics
-        self.ncn = len(grid.core_nodes) # number core nodes
-        self.gr = grid.shape[0] #number of rows
-        self.gc = grid.shape[1] #number of columns
-        self.dx = grid.dx #width of cell
-        self.dy = grid.dy #height of cell
-        
-        # nodes, reshaped in into m*n,1 array like other mg fields
-        self.nodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1],1)
-        self.rnodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1]) #nodes in single column array
-
-        self.xdif = grid.node_x[self.frnode]-grid.node_x[self.rnodes] # change in x from node to receiver node
-        self.ydif = (grid.node_y[self.frnode]-grid.node_y[self.rnodes])*-1 #, change in y from node to receiver node...NOTE: flip direction of y axis so that up is positve
-                                                 
-
-        # grid node coordinates, translated to origin of 0,0
-        self.gridx = grid.node_x#-grid.node_x[0] 
-        self.gridy = grid.node_y#-grid.node_y[0]
-        
-        # extent of each cell in grid        
-        self.ndxe = self.gridx+self.dx/2
-        self.ndxw = self.gridx-self.dx/2
-        self.ndyn = self.gridy+self.dy/2
-        self.ndys = self.gridy-self.dy/2
-
-
+                                          
         
         ### prep LandslideMapper
         self.MW_to_C_threshold = MW_to_channel_threshold # maximum distance [m] from channel for downslope clumping
         self.mass_wasting_threshold = mass_wasting_threshold # probability of landslide threshold
         self.min_mw_cells = min_mw_cells # minimum number of cells to be a mass wasting clump
         
-
-        ### Channel extraction parameters
-        self.Ct = Ct # Channel initiation threshold [m2]   
-        # self.POCbuffer = PartOfChannel_buffer # distance [m] from a channel cell that is considered part of the channel (used for determining distance between landslide and channel)
-        self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
-        # self.TerraceWidth = TerraceWidth # distance from channel grid cells that are considered terrace grid cells [# cells] 
-         
         
         self._ChannelNodes()
         
@@ -190,59 +142,6 @@ class LandslideMapper(Component):
         self.POCbuffer = PartOfChannel_buffer
         self.LS_df = pd.DataFrame([])
         self.LSclump = {} # initial empty
-
-
-    def _ChannelNodes(self):
-        """MWR, DtoL
-        change to 'fluvial channel' and 'channel'
-        channel_network_grid_tools
-        """
-        
-        # to top of debris flow channel (top colluvial channel)
-        ChannelNodeMask = self._grid.at_node['drainage_area'] > self.Ct # xyDf_df used for two gridttools nmg_node_to_rmg_node_mapper, min_dist_to_network,  used in DHSVMtolandlab
-        df_x = self._grid.node_x[ChannelNodeMask]
-        df_y = self._grid.node_y[ChannelNodeMask]
-        self.xyDf_df = pd.DataFrame({'x':df_x, 'y':df_y})
-        self.ChannelNodes = self.rnodes[ChannelNodeMask] 
-        
-        # to top of bedload channels (~top cascade channels)
-        BedloadChannelNodeMask = self._grid.at_node['drainage_area'] > self.BCt # used by mass_wasting_eroder terrace nodes function
-        bc_x = self._grid.node_x[BedloadChannelNodeMask]
-        bc_y = self._grid.node_y[BedloadChannelNodeMask]
-        self.xyDf_bc = pd.DataFrame({'x':bc_x, 'y':bc_y})
-        self.BedloadChannelNodes = self.rnodes[BedloadChannelNodeMask] 
-
-    
-    def _min_distance_to_network(self, cellid, ChType = 'debrisflow'):
-        """channel_network_grid_tools"""
-        def distance_to_network(row):
-            '''GTT only
-            compute distance between a cell and the nearest debris flow network 
-            cell used to determine clump distance to colluvial channel network
-            for clumping algorithm
-            
-            ChType = debrisflow: uses debris flow network
-            ChType = nmg: uses network model grid network
-            
-            TODO: change to "fluvial channel network" and "channel network" options
-            
-            '''
-            return ((row['x']-self.gridx[cellid])**2+(row['y']-self.gridy[cellid])**2)**.5
-        
-        # TODO change this to use a concatenated DF of debris flow, fluvial and terrace cells so that POCbuffer
-        # is not needed
-        
-        if ChType == 'debrisflow':
-            nmg_dist = self.xyDf_df.apply(distance_to_network,axis=1)
-            offset = nmg_dist.min() # minimum distancce
-            mdn = self.xyDf_df[nmg_dist == offset] # minimum distance node and node x y        
-        elif ChType == 'nmg':
-            nmg_dist = self.xyDf.apply(distance_to_network,axis=1)
-            offset = nmg_dist.min() # minimum distancce
-            mdn = self.xyDf[nmg_dist == offset] # minimum distance node and node x y    
-
-        return offset, mdn
-
 
 
     def _extractLSCells(self):

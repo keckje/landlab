@@ -348,7 +348,6 @@ class MassWastingRouter(Component):
     def _ChannelNodes(self):
         """MWR, DtoL
         change to 'fluvial channel' and 'channel'
-        channel_network_grid_tools
         """
         
         # to top of debris flow channel (top colluvial channel)
@@ -370,7 +369,7 @@ class MassWastingRouter(Component):
     
     def _NMG_node_to_RMG_node_mapper(self):
         """MWR, DtoL
-        channel_network_grid_tools
+
         """
             
         #compute distance between deposit and all network cells
@@ -393,11 +392,11 @@ class MassWastingRouter(Component):
         '''
         updates the elevation of the nmg nodes based on the closest channel rmg node
         updates the link slopes based on the updated nmg node elevations
-        move to channel_network_grid_tools?
 
         Returns
         -------
         None.
+
         '''
 
         # update elevation
@@ -408,6 +407,7 @@ class MassWastingRouter(Component):
         # update slope
         nmg_fd = FlowDirectorSteepest(self._nmgrid, "topographic__elevation")
         nmg_fd.run_one_step()
+
 
     
     def _multidirectionflowdirector(self):
@@ -444,7 +444,6 @@ class MassWastingRouter(Component):
 
         df_4 = DepressionFinderAndRouter(self._grid)
         df_4.map_depressions()
-
 
     def run_one_step(self, dt):
         """Run MassWastingRouter forward in time.

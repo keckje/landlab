@@ -11,7 +11,7 @@ from landlab.components import(FlowDirectorD8,
                                 FlowDirectorDINF, 
                                 FlowDirectorMFD, 
                                 FlowDirectorSteepest)
-from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
+
 
 # from landlab.utils.grid_t_tools_a import GridTTools
 
@@ -195,7 +195,6 @@ class LandslideMapper(Component):
     def _ChannelNodes(self):
         """MWR, DtoL
         change to 'fluvial channel' and 'channel'
-        channel_network_grid_tools
         """
         
         # to top of debris flow channel (top colluvial channel)
@@ -214,7 +213,6 @@ class LandslideMapper(Component):
 
     
     def _min_distance_to_network(self, cellid, ChType = 'debrisflow'):
-        """channel_network_grid_tools"""
         def distance_to_network(row):
             '''GTT only
             compute distance between a cell and the nearest debris flow network 

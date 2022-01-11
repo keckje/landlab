@@ -217,7 +217,6 @@ class MassWastingEroder(Component):
     def _ChannelNodes(self): 
         """MWR, DtoL
         change to 'fluvial channel' and 'channel' ######
-        channel_network_grid_tools
         """
         
         # to top of debris flow channel (top colluvial channel)
@@ -240,7 +239,6 @@ class MassWastingEroder(Component):
         #convert links to coincident nodes
             #loop through all links in network grid to determine raster grid cells that coincide with each link
             #and equivalent distance from upstream node on link #######
-            channel_network_grid_tools
         '''
         Lnodelist = [] #list of lists of all nodes that coincide with each link
         Ldistlist = [] #list of lists of all nodes that coincide with each link
@@ -345,7 +343,7 @@ class MassWastingEroder(Component):
 
     def _TerraceNodes(self):
         """MWR
-        
+
         """
      
         for i in range(self.TerraceWidth):

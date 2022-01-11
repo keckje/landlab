@@ -6,18 +6,14 @@ import datetime
 import scipy as sc
 from scipy.stats import moment as lm
 from scipy.special import gamma
-try:
-    from tqdm import tqdm
-    tqdm.pandas()
-except:
-    print('tqdm module not available in this environment')
 
 import xarray as xr
+from landlab import Component, FieldError
 from landlab.plot import graph
 from landlab.io import read_esri_ascii
-from landlab.utils.grid_t_tools_a import GridTTools
+from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
 
-class DHSVMtoLandlab(GridTTools):
+class DHSVMtoLandlab(Component):
 
     """Generate a time series of flow rates and/or soil water conditions on the
     network model grid and/or raster model grid from hydrology modeled by the 
@@ -65,19 +61,23 @@ class DHSVMtoLandlab(GridTTools):
                   fluvial_sediment_RI = 0.25,
                   hillslope_sediment_RI = 2.5,
                   tao_dict = None,
+                  Ct = 5000,
+                  BCt = 100000,
                   seed = None
                   ):        
 
+        super().__init__(grid)
 
         # call __init__ from parent classes
         if (nmgrid != None) and (grid != None):
-            super().__init__(grid, nmgrid)
+            # super().__init__(grid, nmgrid)
+            self.gt = ChannelNetworkGridTools(grid, nmgrid)
             if DHSVM_dtw_dict != None:
                 self.opt = 1
             elif DHSVM_dtw_dict == None:
                 self.opt = 2                
         elif grid != None:
-            super().__init__(grid)
+            self.gt = ChannelNetworkGridTools(grid)
             self.opt = 3
         else:
             raise ValueError("a network model grid and raster model grid or a" \
@@ -118,6 +118,22 @@ class DHSVMtoLandlab(GridTTools):
             val = input("depth to water table maps not provided, continue? (y/n):")
             if val != 'y':
                 raise ValueError("DHSVM depth to water table maps not provided")
+
+
+
+        if 'topographic__elevation' in grid.at_node:
+            self.dem = grid.at_node['topographic__elevation']
+        else:
+            raise FieldError(
+                'A topography is required as a component input!')
+        
+        #   flow receiver node
+        if 'flow__receiver_node' in grid.at_node:
+            self.frnode = grid.at_node['flow__receiver_node']
+        else:
+            raise FieldError(
+                'A flow__receiver_node field is required as a component input!')  
+
         
         
         # set the seed of the np random generator
@@ -167,6 +183,52 @@ class DHSVMtoLandlab(GridTTools):
             self.tao_dict = tao_dict
         else:
             self.tao_dict = {'gHG':[0.15,-0.08], 'wHG':[2.205, 0.38], 'dHG':[0.274, 0.24]}       
+
+
+        # ### RM Grid characteristics
+        # self.ncn = len(grid.core_nodes) # number core nodes #gt
+        # self.gr = grid.shape[0] #number of rows #gt
+        # self.gc = grid.shape[1] #number of columns #gt
+        # self.dx = grid.dx #width of cell #gt
+        # self.dy = grid.dy #height of cell #gt
+
+        # # receivers = self.frnode #receiver nodes (node that receives runoff from node) = self.frnode #receiver nodes (node that receives runoff from node)
+
+        # # nodes, reshaped in into m*n,1 array like other mg fields
+        # self.nodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1],1) #gt
+        # self.rnodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1]) #nodes in single column array #gt
+                
+        # self.xdif = grid.node_x[self.frnode]-grid.node_x[self.rnodes] # change in x from node to receiver node #gt
+        # self.ydif = (grid.node_y[self.frnode]-grid.node_y[self.rnodes])*-1 #, change in y from node to receiver node...NOTE: flip direction of y axis so that up is positve #gt
+       
+        # # grid node coordinates, translated to origin of 0,0
+        # self.gridx = grid.node_x#-grid.node_x[0]  #gt
+        # self.gridy = grid.node_y#-grid.node_y[0] #gt
+        
+        # # extent of each cell in grid        
+        # self.ndxe = self.gridx+self.dx/2 #gt
+        # self.ndxw = self.gridx-self.dx/2 #gt
+        # self.ndyn = self.gridy+self.dy/2 #gt
+        # self.ndys = self.gridy-self.dy/2 #gt
+
+
+        ### NM Grid characteristics
+        if nmgrid is not None:
+            self._nmgrid = nmgrid
+            # network model grid characteristics       
+            # self.linknodes = nmgrid.nodes_at_link #links as ordered by read_shapefile #gt       
+            # network model grid node coordinates, translated to origin of 0,0, used to map grid to nmg
+            # self.nmgridx = nmgrid.x_of_node #gt
+            # self.nmgridy = nmgrid.y_of_node #gt
+            # self.linklength = nmgrid.length_of_link #gt
+            # self.nmg_nodes = nmgrid.nodes #gt
+        
+
+        ### Channel extraction parameters
+
+        self.Ct = Ct # Channel initiation threshold [m2]   
+        self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
+
         
         # Run options:                          
         # (1) FLOW and DTW 
@@ -197,7 +259,9 @@ class DHSVMtoLandlab(GridTTools):
             self._time_idx = 0 # index
             self._time = self.storm_dates[0]  # duration of model run (hours, excludes time between time steps)
 
-            
+
+
+
                              
     def _prep_flow(self):
         """Prepare DHSVMtoLandlab for generating flow values at each link"""
@@ -210,7 +274,7 @@ class DHSVMtoLandlab(GridTTools):
         nmgx = self._nmgrid.x_of_node
         nmgy = self._nmgrid.y_of_node
 
-        out = self._LinktoNodes(linknodes, active_links, nmgx, nmgy)
+        out = self.gt.LinktoNodes(linknodes, active_links, nmgx, nmgy)
         
         self.Lnodelist = out[0]
         self.Ldistlist = out[1]
@@ -223,7 +287,7 @@ class DHSVMtoLandlab(GridTTools):
         nmgx = self.nmgrid_d.x_of_node
         nmgy = self.nmgrid_d.y_of_node
 
-        out = self._LinktoNodes(linknodes, active_links, nmgx, nmgy)
+        out = self.gt.LinktoNodes(linknodes, active_links, nmgx, nmgy)
 
         self.Lnodelist_d = out[0]
         self.Ldistlist_d = out[1]
@@ -231,13 +295,15 @@ class DHSVMtoLandlab(GridTTools):
     
         ## define bedload and debris flow channel nodes       
         ## channel
-        self._ChannelNodes() 
+        # self._ChannelNodes()
+        self.gt.ChannelNodes(self.Ct,self.BCt)
     
         # map dhsvm network model grid to landlab network model grid and prepare
         # time series of flow at each landlab network model grid link
     
         # determine dhsvm network mg links that correspond to the landlab network mg
-        self._DHSVM_network_to_NMG_Mapper()
+        # self._DHSVM_network_to_NMG_Mapper()
+        self.LinkMapper, self.LinkMapL = self.gt.DHSVM_network_to_NMG_Mapper(self.Lnodelist,self.xyDf_d)
         
         # aggregate flow time series
         if self.flow_metric == 'max':
@@ -256,7 +322,7 @@ class DHSVMtoLandlab(GridTTools):
         self.streamflowonly_nmg()
         
         # determine dhsvm network mg links that correspond to the landlab network mg
-        self._DHSVM_network_to_RMG_Mapper()    
+        self.gt.DHSVM_network_to_RMG_Mapper(self.xyDf_d)   # not needed? 
         
         # compute partial duration series and bankful flow rate for each nmgrid_d link
         # used by the nmgrid        
@@ -531,41 +597,39 @@ class DHSVMtoLandlab(GridTTools):
                         coords = dict(
                                 node=(["node"], self._grid.core_nodes ),
                                 quantile=(["quantile"],self.quant)))
-    
-        
-    def _DHSVM_network_to_NMG_Mapper(self):    
-        
-        """Determines the closest dhsvm nmg (nmg_d) link to each link in the landlab
-        nmg. Note, the landlab id of the dhsmv network is used, not the DHSVM
-        network id (arcID). To translate the nmg_d link id to the DHSVM network id: 
-            self.nmg_d.at_link['arcid'][i], where i is the nmg_d link id.
-        """
-        
-        #compute distance between deposit and all network cells
-        def Distance(row):
-            return ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5
-        
-        # for each node equivalent of each nmg link, find the closest nmg_d node
-        # and record the equivalent nmg_d link id 
-        
-        LinkMapper ={}
-        LinkMapL = {}
-        for i, sublist in enumerate(self.Lnodelist):# for each list of link nodes
-            LinkL = []
-            for j in sublist: # for each node associated with the nmg link
-                XY = [self.gridx[j], self.gridy[j]] # get x and y coordinate of node
-                nmg_d_dist = self.xyDf_d.apply(Distance,axis=1) # compute the distance to all dhsvm nodes
-                offset = nmg_d_dist.min() # find the minimum distance
-                mdn = self.xyDf_d['linkID'].values[(nmg_d_dist == offset).values][0]# link id of minimum distance node
-                LinkL.append(mdn)
-            LinkMapL[i] = LinkL
-            LinkMapper[i] = np.argmax(np.bincount(np.array(LinkL))) # dhsvm link that has most link ids in link list
-            print('nmg link '+ str(i)+' mapped to equivalent DHSVM link')
-            
-        # return (Mapper, MapL)
-        self.LinkMapper = LinkMapper
-        self.LinkMapL = LinkMapL
 
+    #interplate function used by other functions
+    def intp(self, x,y,x1,message = None): 
+        '''ALL
+        Parameters
+        ----------
+        x : list, np.array, pd.series of float or int
+            x values used for interpolation
+        y : list, np.array, pd.series of float or int
+            x values used for interpolation
+        x1 : float or int within domain of x
+            interpolate at x1
+    
+        Returns
+        -------
+        float
+            y1, interpolated value at x1
+    
+        '''  
+        if x1 <= min(x):
+            y1 = min(y)
+            # print('TRIED TO INTERPOLATE AT '+str(x1)+' BUT MINIMUM INTERPOLATION RANGE IS: '+str(min(x)))
+            if message:
+                print(message)
+        elif x1 >= max(x):
+            y1 = max(y)
+            # print('TRIED TO INTERPOLATE AT '+str(x1)+' BUT MAXIMUM INTERPOLATION RANGE IS: '+str(max(x)))
+            if message:
+                print(message)
+        else:            
+            f = sc.interpolate.interp1d(x,y)   
+            y1 = f(x1)
+        return y1
     
     def _variable_channel_tau(self):
 

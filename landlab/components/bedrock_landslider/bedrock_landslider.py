@@ -10,7 +10,7 @@ from landlab import Component
 from landlab.grid.nodestatus import NodeStatus
 
 from ..depression_finder.lake_mapper import _FLOODED
-from .cfuncs import _landslide_runout
+# from .cfuncs import _landslide_runout
 
 MAX_HEIGHT_SLOPE = 100  # in m
 

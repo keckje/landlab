@@ -17,7 +17,7 @@ from landlab.components.mass_wasting_router.mass_wasting_eroder import MassWasti
 
 
 
-class MassWastingRouter(Component):
+class MassWastingRouter(GridTTools):
     
 
     '''a component that redistributes mass wasting derived sediment through a 
@@ -236,14 +236,8 @@ class MassWastingRouter(Component):
 
 
         # call __init__ from parent classes
-        # super().__init__(grid, nmgrid, Ct, BCt)
-        super().__init__(grid)
+        super().__init__(grid, nmgrid, Ct, BCt)
 
-        if 'topographic__elevation' in grid.at_node:  # redundant
-            self.dem = grid.at_node['topographic__elevation']
-        else:
-            raise FieldError(
-                'A topography is required as a component input!')
 
 
         # years since disturbance
@@ -258,26 +252,6 @@ class MassWastingRouter(Component):
                         at='node',
                         copy = True,clobber=True)
 
-        ### RM Grid characteristics
-        # self.ncn = len(grid.core_nodes) # number core nodes
-        # self.gr = grid.shape[0] #number of rows
-        # self.gc = grid.shape[1] #number of columns
-        # self.dx = grid.dx #width of cell
-        # self.dy = grid.dy #height of cell
-
-        # receivers = self.frnode #receiver nodes (node that receives runoff from node) = self.frnode #receiver nodes (node that receives runoff from node)
-
-        # nodes, reshaped in into m*n,1 array like other mg fields
-        self.nodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1],1)
-        self.rnodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1]) #nodes in single column array
-
-        ### NM Grid characteristics
-        self._nmgrid = nmgrid
-        self.nmg_nodes = nmgrid.nodes
-
-        ### Channel extraction parameters
-        self.Ct = Ct # Channel initiation threshold [m2]   
-        self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
 
 
         ### prep MassWastingRunout
@@ -326,7 +300,7 @@ class MassWastingRouter(Component):
                     self._nmgrid,
                     Ct = Ct,
                     BCt = BCt,
-                    TerraceWidth = TerraceWidth,#self._nmgrid,
+                    TerraceWidth = TerraceWidth,
                     FluvialErosionRate = FluvialErosionRate, # Fluvial erosion rate parameters
                     parcel_volume = parcel_volume, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
                     )
@@ -345,59 +319,15 @@ class MassWastingRouter(Component):
 
 
 
-    def _ChannelNodes(self):
-        """MWR, DtoL
-        change to 'fluvial channel' and 'channel'
-        channel_network_grid_tools
-        """
-        
-        # to top of debris flow channel (top colluvial channel)
-        ChannelNodeMask = self._grid.at_node['drainage_area'] > self.Ct # xyDf_df used for two gridttools nmg_node_to_rmg_node_mapper, min_dist_to_network,  used in DHSVMtolandlab
-        df_x = self._grid.node_x[ChannelNodeMask]
-        df_y = self._grid.node_y[ChannelNodeMask]
-        self.xyDf_df = pd.DataFrame({'x':df_x, 'y':df_y})
-        self.ChannelNodes = self.rnodes[ChannelNodeMask] 
-        
-        # to top of bedload channels (~top cascade channels)
-        BedloadChannelNodeMask = self._grid.at_node['drainage_area'] > self.BCt # used by mass_wasting_eroder terrace nodes function
-        bc_x = self._grid.node_x[BedloadChannelNodeMask]
-        bc_y = self._grid.node_y[BedloadChannelNodeMask]
-        self.xyDf_bc = pd.DataFrame({'x':bc_x, 'y':bc_y})
-        self.BedloadChannelNodes = self.rnodes[BedloadChannelNodeMask] 
-
-
-
-    
-    def _NMG_node_to_RMG_node_mapper(self):
-        """MWR, DtoL
-        channel_network_grid_tools
-        """
-            
-        #compute distance between deposit and all network cells
-        def Distance(row):
-            return ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5        
-
-        # for each node in the channel node list record the equivalent nmg_d link id 
-
-        NodeMapper ={}
-        for i, node in enumerate(self.nmg_nodes):# for each node network modelg grid
-            XY = [self._nmgrid.node_x[i], self._nmgrid.node_y[i]] # get x and y coordinate of node
-            nmg_node_dist = self.xyDf_df.apply(Distance,axis=1) # compute the distance to all channel nodes
-            offset = nmg_node_dist.min() # find the minimum distance between node and channel nodes
-            mdn = self.xyDf_df.index[(nmg_node_dist == offset).values][0]# index of minimum distance node
-            NodeMapper[i] = self.ChannelNodes[mdn] # dhsmve link for node i
-            
-        self.NMGtoRMGnodeMapper = NodeMapper
-
     def _update_NMG_nodes(self):
         '''
         updates the elevation of the nmg nodes based on the closest channel rmg node
         updates the link slopes based on the updated nmg node elevations
-        move to channel_network_grid_tools?
 
         Returns
         -------
         None.
+
         '''
 
         # update elevation
@@ -408,6 +338,7 @@ class MassWastingRouter(Component):
         # update slope
         nmg_fd = FlowDirectorSteepest(self._nmgrid, "topographic__elevation")
         nmg_fd.run_one_step()
+
 
     
     def _multidirectionflowdirector(self):
@@ -444,7 +375,6 @@ class MassWastingRouter(Component):
 
         df_4 = DepressionFinderAndRouter(self._grid)
         df_4.map_depressions()
-
 
     def run_one_step(self, dt):
         """Run MassWastingRouter forward in time.

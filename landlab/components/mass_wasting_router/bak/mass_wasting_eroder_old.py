@@ -7,10 +7,10 @@ from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFind
 from landlab import imshow_grid, imshow_grid_at_node
 
 
-# from landlab.utils.grid_t_tools_a import GridTTools
+from landlab.utils.grid_t_tools import GridTTools
 
 
-class MassWastingEroder(Component):
+class MassWastingEroder(GridTTools):
     
 
     '''a component that converts zones of deposition and scour recorded on a 
@@ -85,15 +85,7 @@ class MassWastingEroder(Component):
         """
 
         # call __init__ from parent classes
-        # super().__init__(grid, nmgrid, Ct, BCt)
-        super().__init__(grid)
-
-        
-        if 'topographic__elevation' in grid.at_node:
-            self.dem = grid.at_node['topographic__elevation']
-        else:
-            raise FieldError(
-                'A topography is required as a component input!')
+        super().__init__(grid, nmgrid, Ct, BCt)
 
 
         #   soil thickness
@@ -122,56 +114,9 @@ class MassWastingEroder(Component):
                             copy = True,clobber=True)
 
 
-        #   flow receiver node
-        if 'flow__receiver_node' in grid.at_node:
-            self.frnode = grid.at_node['flow__receiver_node']
-        else:
-            raise FieldError(
-                'A flow__receiver_node field is required as a component input!')  
 
 
 
-
-        ### RM Grid characteristics
-        self.ncn = len(grid.core_nodes) # number core nodes
-        self.gr = grid.shape[0] #number of rows
-        self.gc = grid.shape[1] #number of columns
-        self.dx = grid.dx #width of cell
-        self.dy = grid.dy #height of cell
-
-        # nodes, reshaped in into m*n,1 array like other mg fields
-        self.nodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1],1)
-        self.rnodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1]) #nodes in single column array
-                
-        self.xdif = grid.node_x[self.frnode]-grid.node_x[self.rnodes] # change in x from node to receiver node
-        self.ydif = (grid.node_y[self.frnode]-grid.node_y[self.rnodes])*-1 #, change in y from node to receiver node...NOTE: flip direction of y axis so that up is positve
-       
-        # grid node coordinates, translated to origin of 0,0
-        self.gridx = grid.node_x#-grid.node_x[0] 
-        self.gridy = grid.node_y#-grid.node_y[0]
-        
-        # extent of each cell in grid        
-        self.ndxe = self.gridx+self.dx/2
-        self.ndxw = self.gridx-self.dx/2
-        self.ndyn = self.gridy+self.dy/2
-        self.ndys = self.gridy-self.dy/2
-
-        ### NM Grid characteristics
-        self._nmgrid = nmgrid
-        # network model grid characteristics       
-        self.linknodes = nmgrid.nodes_at_link #links as ordered by read_shapefile       
-        # network model grid node coordinates, translated to origin of 0,0, used to map grid to nmg
-        self.nmgridx = nmgrid.x_of_node
-        self.nmgridy = nmgrid.y_of_node
-        self.linklength = nmgrid.length_of_link 
-        self.nmg_nodes = nmgrid.nodes
-
-
-        ### Channel extraction parameters
-        self.Ct = Ct # Channel initiation threshold [m2]   
-        self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
-        self.TerraceWidth = TerraceWidth # distance from channel grid cells that are considered terrace grid cells [# cells]     
-         
         ### fluvial erosion
         self.C_a = FluvialErosionRate[0][0]
         self.C_b = FluvialErosionRate[0][1]
@@ -180,7 +125,6 @@ class MassWastingEroder(Component):
 
         # minimum parcel size (parcels smaller than this are aggregated into a single parcel this size)
         self.parcel_volume = parcel_volume
-
 
 
         #### Define the raster model grid representation of the network model grid
@@ -212,100 +156,6 @@ class MassWastingEroder(Component):
         self.dem_mw_dzdt = self.dem_dz_cumulative # initial cells of deposition and scour - none, TODO, make this an optional input
         self.DistNodes = np.array([])
         self.FED = np.array([])
-
-
-    def _ChannelNodes(self): 
-        """MWR, DtoL
-        change to 'fluvial channel' and 'channel' ######
-        channel_network_grid_tools
-        """
-        
-        # to top of debris flow channel (top colluvial channel)
-        ChannelNodeMask = self._grid.at_node['drainage_area'] > self.Ct # xyDf_df used for two gridttools nmg_node_to_rmg_node_mapper, min_dist_to_network,  used in DHSVMtolandlab
-        df_x = self._grid.node_x[ChannelNodeMask]
-        df_y = self._grid.node_y[ChannelNodeMask]
-        self.xyDf_df = pd.DataFrame({'x':df_x, 'y':df_y})
-        self.ChannelNodes = self.rnodes[ChannelNodeMask] 
-        
-        # to top of bedload channels (~top cascade channels)
-        BedloadChannelNodeMask = self._grid.at_node['drainage_area'] > self.BCt # used by mass_wasting_eroder terrace nodes function
-        bc_x = self._grid.node_x[BedloadChannelNodeMask]
-        bc_y = self._grid.node_y[BedloadChannelNodeMask]
-        self.xyDf_bc = pd.DataFrame({'x':bc_x, 'y':bc_y})
-        self.BedloadChannelNodes = self.rnodes[BedloadChannelNodeMask] 
-
-
-    def _LinktoNodes(self, linknodes, active_links, nmgx, nmgy):
-        '''MWR, DtoL
-        #convert links to coincident nodes
-            #loop through all links in network grid to determine raster grid cells that coincide with each link
-            #and equivalent distance from upstream node on link #######
-            channel_network_grid_tools
-        '''
-        Lnodelist = [] #list of lists of all nodes that coincide with each link
-        Ldistlist = [] #list of lists of all nodes that coincide with each link
-        xdDFlist = []
-        Lxy= [] #list of all nodes the coincide with the network links
-              
-        for k,lk in enumerate(linknodes) : #for each link in network grid
-            
-            linkID = active_links[k] #link id (indicie of link in nmg fields)
-            
-            lknd = lk #link node numbers
-            
-            x0 = nmgx[lknd[0]] #x and y of downstream link node
-            y0 = nmgy[lknd[0]]
-            x1 = nmgx[lknd[1]] #x and y of upstream link node
-            y1 = nmgy[lknd[1]]
-            
-            #create 1000 points along domain of link
-            X = np.linspace(x0,x1,1000)
-            Xs = X-x0 #change begin value to zero
-            
-            #determine distance from upstream node to each point
-            #y value of points
-            if Xs.max() ==0: #if a vertical link (x is constant)
-                vals = np.linspace(y0,y1,1000)
-                dist = vals-y0 #distance along link, from downstream end upstream
-                dist = dist.max()-dist #distance from updtream to downstream
-            else: #all their lines
-                vals = y0+(y1-y0)/(x1-x0)*(Xs)
-                dist = ((vals-y0)**2+Xs**2)**.5
-                dist = dist.max()-dist #distance from updtream to downstream
-            
-                
-          
-            #match points along link (vals) with grid cells that coincide with link
-            
-            nodelist = [] #list of nodes along link
-            distlist = [] #list of distance along link corresponding to node
-            # print(vals)
-            for i,v in enumerate(vals):
-                
-                x = X[i]
-                
-                mask = (self.ndyn>=v) & (self.ndys<=v) & (self.ndxe>=x) & (self.ndxw<=x)  #mask - use multiple boolian tests to find cell that contains point on link
-                
-                node = self.nodes[mask] #use mask to extract node value
-                # print(node)
-                if node.shape[0] > 1:
-                    node = np.array([node[0]])
-                # print(node)
-                # create list of all nodes that coincide with linke
-                if node not in nodelist: #if node not already in list, append - many points will be in same cell; only need to list cell once
-                    nodelist.append(node[0][0])  
-                    distlist.append(dist[i])
-                    xy = {'linkID':linkID,
-                        'node':node[0][0],
-                          'x':self.gridx[node[0][0]],
-                          'y':self.gridy[node[0][0]]}
-                    Lxy.append(xy)
-            
-            Lnodelist.append(nodelist)
-            Ldistlist.append(distlist)
-            
-        return (Lnodelist, Ldistlist, Lxy)
-
 
         
     def _DefineErosionRates(self):
@@ -345,7 +195,7 @@ class MassWastingEroder(Component):
 
     def _TerraceNodes(self):
         """MWR
-        
+
         """
      
         for i in range(self.TerraceWidth):
@@ -625,6 +475,5 @@ class MassWastingEroder(Component):
         # the sediment pulser utility
         self._parcelDFmaker()
         
-
 
 
