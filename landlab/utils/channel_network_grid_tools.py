@@ -220,8 +220,6 @@ class ChannelNetworkGridTools(Component):
                 dist = ((vals-y0)**2+Xs**2)**.5
                 dist = dist.max()-dist #distance from updtream to downstream
             
-                
-          
             #match points along link (vals) with grid cells that coincide with link
             
             nodelist = [] #list of nodes along link
@@ -331,7 +329,6 @@ class ChannelNetworkGridTools(Component):
         self.NodeMapper = NodeMapper       
 
 
-
     def NMG_node_to_RMG_node_mapper(self):
         """MWR, DtoL
         #map_rmg_nodes_to_nmg_nodes
@@ -391,38 +388,28 @@ class ChannelNetworkGridTools(Component):
 
         return offset, mdn
 
-    
-    # def intp(self, x,y,x1,message = None): 
-    #     '''interplate function used by other functions
-    #     Parameters
-    #     ----------
-    #     x : list, np.array, pd.series of float or int
-    #         x values used for interpolation
-    #     y : list, np.array, pd.series of float or int
-    #         x values used for interpolation
-    #     x1 : float or int within domain of x
-    #         interpolate at x1
-    
-    #     Returns
-    #     -------
-    #     float
-    #         y1, interpolated value at x1
-    
-    #     '''  
-    #     if x1 <= min(x):
-    #         y1 = min(y)
-    #         # print('TRIED TO INTERPOLATE AT '+str(x1)+' BUT MINIMUM INTERPOLATION RANGE IS: '+str(min(x)))
-    #         if message:
-    #             print(message)
-    #     elif x1 >= max(x):
-    #         y1 = max(y)
-    #         # print('TRIED TO INTERPOLATE AT '+str(x1)+' BUT MAXIMUM INTERPOLATION RANGE IS: '+str(max(x)))
-    #         if message:
-    #             print(message)
-    #     else:            
-    #         f = sc.interpolate.interp1d(x,y)   
-    #         y1 = f(x1)
-    #     return y1
+    def update_NMG_nodes(self):
+        '''
+        # change to rmg_node_field_to_nmg_node_field
+        updates the elevation of the nmg nodes based on the closest channel rmg node
+        updates the link slopes based on the updated nmg node elevations
+        move to channel_network_grid_tools?
+
+        Returns
+        -------
+        None.
+        '''
+
+        # update elevation
+        for i, node in enumerate(self.nmg_nodes):
+            RMG_node = self.NMGtoRMGnodeMapper[i]
+            self._nmgrid.at_node['topographic__elevation'][i] = self._grid.at_node['topographic__elevation'][RMG_node]
+
+
+
+    # def NMG_link_field_to_RMG_node_field(self,field)
+    # 
+
     
     
     def run_one_step(self):

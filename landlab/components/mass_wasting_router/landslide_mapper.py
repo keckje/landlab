@@ -96,7 +96,8 @@ class LandslideMapper(Component):
         MW_to_channel_threshold = 50,
         PartOfChannel_buffer = 10, # may not need this parameter            
         mass_wasting_threshold = 0.75,  # landslide mapping parameters
-        min_mw_cells = 1
+        min_mw_cells = 1,
+        gt = None
         ):
 
         
@@ -140,9 +141,14 @@ class LandslideMapper(Component):
             self.mwclump = grid.add_zeros('node',
                                         'mass__wasting_clumps')                                          
 
-
-        self.gt = ChannelNetworkGridTools(grid = grid,Ct = Ct,BCt = BCt)
-
+        if gt != None:
+            self.gt = gt
+            if not hasattr(gt,ChannelNodes):
+                self.gt.ChannelNodes(Ct,BCt)
+                    
+        else:
+            self.gt = ChannelNetworkGridTools(grid = grid,Ct = Ct,BCt = BCt)
+            self.gt.ChannelNodes(Ct,BCt)
         
         ### prep LandslideMapper
         self.MW_to_C_threshold = MW_to_channel_threshold # maximum distance [m] from channel for downslope clumping
@@ -157,7 +163,7 @@ class LandslideMapper(Component):
         # # self.TerraceWidth = TerraceWidth # distance from channel grid cells that are considered terrace grid cells [# cells] 
          
 
-        self.gt.ChannelNodes(Ct,BCt)
+        # self.gt.ChannelNodes(Ct,BCt)
         
         
         # initial class variable values

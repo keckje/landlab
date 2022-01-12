@@ -13,7 +13,7 @@ from landlab.components.mass_wasting_router.landslide_mapper import LandslideMap
 # from landlab.components.mass_wasting_router.mass_wasting_runout_sv7 import MassWastingRunout as MWR
 from landlab.components.mass_wasting_router.mass_wasting_runout import MassWastingRunout as MWRu
 from landlab.components.mass_wasting_router.mass_wasting_eroder import MassWastingEroder as MWE
-
+from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
 
 
 
@@ -258,13 +258,6 @@ class MassWastingRouter(Component):
                         at='node',
                         copy = True,clobber=True)
 
-        ### RM Grid characteristics
-        # self.ncn = len(grid.core_nodes) # number core nodes
-        # self.gr = grid.shape[0] #number of rows
-        # self.gc = grid.shape[1] #number of columns
-        # self.dx = grid.dx #width of cell
-        # self.dy = grid.dy #height of cell
-
         # receivers = self.frnode #receiver nodes (node that receives runoff from node) = self.frnode #receiver nodes (node that receives runoff from node)
 
         # nodes, reshaped in into m*n,1 array like other mg fields
@@ -300,9 +293,23 @@ class MassWastingRouter(Component):
         self._grid.at_node['mass__wasting_events'] = np.zeros(self.nodes.shape[0]).astype(int)
         self._grid.at_node['mass__wasting_volumes'] = np.zeros(self.nodes.shape[0])
 
+        
+        # instantiate channel network grid tools
+        self.gt = ChannelNetworkGridTools(grid = grid, nmgrid = nmgrid, Ct = Ct, BCt = BCt)
+
+        ## define channel and fluvia channel networks in the raster model grid
+        self.gt.ChannelNodes(Ct,BCt)        
+
+        ## create the nmg to rmg node mapper
+        self.gt.NMG_node_to_RMG_node_mapper()
+
+        ## define nmg node elevation based on rmg channel nodes
+        self.gt.update_NMG_nodes()
 
 
         ### class instance of LandslideMapper
+        # self.gt.ChannelNodes(Ct,BCt)
+        # self.gt.min_distance_to_network(loc[c],  ChType = 'debrisflow') 
         self.Landslides = LM(self._grid,
              Ct = Ct, 
              BCt  = BCt,
@@ -313,6 +320,7 @@ class MassWastingRouter(Component):
         
         
         ### class instance of MassWastingRunout
+        # none
         self.DebrisFlows = MWRu(self._grid,
                                release_dict,
                                df_dict, save_df_dem = True,
@@ -321,6 +329,10 @@ class MassWastingRouter(Component):
         
         
         ### class instance of MassWastingEroder
+        # self.gt.LinktoNodes
+        # self.gt.ChannelNodes
+        # self.gt.TerraceNodes
+        # 
         self.DepositEroder = MWE(
                     self._grid,
                     self._nmgrid,
@@ -334,15 +346,6 @@ class MassWastingRouter(Component):
         
         self.xyDf_t = self.DepositEroder.gt.xyDf_t
                
-        ## define channel and fluvia channel networks in the raster model grid
-        self._ChannelNodes()        
-
-        ## create the nmg to rmg node mapper
-        self._NMG_node_to_RMG_node_mapper()
-
-        ## define nmg node elevation based on rmg channel nodes
-        self._update_NMG_nodes()
-
 
 
     def _ChannelNodes(self):
@@ -368,26 +371,26 @@ class MassWastingRouter(Component):
 
 
     
-    def _NMG_node_to_RMG_node_mapper(self):
-        """MWR, DtoL
-        channel_network_grid_tools
-        """
+    # def _NMG_node_to_RMG_node_mapper(self):
+    #     """MWR, DtoL
+    #     channel_network_grid_tools
+    #     """
             
-        #compute distance between deposit and all network cells
-        def Distance(row):
-            return ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5        
+    #     #compute distance between deposit and all network cells
+    #     def Distance(row):
+    #         return ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5        
 
-        # for each node in the channel node list record the equivalent nmg_d link id 
+    #     # for each node in the channel node list record the equivalent nmg_d link id 
 
-        NodeMapper ={}
-        for i, node in enumerate(self.nmg_nodes):# for each node network modelg grid
-            XY = [self._nmgrid.node_x[i], self._nmgrid.node_y[i]] # get x and y coordinate of node
-            nmg_node_dist = self.xyDf_df.apply(Distance,axis=1) # compute the distance to all channel nodes
-            offset = nmg_node_dist.min() # find the minimum distance between node and channel nodes
-            mdn = self.xyDf_df.index[(nmg_node_dist == offset).values][0]# index of minimum distance node
-            NodeMapper[i] = self.ChannelNodes[mdn] # dhsmve link for node i
+    #     NodeMapper ={}
+    #     for i, node in enumerate(self.nmg_nodes):# for each node network modelg grid
+    #         XY = [self._nmgrid.node_x[i], self._nmgrid.node_y[i]] # get x and y coordinate of node
+    #         nmg_node_dist = self.xyDf_df.apply(Distance,axis=1) # compute the distance to all channel nodes
+    #         offset = nmg_node_dist.min() # find the minimum distance between node and channel nodes
+    #         mdn = self.xyDf_df.index[(nmg_node_dist == offset).values][0]# index of minimum distance node
+    #         NodeMapper[i] = self.ChannelNodes[mdn] # dhsmve link for node i
             
-        self.NMGtoRMGnodeMapper = NodeMapper
+    #     self.NMGtoRMGnodeMapper = NodeMapper
 
     def _update_NMG_nodes(self):
         '''
@@ -495,6 +498,11 @@ class MassWastingRouter(Component):
             ## update NMG node elevation
             self._update_NMG_nodes()
             # print('updated NMG node elevation')
+            
+            
+            # # update slope
+            # nmg_fd = FlowDirectorSteepest(self._nmgrid, "topographic__elevation") # instantiate every time fields updated?
+            # nmg_fd.run_one_step()
     
             ## reset landslide probability field
             self._grid.at_node['MW__probability'] = np.zeros(self._grid.at_node['topographic__elevation'].shape[0])
