@@ -151,7 +151,7 @@ class ChannelNetworkGridTools(Component):
         self.BedloadChannelNodes = self.rnodes[BedloadChannelNodeMask] 
 
 
-    def _TerraceNodes(self):
+    def TerraceNodes(self):
         """MWR
 
         """
@@ -363,37 +363,9 @@ class ChannelNetworkGridTools(Component):
         self.NMGtoRMGnodeMapper = NodeMapper
 
 
-    # def NMG_link_to_RMG_node_mapper(self,xyDF):
-    #     """MWR, DtoL
-    #     determine the network model grid link that corrisponds to each raster
-    #     model grid channel node.
-        
-    #     Channel nodes are identified based on a simple contributing area threshold
-    #     using ChannelMapper.
-        
-    #     nmg_nodes: list of nmg nodes
-    #     xyDF: pd dataframe with columns: x, y of each RMG channel node
-    #     """
-            
-    #     #compute distance between deposit and all network cells
-    #     def Distance(row):
-    #         return ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5        
-
-    #     # for each node in the channel node list record the equivalent nmg_d link id 
-
-    #     NodeMapper ={}
-    #     for i, node in enumerate(self.nmg_nodes):# for each node network modelg grid
-    #         XY = [self._nmgrid.node_x[i], self._nmgrid.node_y[i]] # get x and y coordinate of node
-    #         nmg_node_dist = self.xyDf_df.apply(Distance,axis=1) # compute the distance to all channel nodes
-    #         offset = nmg_node_dist.min() # find the minimum distance between node and channel nodes
-    #         mdn = self.xyDf_df.index[(nmg_node_dist == offset).values][0]# index of minimum distance node
-    #         NodeMapper[i] = self.ChannelNodes[mdn] # dhsmve link for node i
-            
-    #     self.NMGtoRMGnodeMapper = NodeMapper
 
 
-
-    def _min_distance_to_network(self, cellid, ChType = 'debrisflow'):
+    def min_distance_to_network(self, cellid, ChType = 'debrisflow'):
         def distance_to_network(row):
             '''GTT only
             compute distance between a cell and the nearest debris flow network 

@@ -332,7 +332,7 @@ class MassWastingRouter(Component):
                     )
 
         
-        self.xyDf_t = self.DepositEroder.xyDf_t
+        self.xyDf_t = self.DepositEroder.gt.xyDf_t
                
         ## define channel and fluvia channel networks in the raster model grid
         self._ChannelNodes()        
