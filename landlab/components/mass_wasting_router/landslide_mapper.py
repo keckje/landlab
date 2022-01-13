@@ -13,8 +13,6 @@ from landlab.components import(FlowDirectorD8,
                                 FlowDirectorSteepest)
 from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
 
-# from landlab.utils.grid_t_tools_a import GridTTools
-
 
 class LandslideMapper(Component):
 
@@ -127,13 +125,6 @@ class LandslideMapper(Component):
             raise FieldError(
                 'A mass__wasting_potential field is required as a component input!')
 
-        # #   high probability mass wasting cells
-        # if 'high__MW_probability' in grid.at_node:
-        #     self.hmwprob = grid.at_node['high__MW_probability']
-        # else:
-        #     self.hmwprob = grid.add_zeros('node',
-        #                                 'high__MW_probability')
-        
         #   mass wasting clumps
         if 'mass__wasting_clumps' in grid.at_node:
             self.mwclump = grid.at_node['mass__wasting_clumps']
@@ -141,30 +132,23 @@ class LandslideMapper(Component):
             self.mwclump = grid.add_zeros('node',
                                         'mass__wasting_clumps')                                          
 
+        # instantiate channel network grid tools or use  provided instance
         if gt != None:
             self.gt = gt
-            if not hasattr(gt,ChannelNodes):
-                self.gt.ChannelNodes(Ct,BCt)
-                    
+            # check if ChannelNodes already created                   
         else:
             self.gt = ChannelNetworkGridTools(grid = grid,Ct = Ct,BCt = BCt)
-            self.gt.ChannelNodes(Ct,BCt)
+
+
+        if not hasattr(gt,"ChannelNodes"):
+            self.gt.extract_channel_nodes(Ct,BCt)
+
         
         ### prep LandslideMapper
         self.MW_to_C_threshold = MW_to_channel_threshold # maximum distance [m] from channel for downslope clumping
         self.mass_wasting_threshold = mass_wasting_threshold # probability of landslide threshold
         self.min_mw_cells = min_mw_cells # minimum number of cells to be a mass wasting clump
-        
-
-        # ### Channel extraction parameters
-        # self.Ct = Ct # Channel initiation threshold [m2]   
-        # # self.POCbuffer = PartOfChannel_buffer # distance [m] from a channel cell that is considered part of the channel (used for determining distance between landslide and channel)
-        # self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
-        # # self.TerraceWidth = TerraceWidth # distance from channel grid cells that are considered terrace grid cells [# cells] 
-         
-
-        # self.gt.ChannelNodes(Ct,BCt)
-        
+              
         
         # initial class variable values
         self._extractLSCells() # initial high landslide probability grid cells

@@ -63,7 +63,8 @@ class DHSVMtoLandlab(Component):
                   tao_dict = None,
                   Ct = 5000,
                   BCt = 100000,
-                  seed = None
+                  seed = None,
+                  gt = None
                   ):        
 
         super().__init__(grid)
@@ -71,13 +72,25 @@ class DHSVMtoLandlab(Component):
         # call __init__ from parent classes
         if (nmgrid != None) and (grid != None):
             # super().__init__(grid, nmgrid)
-            self.gt = ChannelNetworkGridTools(grid, nmgrid)
+        
+            # instantiate channel network grid tools or use provided instance
+            if gt != None:
+                self.gt = gt
+            else:
+                self.gt = ChannelNetworkGridTools(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
+                
             if DHSVM_dtw_dict != None:
                 self.opt = 1
             elif DHSVM_dtw_dict == None:
                 self.opt = 2                
         elif grid != None:
-            self.gt = ChannelNetworkGridTools(grid)
+            
+            # instantiate channel network grid tools or use provided instance
+            if gt != None:
+                self.gt = gt
+            else:
+                self.gt = ChannelNetworkGridTools(grid = grid, Ct = Ct,BCt = BCt)
+            
             self.opt = 3
         else:
             raise ValueError("a network model grid and raster model grid or a" \
@@ -156,18 +169,14 @@ class DHSVMtoLandlab(Component):
         
         # flow return interval [yrs] at which bedload transport occurs
         self.sed_ri = fluvial_sediment_RI
-                
-
-               
+                               
         # stochastic or time_series
         self._method = method
         
         # begin and end year of stochastic model run
         self.begin_year = begin_year
         self.end_year = end_year
-        
-       
-        
+                
         # Event return interval above which landslides occur
         self.ls_ri = hillslope_sediment_RI
     
@@ -185,44 +194,9 @@ class DHSVMtoLandlab(Component):
             self.tao_dict = {'gHG':[0.15,-0.08], 'wHG':[2.205, 0.38], 'dHG':[0.274, 0.24]}       
 
 
-        # ### RM Grid characteristics
-        # self.ncn = len(grid.core_nodes) # number core nodes #gt
-        # self.gr = grid.shape[0] #number of rows #gt
-        # self.gc = grid.shape[1] #number of columns #gt
-        # self.dx = grid.dx #width of cell #gt
-        # self.dy = grid.dy #height of cell #gt
-
-        # # receivers = self.frnode #receiver nodes (node that receives runoff from node) = self.frnode #receiver nodes (node that receives runoff from node)
-
-        # # nodes, reshaped in into m*n,1 array like other mg fields
-        # self.nodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1],1) #gt
-        # self.rnodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1]) #nodes in single column array #gt
-                
-        # self.xdif = grid.node_x[self.frnode]-grid.node_x[self.rnodes] # change in x from node to receiver node #gt
-        # self.ydif = (grid.node_y[self.frnode]-grid.node_y[self.rnodes])*-1 #, change in y from node to receiver node...NOTE: flip direction of y axis so that up is positve #gt
-       
-        # # grid node coordinates, translated to origin of 0,0
-        # self.gridx = grid.node_x#-grid.node_x[0]  #gt
-        # self.gridy = grid.node_y#-grid.node_y[0] #gt
-        
-        # # extent of each cell in grid        
-        # self.ndxe = self.gridx+self.dx/2 #gt
-        # self.ndxw = self.gridx-self.dx/2 #gt
-        # self.ndyn = self.gridy+self.dy/2 #gt
-        # self.ndys = self.gridy-self.dy/2 #gt
-
-
         ### NM Grid characteristics
         if nmgrid is not None:
             self._nmgrid = nmgrid
-            # network model grid characteristics       
-            # self.linknodes = nmgrid.nodes_at_link #links as ordered by read_shapefile #gt       
-            # network model grid node coordinates, translated to origin of 0,0, used to map grid to nmg
-            # self.nmgridx = nmgrid.x_of_node #gt
-            # self.nmgridy = nmgrid.y_of_node #gt
-            # self.linklength = nmgrid.length_of_link #gt
-            # self.nmg_nodes = nmgrid.nodes #gt
-        
 
         ### Channel extraction parameters
 
@@ -243,7 +217,6 @@ class DHSVMtoLandlab(Component):
         # (3) DTW only
         elif DHSVM_dtw_dict: 
             self._prep_depth_to_watertable()
-
 
 
         # initilize storm generator
@@ -269,41 +242,48 @@ class DHSVMtoLandlab(Component):
         # map raster model grid cells to network model grid and dhsvm network
         # properties of raster model grid added as class variables in GridTTools      
         # determine raster mg nodes that correspond to landlab network mg
-        linknodes = self._nmgrid.nodes_at_link
-        active_links = self._nmgrid.active_links
-        nmgx = self._nmgrid.x_of_node
-        nmgy = self._nmgrid.y_of_node
 
-        out = self.gt.LinktoNodes(linknodes, active_links, nmgx, nmgy)
         
-        self.Lnodelist = out[0]
-        self.Ldistlist = out[1]
-        self.xyDf = pd.DataFrame(out[2])    
+        if not hasattr(self.gt,"xyDf"):
+            # determine raster mg nodes that correspond to nmg links 
+            linknodes = self._nmgrid.nodes_at_link
+            active_links = self._nmgrid.active_links
+            nmgx = self._nmgrid.x_of_node
+            nmgy = self._nmgrid.y_of_node            
+        
+            out = self.gt.map_nmg_links_to_rmg_nodes(linknodes, active_links, nmgx, nmgy)
+            
+            self.Lnodelist = out[0]
+            self.Ldistlist = out[1]
+            self.xyDf = pd.DataFrame(out[2])    
     
 
-        # determine raster mg nodes that correspond to dhsvm network mg
-        linknodes = self.nmgrid_d.nodes_at_link
-        active_links = self.nmgrid_d.active_links
-        nmgx = self.nmgrid_d.x_of_node
-        nmgy = self.nmgrid_d.y_of_node
 
-        out = self.gt.LinktoNodes(linknodes, active_links, nmgx, nmgy)
-
-        self.Lnodelist_d = out[0]
-        self.Ldistlist_d = out[1]
-        self.xyDf_d = pd.DataFrame(out[2])           
+            # determine raster mg nodes that correspond to dhsvm links
+        if not hasattr(self.gt,"xyDf_d"):
+            linknodes = self.nmgrid_d.nodes_at_link
+            active_links = self.nmgrid_d.active_links
+            nmgx = self.nmgrid_d.x_of_node
+            nmgy = self.nmgrid_d.y_of_node
+        
+            out = self.gt.map_nmg_links_to_rmg_nodes(linknodes, active_links, nmgx, nmgy)
     
+            self.Lnodelist_d = out[0]
+            self.Ldistlist_d = out[1]
+            self.xyDf_d = pd.DataFrame(out[2])           
+        
         ## define bedload and debris flow channel nodes       
         ## channel
         # self._ChannelNodes()
-        self.gt.ChannelNodes(self.Ct,self.BCt)
+        if not hasattr(self.gt,"ChannelNodes"):
+            self.gt.extract_channel_nodes(self.Ct,self.BCt)
     
         # map dhsvm network model grid to landlab network model grid and prepare
         # time series of flow at each landlab network model grid link
     
         # determine dhsvm network mg links that correspond to the landlab network mg
-        # self._DHSVM_network_to_NMG_Mapper()
-        self.LinkMapper, self.LinkMapL = self.gt.DHSVM_network_to_NMG_Mapper(self.Lnodelist,self.xyDf_d)
+        # self._map_nmg1_links_to_nmg2_links()
+        self.LinkMapper, self.LinkMapL = self.gt.map_nmg1_links_to_nmg2_links(self.Lnodelist,self.xyDf_d)
         
         # aggregate flow time series
         if self.flow_metric == 'max':
@@ -322,7 +302,7 @@ class DHSVMtoLandlab(Component):
         self.streamflowonly_nmg()
         
         # determine dhsvm network mg links that correspond to the landlab network mg
-        self.gt.DHSVM_network_to_RMG_Mapper(self.xyDf_d)   # not needed? 
+        self.gt.DHSVM_network_to_RMG_Mapper(self.xyDf_d)   # not needed? Use
         
         # compute partial duration series and bankful flow rate for each nmgrid_d link
         # used by the nmgrid        
@@ -552,7 +532,7 @@ class DHSVMtoLandlab(Component):
         self.st_l_an = np.array(st_l_an)
         self.rw_l_an = np.array(rw_l_an)
            
-    
+
     def _mean_saturated_zone_thickness_cdf(self):
         """parammeterize a pdf to a partial duration series of the basin mean 
         saturated zone thickness"""
@@ -573,8 +553,8 @@ class DHSVMtoLandlab(Component):
         """ at each core node, parameterize a cdf (pdf) to the partial duration series
         ( or annual maximum series) of maximum saturated thickness, solve the cdf at 
         1000 points along the domain of the cdf (0 to 1) and save as a row in an xarray 
-        dataaray. Each row of the data array corrisponds to one of the core nodes."""
-
+        dataaray. Each row of the data array corrisponds to one of the core nodes.
+        """
     
         # version 2, handle constant saturated thickness cells (during extreme events)
         def interpolate_q_val(x):
@@ -598,7 +578,16 @@ class DHSVMtoLandlab(Component):
                                 node=(["node"], self._grid.core_nodes ),
                                 quantile=(["quantile"],self.quant)))
 
-    #interplate function used by other functions
+        mu_s_field = (np.ones(self._grid.at_node['soil__thickness'].shape[0])*np.nan).astype(float)
+        mu_s_field[self._grid.core_nodes] = mu_s
+        self._grid.add_field("node", "thickness__sat_zone_mean", mu_s_field, clobber = True)
+
+        ss_field = (np.ones(self._grid.at_node["soil__thickness"].shape[0])*np.nan).astype(float)
+        ss_field[self._grid.core_nodes] = ss
+        self._grid.add_field("node", "thickness__sat_zone_stdev", ss_field, clobber = True)
+
+    # interplate function used by other functions
+    # grid tools also has this function
     def intp(self, x,y,x1,message = None): 
         '''ALL
         Parameters
@@ -764,8 +753,7 @@ class DHSVMtoLandlab(Component):
         # combine dataarrays into one dataset, save as instance variable                      
         self.dataset = xr.merge([Q_da, q_da, d_da, T_da, U_da, Uo_da, nt_da, no_da, 
                                  Teff_da, Teffr_da, deff_da])
-        
-    
+            
     def D50_parcels(self, Link):
         
         ct = self.parcels.dataset.time[-1]

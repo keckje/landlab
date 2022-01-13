@@ -129,9 +129,10 @@ class ChannelNetworkGridTools(Component):
             self.POCbuffer = PartOfChannel_buffer # distance [m] from a channel cell that is considered part of the channel (used for determining distance between landslide and channel)
             self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
             self.TerraceWidth = TerraceWidth # distance from channel grid cells that are considered terrace grid cells [# cells]          
-      
+     
+        
 
-    def ChannelNodes(self,Ct,BCt):
+    def extract_channel_nodes(self,Ct,BCt):
         """MWR, DtoL
         change to 'fluvial channel' and 'channel'
         """
@@ -151,7 +152,7 @@ class ChannelNetworkGridTools(Component):
         self.BedloadChannelNodes = self.rnodes[BedloadChannelNodeMask] 
 
 
-    def TerraceNodes(self):
+    def extract_terrace_nodes(self):
         """MWR
 
         """
@@ -181,8 +182,9 @@ class ChannelNetworkGridTools(Component):
         self.TerraceNodes = TerraceNodes
     
         
-    def LinktoNodes(self, linknodes, active_links, nmgx, nmgy):
-        '''map_links_to_rmg_nodes() MWR, DtoL
+    
+    def map_nmg_links_to_rmg_nodes(self, linknodes, active_links, nmgx, nmgy):
+        '''was LinktoNodes() MWR, DtoL
         #convert links to coincident nodes
         for each nmg link, maps all coicident rmg nodes. Output is a list of lists. order of lists is order links
         
@@ -252,9 +254,9 @@ class ChannelNetworkGridTools(Component):
         return (Lnodelist, Ldistlist, Lxy)
 
             
-    def DHSVM_network_to_NMG_Mapper(self,Lnodelist,xyDf_d):    
+    def map_nmg1_links_to_nmg2_links(self,Lnodelist,xyDf_d):    
         
-        '''DtoL
+        '''was DHSVM_network_to_NMG_Mapper
         ### change to onetwork to network mapper
         
         # map_nmg1_links_to_nmg2_links
@@ -295,8 +297,9 @@ class ChannelNetworkGridTools(Component):
 
     def DHSVM_network_to_RMG_Mapper(self,xyDf_d):
         """DtoL
-        
-        # map_nmg_links_to_rmg_channel_nodes
+        # this function appears to give same output as map_nmg_links_to_rmg_nodes 
+        # try to get rid of this function
+        # map_rmg_nodes_to_nmg_links
         
         Determine the closest link to each RMG channel node
         output can be used to map nmg field values to the rmg
@@ -329,9 +332,9 @@ class ChannelNetworkGridTools(Component):
         self.NodeMapper = NodeMapper       
 
 
-    def NMG_node_to_RMG_node_mapper(self):
+    def map_rmg_nodes_to_nmg_nodes(self):
         """MWR, DtoL
-        #map_rmg_nodes_to_nmg_nodes
+        #was NMG_node_to_RMG_node_mapper
         find RMG node that is closest to each NMG node
         
         used to map changes in the rmg elevation to the nmg profile
@@ -388,9 +391,11 @@ class ChannelNetworkGridTools(Component):
 
         return offset, mdn
 
-    def update_NMG_nodes(self):
+
+
+    def transfer_rmg_node_field_to_nmg_node_field(self):
         '''
-        # change to rmg_node_field_to_nmg_node_field
+        # change to transfer_rmg_node_field_to_nmg_node_field
         updates the elevation of the nmg nodes based on the closest channel rmg node
         updates the link slopes based on the updated nmg node elevations
         move to channel_network_grid_tools?

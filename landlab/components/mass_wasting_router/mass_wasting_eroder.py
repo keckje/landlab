@@ -7,8 +7,6 @@ from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFind
 from landlab import imshow_grid, imshow_grid_at_node
 from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
 
-# from landlab.utils.grid_t_tools_a import GridTTools
-
 
 class MassWastingEroder(Component):
     
@@ -70,6 +68,7 @@ class MassWastingEroder(Component):
             TerraceWidth = 1,
             FluvialErosionRate = [[1,1], [1,1]], # [[0.03,-0.43], [0.01,-0.43]], # Fluvial erosion rate parameters
             parcel_volume = 0.2, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
+            gt = None,
             **kwds):
 
         """
@@ -129,8 +128,14 @@ class MassWastingEroder(Component):
             raise FieldError(
                 'A flow__receiver_node field is required as a component input!')  
 
+        # instantiate channel network grid tools or use  provided instance
+        if gt != None:
+            self.gt = gt
+        else:
+            self.gt = ChannelNetworkGridTools(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
 
-        self.gt = ChannelNetworkGridTools(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
+            
+        # self.gt = ChannelNetworkGridTools(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
 
         self.rnodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1]) #nodes in single column array
                
@@ -145,8 +150,6 @@ class MassWastingEroder(Component):
         # self.nmg_nodes = nmgrid.nodes
 
         ### Channel extraction parameters
-        # self.Ct = Ct # Channel initiation threshold [m2]   
-        # self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
         self.TerraceWidth = TerraceWidth # distance from channel grid cells that are considered terrace grid cells [# cells]     
          
         ### fluvial erosion
@@ -160,25 +163,22 @@ class MassWastingEroder(Component):
 
 
 
-        #### Define the raster model grid representation of the network model grid
-        out = self.gt.LinktoNodes(linknodes = self.linknodes,
-                                active_links = self._nmgrid.active_links,
-                                nmgx = self.nmgridx, nmgy = self.nmgridy)
-
-        self.Lnodelist = out[0]
-        self.Ldistlist = out[1]
-        self.xyDf = pd.DataFrame(out[2])
-
-        ## define bedload and debris flow channel nodes
-        ## channel
-        self.gt.ChannelNodes(Ct, BCt)
-
-        ## terrace
-        self.gt.TerraceNodes()
+        #### these functions may have already been run
+        if not hasattr(gt,"ChannelNodes"):
+            self.gt.extract_channel_nodes(Ct,BCt)
+        if not hasattr(gt,"TerraceNodes"):
+            self.gt.extract_terrace_nodes()
+        if not hasattr(gt,"xyDf"):
+            out = self.gt.map_nmg_links_to_rmg_nodes(linknodes = self.linknodes,
+                                    active_links = self._nmgrid.active_links,
+                                    nmgx = self.nmgridx, nmgy = self.nmgridy)
+    
+            self.Lnodelist = out[0]
+            self.Ldistlist = out[1]
+            self.xyDf = pd.DataFrame(out[2])
 
         ## define fluvial erosion rates of channel and terrace nodes (no fluvial erosion on hillslopes)
         self._DefineErosionRates()
-
 
 
         ### create initial values

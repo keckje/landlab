@@ -247,3 +247,14 @@ def test_calculate_landslide_probability_lognormal_spatial_method():
     np.testing.assert_almost_equal(
         grid_3.at_node["landslide__probability_of_failure"][9], 0.29999999
     )
+
+
+def test_calculate_landslide_probability_modeled_storm_method():
+    """test output when distributed hydrology modeled soil water for
+    a specific storm event is used to determine rw"""
+    
+
+def test_calculate_landslide_probability_modeled_method():
+    """test output when lognormal probability function for rw, parameterized for each
+    grid cell is used to, to run model
+    

@@ -97,13 +97,13 @@ class LandslideProbability(Component):
                                                                HSD_id_dict,
                                                                fract_dict])
 
-    Option 5 - Modeled recharge
+    Option 5 - Modeled event recharge
 
     .. code-block:: python
 
         LandslideProbability(grid,
                              number_of_iterations=250,
-                             groundwater__recharge_distribution='modeled'
+                             groundwater__recharge_distribution='modeled_event'
 
     Examples
     --------
@@ -463,11 +463,12 @@ class LandslideProbability(Component):
             self._HSD_id_dict = groundwater__recharge_HSD_inputs[1]
             self._fract_dict = groundwater__recharge_HSD_inputs[2]
             self._interpolate_HSD_dict()
-        elif self._groundwater__recharge_distribution == "modeled": #/jk/
-            print('recharge is computed from the depth__to_water_table rmg field')
-
-            
-            
+        elif self._groundwater__recharge_distribution == "modeled_rw_event": #/jk/
+            print('a single relative wetness computed directly from the depth__to_water_table rmg field, representing recharge from a specific storm event') #/jk/
+        elif self._groundwater__recharge_distribution == "modeled_rw_lognormal_spatial":     
+            print('relative wetness computed directly from the thickness__sat_zone_mean and thickness__sat_zone_stdev rmg field for "n" random events') #/jk/
+            self._sat_thickness_mean =  np.float32(self._grid.at_node["thickness__sat_zone_mean"]) #/jk/
+            self._sat_thickness_stdev =  np.float32(self._grid.at_node["thickness__sat_zone_stdev"]) #/jk/
         # Check if all output fields are initialized
         self.initialize_output_fields()
 
@@ -540,8 +541,22 @@ class LandslideProbability(Component):
             self._Re /= 1000.0  # Convert mm to m
         
         #/jk/
-        elif self._groundwater__recharge_distribution == 'modeled': #/jk/
-            self._Re = np.ones(self._n)*np.nan #/jk/
+        elif self._groundwater__recharge_distribution == 'modeled_rw_event': #/jk/
+            self._Re = np.ones(self._n)*np.nan #/jk/ # no recharge, depth to water table modeled
+        #/jk/
+        elif self._groundwater__recharge_distribution == 'modeled_rw_lognormal_spatial': #/jk/
+            self._Re = np.ones(self._n)*np.nan #/jk/ # no recharge, depth to water table modeled
+           
+            mu_lognormal = np.log(
+                (self._sat_thickness_mean[i] ** 2)
+                / np.sqrt(self._sat_thickness_stdev[i] ** 2 + self._sat_thickness_mean[i] ** 2)
+            )
+            sigma_lognormal = np.sqrt(
+                np.log(
+                    (self._sat_thickness_stdev[i] ** 2) / (self._sat_thickness_mean[i] ** 2) + 1
+                )
+            )
+            self._satthick = np.random.lognormal(mu_lognormal, sigma_lognormal, self._n) #/jk/      
             
         # Cohesion
         # if don't provide fields of min and max C, uncomment 2 lines below
@@ -585,15 +600,27 @@ class LandslideProbability(Component):
         )  # dimensionless cohesion
         
         #/jk/
-        if self._groundwater__recharge_distribution == 'modeled': #/jk/#
-            #/jk/ relative wetness is determined from the modeled depth to water 
-            # table and randomly selected soil depth for each iteration
+        if self._groundwater__recharge_distribution == 'modeled_rw_event': #/jk/#
+            #/jk/ a single relative wetness value is determined from raster mg depth
+            # to water table field, all other parameters are an np array of 
+            # length n of randomly parameters 
             #/jk/
-            self._depth_to_water_table = np.float32(self._grid.at_node["depth__to_water_table"][i])
-            Rw = (self._hs-self._depth_to_water_table) / self._hs #/jk/
-            self._rel_wetness = Rw#np.ones(self._n)*Rw #/jk/
+            # np.float32(self._grid.at_node["depth__to_water_table"])...np float needed? #/jk
+            Rw = (self._hs-self._grid.at_node["depth__to_water_table"][i]) / self._hs #/jk/
+            self._rel_wetness = Rw #np.ones(self._n)*Rw #/jk/
+        
+        elif self._groundwater__recharge_distribution == 'modeled_rw_lognormal_spatial': #/jk/#
+            #/jk/ relative wetness is stochastically determined from a lognormal #/jk/
+            #/jk/ pdf of saturated zone thickness, parameterized from the mean and #/jk/
+            #/jk/ standard deviation of saturated zone thikcness at each node #/jk/
+            # , all other parameters are an np array of length n of randomly #/jk/ 
+            # parameters #/jk/
+            Rw = (self._satthick) / self._hs #/jk/
+            self._rel_wetness = Rw #np.ones(self._n)*Rw #/jk/            
+            
         else:
-            #/jk/ relative wetness is stochastically determined for each iteration
+            #/jk/ relative wetness is stochastically determined from the user
+            #selected recharge pdf for each iteration
             self._rel_wetness = ((self._Re) / self._T) * ( #/jk/
                 self._a / np.sin(np.arctan(self._theta)) #/jk/
             )  # relative wetness #/jk/
