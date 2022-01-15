@@ -973,21 +973,27 @@ class DHSVMtoLandlab(Component):
         # soild depth at core nodes
         soild = self._grid.at_node['soil__thickness'][self._grid.core_nodes]
         
+        # apply constraints
+        st[st<0]  = 0 # saturated thickness cannot be less than zero
+        st[st>soild] = soild[st>soild] # saturated thickness cannot be greater than soil thickness
+        
         # convert saturated thickness to depth to water table
         dtw = soild-st.values
         
-        # apply constraints
-        # depth to water table cannot be less than zero
-        dtw[dtw<0]  = 0
+        # # apply constraints
+        # # depth to water table cannot be less than zero
+        # dtw[dtw<0]  = 0
     
-        # depth to water table cannot be greater than soil thickness
-        dtw[dtw>soild] = soild[dtw>soild]
+        # # depth to water table cannot be greater than soil thickness
+        # dtw[dtw>soild] = soild[dtw>soild]
         
         # update
         #self._grid.at_node['depth__to_water_table'][self._grid.core_nodes] = dtw
         
         dtw_field = (np.ones(self._grid.at_node['soil__thickness'].shape[0])*np.nan).astype(float)
         dtw_field[self._grid.core_nodes] = dtw
+        
+        self._grid.add_field('node', 'saturated__thickness', dtw_field, clobber = True)
         self._grid.add_field('node', 'depth__to_water_table', dtw_field, clobber = True)
 
 
