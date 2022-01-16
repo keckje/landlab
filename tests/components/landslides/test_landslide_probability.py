@@ -249,16 +249,16 @@ def test_calculate_landslide_probability_lognormal_spatial_method():
     )
 
 
-def test_calculate_landslide_probability_modeled_rw_event_method(example_raster_model_grid):
-    """test probability is correct when using modeled relative wetness (modeled
-    depth to water table) for a specific event - normal value test"""
+def test_calculate_landslide_probability_modeled_st_event(example_raster_model_grid):
+    """test probability is correct when using modeled saturated thickness
+    for a specific event - normal value test"""
     
     gridnum = example_raster_model_grid.number_of_nodes
 
     ls_prob = LandslideProbability(
     example_raster_model_grid,
     number_of_iterations=10,
-    groundwater__recharge_distribution="modeled_rw_event",
+    groundwater__recharge_distribution="modeled_st_event",
     groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
     groundwater__recharge_standard_deviation=np.random.rand(gridnum),
     seed=7,
@@ -266,24 +266,23 @@ def test_calculate_landslide_probability_modeled_rw_event_method(example_raster_
     
     ls_prob.calculate_landslide_probability()
     
-    expected_probability = np.array([1, 1, 0.9, 1, 0, 0])
-    
+    # expected_probability = np.array([1, 1, 0.9, 1, 0, 0])
+    expected_probability = np.array([ 0.5,  0.2,  0. ,  0.6,  0. ,  0. ])
     np.testing.assert_almost_equal(
         example_raster_model_grid.at_node["landslide__probability_of_failure"]\
             [example_raster_model_grid.core_nodes], expected_probability
     )
  
-def test_calculate_landslide_probability_modeled_rw_event_method_dtw_equals_zero(example_raster_model_grid):
-    """test probability is correct when using modeled relative wetness = 1 (modeled
-    depth to water table = soil depth) for a specific event, - boundary value test"""
+def test_calculate_landslide_probability_modeled_st_event_dry(example_raster_model_grid):
+    """test probability is correct when using modeled saturated thickness
+    for a specific dry event, saturated__thickness = 0, - boundary value test"""
     
     gridnum = example_raster_model_grid.number_of_nodes
-    example_raster_model_grid.at_node["depth__to_water_table"] = \
-        example_raster_model_grid.at_node['soil__thickness']
+    example_raster_model_grid.at_node["saturated__thickness"] = np.zeros(gridnum)
     ls_prob = LandslideProbability(
     example_raster_model_grid,
     number_of_iterations=10,
-    groundwater__recharge_distribution="modeled_rw_event",
+    groundwater__recharge_distribution="modeled_st_event",
     groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
     groundwater__recharge_standard_deviation=np.random.rand(gridnum),
     seed=7,
@@ -291,21 +290,20 @@ def test_calculate_landslide_probability_modeled_rw_event_method_dtw_equals_zero
     
     ls_prob.calculate_landslide_probability()
     
-    expected_probability = np.array([0.1, 0, 0, 0.4, 0, 0])
+    expected_probability = np.array([0.2, 0.1, 0, 0.4, 0, 0])
     
     np.testing.assert_almost_equal(
         example_raster_model_grid.at_node["landslide__probability_of_failure"]\
             [example_raster_model_grid.core_nodes], expected_probability
     )
         
-def test_calculate_landslide_probability_modeled_rw_event_method_negative_dtw(example_raster_model_grid):
-    """test a ValueError exception is raised when instantiating 
-    using modeled event relative wetness if rw is greater than 1 (modeled
-    depth to water table negative) - bad value test"""
+def test_modeled_st_event_method_negative_st(example_raster_model_grid):
+    """test a ValueError exception is raised if saturated__thickness is negative
+    - bad value test"""
     
     with pytest.raises(ValueError) as exc_info:
         
-        example_raster_model_grid.at_node["depth__to_water_table"] = \
+        example_raster_model_grid.at_node["saturated__thickness"] = \
         np.array([ 0.03,  0.03,  0.03, -0.11,  0.14,  0.06,  0.  ,  0.03, -0.34,
        -0.4 , -0.51, -0.43, -0.49, -0.56, -0.64, -0.73, -0.76, -0.82,
        -0.84, -0.93])
@@ -313,50 +311,46 @@ def test_calculate_landslide_probability_modeled_rw_event_method_negative_dtw(ex
         ls_prob = LandslideProbability(
         example_raster_model_grid,
         number_of_iterations=10,
-        groundwater__recharge_distribution="modeled_rw_event",
+        groundwater__recharge_distribution="modeled_st_event",
         groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
         groundwater__recharge_standard_deviation=np.random.rand(gridnum),
         seed=7,
         )
         
-        assert exc_info.match("depth to water table cannot be negative")
+        assert exc_info.match("saturated__thickness cannot be negative")
 
 
-def test_calculate_landslide_probability_modeled_rw_event_method_dtw_wrong_shape(example_raster_model_grid):
+def test_modeled_st_event_method_st_wrong_shape(example_raster_model_grid):
     """test a ValueError exception is raised when dtw field is has the wrong
     number of values, e.g. each node is a list of values rather than a single 
     float value- bad value test"""
     
     with pytest.raises(ValueError) as exc_info:
         
-        example_raster_model_grid.at_node["depth__to_water_table"] = np.ones((20,2))       
         gridnum = example_raster_model_grid.number_of_nodes
+        example_raster_model_grid.at_node["saturated__thickness"] = np.ones((gridnum,2))       
         ls_prob = LandslideProbability(
         example_raster_model_grid,
         number_of_iterations=10,
-        groundwater__recharge_distribution="modeled_rw_event",
+        groundwater__recharge_distribution="modeled_st_event",
         groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
         groundwater__recharge_standard_deviation=np.random.rand(gridnum),
         seed=7,
         )
         
-        assert exc_info.match("depth to water table should be a 1-d array")
+        assert exc_info.match("saturated__thickness should be a 1-d array")
 
-# def test_calculate_landslide_probability_modeled_method():
-#     """test output when lognormal probability function for rw, parameterized for each
-#     grid cell is used to, to run model
 
-def test_calculate_landslide_probability_modeled_rw_lognormal_spatial(example_raster_model_grid):
+def test_calculate_landslide_probability_modeled_st_lognormal_spatial(example_raster_model_grid):
     """test probability matches expected when relative wetness is randomly 
-    determed from a lognormal distribution of saturated thickness parameterized
-    from modeled output - normal value test"""
+    determed from a lognormal distribution of saturated thickness - normal value test"""
     
     gridnum = example_raster_model_grid.number_of_nodes
 
     ls_prob = LandslideProbability(
     example_raster_model_grid,
     number_of_iterations=10,
-    groundwater__recharge_distribution="modeled_rw_lognormal_spatial",
+    groundwater__recharge_distribution="modeled_st_lognormal_spatial",
     groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
     groundwater__recharge_standard_deviation=np.random.rand(gridnum),
     seed=7,
@@ -372,20 +366,19 @@ def test_calculate_landslide_probability_modeled_rw_lognormal_spatial(example_ra
     )
  
     
-        def test_calculate_landslide_probability_modeled_rw_lognormal_spatial_swamp(example_raster_model_grid):
-    """test probability matches expected when relative wetness is randomly 
-    determed from a lognormal distribution of saturated thickness parameterized
-    with a mean and standard deviation of 0 - boundary value test"""
+def test_calculate_landslide_probability_modeled_st_lognormal_spatial_dry(example_raster_model_grid):
+    """test probability matches expected when mean and standard deviation of the
+    saturated thickness equal zero - boundary value test"""
     
     gridnum = example_raster_model_grid.number_of_nodes
     
-    example_raster_model_grid.at_node["thickness__sat_zone_mean"] = np.zeros(20)
-    example_raster_model_grid.at_node["thickness__sat_zone_stdev"] = np.zeros(20)
+    example_raster_model_grid.at_node["mean__saturated_thickness"] = np.zeros(gridnum)
+    example_raster_model_grid.at_node["stdev__saturated_thickness"] = np.zeros(gridnum)
     
     ls_prob = LandslideProbability(
     example_raster_model_grid,
     number_of_iterations=10,
-    groundwater__recharge_distribution="modeled_rw_lognormal_spatial",
+    groundwater__recharge_distribution="modeled_st_lognormal_spatial",
     groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
     groundwater__recharge_standard_deviation=np.random.rand(gridnum),
     seed=7,
@@ -393,9 +386,126 @@ def test_calculate_landslide_probability_modeled_rw_lognormal_spatial(example_ra
     
     ls_prob.calculate_landslide_probability()
     
-    expected_probability = np.array([1, 0.9, 0.8, 1, 0, 0])
+    expected_probability = np.array([0.2, 0.1, 0, 0.4, 0, 0])
     
     np.testing.assert_almost_equal(
         example_raster_model_grid.at_node["landslide__probability_of_failure"]\
             [example_raster_model_grid.core_nodes], expected_probability
     )
+        
+def test_calculate_landslide_probability_modeled_st_lognormal_spatial_swamp(example_raster_model_grid):
+    """test probability matches expected when mean saturated thickness is equal 
+    to soil thickness and standard deviation is zero - boundary value test"""
+    
+    gridnum = example_raster_model_grid.number_of_nodes
+    
+    example_raster_model_grid.at_node["mean__saturated_thickness"] = \
+        example_raster_model_grid.at_node["soil__thickness"]
+    
+    example_raster_model_grid.at_node["stdev__saturated_thickness"] = np.zeros(gridnum)
+    
+    ls_prob = LandslideProbability(
+    example_raster_model_grid,
+    number_of_iterations=10,
+    groundwater__recharge_distribution="modeled_st_lognormal_spatial",
+    groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
+    groundwater__recharge_standard_deviation=np.random.rand(gridnum),
+    seed=7,
+    )
+    
+    ls_prob.calculate_landslide_probability()
+    
+    expected_probability = np.array([1, 1, 1, 1, 0, 0])
+    
+    np.testing.assert_almost_equal(
+        example_raster_model_grid.at_node["landslide__probability_of_failure"]\
+            [example_raster_model_grid.core_nodes], expected_probability
+    )
+        
+def test_modeled_st_lognormal_spatial_negative_mean(example_raster_model_grid):
+    """test a ValueError exception is raised if mean__saturated_thickness is negative
+    - bad value test"""
+    
+    with pytest.raises(ValueError) as exc_info:
+        
+        example_raster_model_grid.at_node["mean__saturated_thickness"] = \
+        np.array([ 0.03,  0.03,  0.03, -0.11,  0.14,  0.06,  0.  ,  0.03, -0.34,
+       -0.4 , -0.51, -0.43, -0.49, -0.56, -0.64, -0.73, -0.76, -0.82,
+       -0.84, -0.93])
+        gridnum = example_raster_model_grid.number_of_nodes        
+        ls_prob = LandslideProbability(
+        example_raster_model_grid,
+        number_of_iterations=10,
+        groundwater__recharge_distribution="modeled_st_lognormal_spatial",
+        groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
+        groundwater__recharge_standard_deviation=np.random.rand(gridnum),
+        seed=7,
+        )
+        
+        assert exc_info.match("mean__saturated_thickness and/or \
+                              stdev__saturated_thickness cannot be negative")
+                              
+def test_modeled_st_lognormal_spatial_negative_stdev(example_raster_model_grid):
+    """test a ValueError exception is raised if stdev__saturated_thickness is negative
+    - bad value test"""
+    
+    with pytest.raises(ValueError) as exc_info:
+        
+        example_raster_model_grid.at_node["stdev__saturated_thickness"] = \
+        np.array([ 0.03,  0.03,  0.03, -0.11,  0.14,  0.06,  0.  ,  0.03, -0.34,
+       -0.4 , -0.51, -0.43, -0.49, -0.56, -0.64, -0.73, -0.76, -0.82,
+       -0.84, -0.93])
+        gridnum = example_raster_model_grid.number_of_nodes        
+        ls_prob = LandslideProbability(
+        example_raster_model_grid,
+        number_of_iterations=10,
+        groundwater__recharge_distribution="modeled_st_lognormal_spatial",
+        groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
+        groundwater__recharge_standard_deviation=np.random.rand(gridnum),
+        seed=7,
+        )
+        
+        assert exc_info.match("mean__saturated_thickness and/or \
+                              stdev__saturated_thickness cannot be negative")
+
+def test_modeled_st_lognormal_spatial_wrong_shape_mean(example_raster_model_grid):
+    """test a ValueError exception is raised when mean__saturated_thickness field 
+    has the wrong number of values, e.g. each node is a list of values rather 
+    than a single value- bad value test"""
+    
+    with pytest.raises(ValueError) as exc_info:
+
+        gridnum = example_raster_model_grid.number_of_nodes        
+        example_raster_model_grid.at_node["mean__saturated_thickness"] = np.ones((gridnum,2))       
+        ls_prob = LandslideProbability(
+        example_raster_model_grid,
+        number_of_iterations=10,
+        groundwater__recharge_distribution="modeled_st_lognormal_spatial",
+        groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
+        groundwater__recharge_standard_deviation=np.random.rand(gridnum),
+        seed=7,
+        )
+        
+        assert exc_info.match("mean__saturated_thickness and/or stdev__saturated_thickness \
+                    should be a 1-d array")
+                    
+def test_modeled_st_lognormal_spatial_wrong_shape_stdev(example_raster_model_grid):
+    """test a ValueError exception is raised when stdev__saturated_thickness field 
+    has the wrong number of values, e.g. each node is a list of values rather 
+    than a single value- bad value test"""
+    
+    with pytest.raises(ValueError) as exc_info:
+        
+        gridnum = example_raster_model_grid.number_of_nodes
+        example_raster_model_grid.at_node["stdev__saturated_thickness"] = np.ones((gridnum,2))       
+        ls_prob = LandslideProbability(
+        example_raster_model_grid,
+        number_of_iterations=10,
+        groundwater__recharge_distribution="modeled_st_lognormal_spatial",
+        groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
+        groundwater__recharge_standard_deviation=np.random.rand(gridnum),
+        seed=7,
+        )
+        
+        assert exc_info.match("mean__saturated_thickness and/or stdev__saturated_thickness \
+                    should be a 1-d array")
