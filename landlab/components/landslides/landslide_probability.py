@@ -97,13 +97,23 @@ class LandslideProbability(Component):
                                                                HSD_id_dict,
                                                                fract_dict])
 
-    Option 5 - Modeled event recharge
+    Option 5 - Modeled_event saturated zone thickness 
 
     .. code-block:: python
 
         LandslideProbability(grid,
                              number_of_iterations=250,
-                             groundwater__recharge_distribution='modeled_event'
+                             groundwater__recharge_distribution='modeled_event_st'
+
+
+    Option 6 - Modeled_lognormal_spatial saturated zone thickness 
+
+    .. code-block:: python
+
+        LandslideProbability(grid,
+                             number_of_iterations=250,
+                             groundwater__recharge_distribution='modeled_lognormal_spatial_st'
+
 
     Examples
     --------
@@ -347,14 +357,6 @@ class LandslideProbability(Component):
             "mapping": "node",
             "doc": "specific contributing (upslope area/cell face ) that drains to node",
         },
-        "depth__to_water_table": {
-            "dtype": float,
-            "intent": "in",
-            "optional": True,
-            "units": "m",
-            "mapping": "node",
-            "doc": "depth to water table",
-        },
     }
 
     def __init__(
@@ -463,7 +465,7 @@ class LandslideProbability(Component):
             self._HSD_id_dict = groundwater__recharge_HSD_inputs[1]
             self._fract_dict = groundwater__recharge_HSD_inputs[2]
             self._interpolate_HSD_dict()
-        elif self._groundwater__recharge_distribution == "modeled_st_event": #/jk/
+        elif self._groundwater__recharge_distribution == "modeled_event_st": #/jk/
             print('a single relative wetness computed directly from the \
                   saturated__thickness rmg field, representing recharge from \
                       a specific storm event') #/jk/
@@ -473,7 +475,7 @@ class LandslideProbability(Component):
             if len(grid.at_node["saturated__thickness"].shape) > 1:
                 msg = "saturated__thickness should be a 1-d array"
                 raise ValueError(msg)
-        elif self._groundwater__recharge_distribution == "modeled_st_lognormal_spatial":     
+        elif self._groundwater__recharge_distribution == "modeled_lognormal_spatial_st":     
             print('relative wetness computed directly from the mean__saturated_thickness \
                   and stdev__saturated_thickness rmg field for "n" random events') #/jk/
             if ((grid.at_node["mean__saturated_thickness"]<0).any()) or \
@@ -562,11 +564,11 @@ class LandslideProbability(Component):
             self._Re /= 1000.0  # Convert mm to m
         
         #/jk/
-        elif self._groundwater__recharge_distribution == 'modeled_st_event': #/jk/
+        elif self._groundwater__recharge_distribution == 'modeled_event_st': #/jk/
             self._Re = np.ones(self._n)*np.nan #/jk/ # no recharge, depth to water table modeled
             self._satthick = np.ones(self._n)*np.nan #/jk/ for tests
         #/jk/
-        elif self._groundwater__recharge_distribution == 'modeled_st_lognormal_spatial': #/jk/
+        elif self._groundwater__recharge_distribution == 'modeled_lognormal_spatial_st': #/jk/
             self._Re = np.ones(self._n)*np.nan #/jk/ # no recharge, depth to water table modeled
             #/jk/ log mu and sigma can not be determined from mean = 0
             if (self._sat_thickness_mean[i] == 0): 
@@ -627,7 +629,7 @@ class LandslideProbability(Component):
         )  # dimensionless cohesion
         
         #/jk/
-        if self._groundwater__recharge_distribution == 'modeled_st_event': #/jk/#
+        if self._groundwater__recharge_distribution == 'modeled_event_st': #/jk/#
             #/jk/ a single relative wetness value is determined from raster mg 
             # saturated__thickness field, all other parameters are an np array of 
             # length n of randomly parameters 
@@ -638,7 +640,7 @@ class LandslideProbability(Component):
             Rw[Rw>1] = 1#/jk/
             self._rel_wetness = Rw #np.ones(self._n)*Rw #/jk/
         
-        elif self._groundwater__recharge_distribution == 'modeled_st_lognormal_spatial': #/jk/#
+        elif self._groundwater__recharge_distribution == 'modeled_lognormal_spatial_st': #/jk/#
             #/jk/ relative wetness is stochastically determined from a lognormal #/jk/
             #/jk/ pdf of saturated zone thickness, parameterized from the mean and #/jk/
             #/jk/ standard deviation of saturated zone thikcness at each node #/jk/

@@ -104,8 +104,8 @@ class MassWastingRunout(Component):
     self,
     grid,
     release_dict,
-    df_dict,
-    save_df_dem = False, 
+    mw_dict,
+    save_mw_dem = False, 
     run_id = 0, 
     itL = 1000,
     opt1 = None,
@@ -116,8 +116,8 @@ class MassWastingRunout(Component):
         super().__init__(grid)
         # self.grid = grid
         self.release_dict = release_dict
-        self.df_dict = df_dict
-        self.save = save_df_dem
+        self.mw_dict = mw_dict
+        self.save = save_mw_dem
         self.run_id = run_id
         self.itL = itL
         self.df_evo_maps = {}
@@ -133,6 +133,11 @@ class MassWastingRunout(Component):
         # define initial topographic + mass wasting thickness topography
         self._grid.at_node['topographic__elevation_MW_surface'] = self._grid.at_node['topographic__elevation'].copy()
         self._grid.at_node['topographic__initial_elevation'] = self._grid.at_node['topographic__elevation'].copy()
+    
+    
+    
+    
+    
     
     """route an initial mass wasting volume through a watershed, determine Scour, 
     Entrainment and Depostion depths and update the DEM
@@ -160,16 +165,16 @@ class MassWastingRunout(Component):
                     iteration delay: int
                         number of iterations between each pulse
     
-    df_dict : dictionary
+    mw_dict : dictionary
         a dictionary of parameters that control the behavoir of the cellular-automata 
         debris flow model formatted as follows:
-                df_dict = {
-                    'critical slope':0.05, 'minimum flux':0.1,
+                mw_dict = {
+                    'friction angle':0.05, 'minimum flux':0.1,
                     'scour coefficient':0.03}
             
             where: 
-                critical slope: float
-                    angle of repose or friction coefficient of mass wasting material , L/L
+                friction angle: float
+                    friction angle (angle of repose if no cohesion) of mass wasting material , L/L
                 minimum-flux: float
                     minimum volumetric flux per unit contour width, i.e., 
                     volume/(grid.dx*grid.dx) per iteration, (L)/i.
@@ -250,10 +255,13 @@ class MassWastingRunout(Component):
             nid = np.ones(len(innL))*nid
 
         # material stops at cell when flux / cell width is below this,
-        self.SD = self.df_dict['minimum flux']
+        self.SD = self.mw_dict['minimum flux']
         
         # entrainment coefficient
-        self.cs = self.df_dict['scour coefficient']
+        self.cs = self.mw_dict['scour coefficient']
+        
+        # optional parameters
+        
                 
         DFcells = {}            
         cL = {}
@@ -382,10 +390,11 @@ class MassWastingRunout(Component):
 
                     self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
                     
-                    for ii, n in enumerate(arn_u):
+                    # for ii, n in enumerate(arn_u): # move this into deposit_settles?
                        
-                        # deposit material settles
-                        self._deposit_settles(ii, n)
+                    #     # deposit material settles
+                    #     self._settle(ii, n)
+                    self._settle(arn_u)
                     
                 if self.opt2:
      
@@ -454,43 +463,60 @@ class MassWastingRunout(Component):
             # since using flux per unit contour width (rather than flux), 
             # L is (1-(slpn/slpc)**2) rather than dx/(1-(slpn/slpc)**2)         
             
-            # critical slope
-            if self.opt1:
-                a = self.df_dict['critical slope'][0]
-                b = self.df_dict['critical slope'][1]
-                slpc = a*self._grid.at_node['drainage_area'][n]**b
-            else:
-                slpc = self.df_dict['critical slope'][0]
+            # friction angle
+            #####
+            ##### deposition function
             
-            Lnum = np.max([(1-(slpn/slpc)**2),0])
+            # if self.opt1:
+            #     a = self.mw_dict['friction angle'][0]
+            #     b = self.mw_dict['friction angle'][1]
+            #     slpc = a*self._grid.at_node['drainage_area'][n]**b
+            # else:
+            #     slpc = self.mw_dict['friction angle'][0]
             
-            if self.opt2:
-                zo = self._grid.at_node['topographic__elevation'][rn].min()
-                zi = self._grid.at_node['topographic__elevation'][n]
-                if zi<zo and qsi>(zo-zi) and self.opt3:
-                    # print('opt3')
-                    # print(str(zo-zi+(qsi-(zo-zi))*Lnum)+' ,'+str(qsi*Lnum))
-                    # D = min(zo-zi+(qsi-(zo-zi))*Lnum,qsi*Lnum)
-                    D = zo-zi+(qsi-(zo-zi))*Lnum
-                else:
-                    D = qsi*Lnum # deposition depth
-            else:
-                D = qsi*Lnum
-                
-            ## erosion depth
+            # Lnum = np.max([(1-(slpn/slpc)**2),0])
+            
+            # if self.opt2:
+            #     zo = self._grid.at_node['topographic__elevation'][rn].min()
+            #     zi = self._grid.at_node['topographic__elevation'][n]
+            #     if zi<zo and qsi>(zo-zi) and self.opt3:
+            #         # print('opt3')
+            #         # print(str(zo-zi+(qsi-(zo-zi))*Lnum)+' ,'+str(qsi*Lnum))
+            #         # D = min(zo-zi+(qsi-(zo-zi))*Lnum,qsi*Lnum)
+            #         D = zo-zi+(qsi-(zo-zi))*Lnum
+            #     else:
+            #         D = qsi*Lnum # deposition depth
+            # else:
+            #     D = qsi*Lnum
+            #     print(D)
+            
+            ###### deposition function
+            ######
+            D = self._deposit(qsi,slpn,rn,n)
+            # print(D)
             
             # debris flow depth over cell    
             df_depth = qsi #vin/(self._grid.dx*self._grid.dx) #df depth
             
+            
+            
+            ###### erosion function
+            ######
             # depth-slope product approximation of total shear stress on channel bed [Pa]
             Tb = 1700*9.81*df_depth*slpn
-     
+
             # max erosion depth equals regolith (soil) thickness
             dmx = self._grid.at_node['soil__thickness'][n]
             
             # erosion depth: 
-            E = min(dmx, self.cs*Tb/1000) # convert Tb to kPa
+            # E = min(dmx, self.cs*Tb/1000) # convert Tb to kPa
             
+            ###### erosion function
+            ######  
+            E = self._scour(n, qsi, slpn, opt = 1)
+            
+            
+            # entrainment is mass conservation at cell
             ## flow out
             qso = qsi-D+E
             
@@ -540,122 +566,162 @@ class MassWastingRunout(Component):
         # return mwh
 
 
-    def _deposit_settles(self, ii, n):
+    def _settle(self, arn_u):
         """ for each unique node in receiving node list, after entrainment, deposition 
         and change in node elevation have been determined, check that the height of the node 
         is not greater than permitted by angle of repose/friction angle as evaluated from 
-        the lowest cell
+        the lowest cell. Note slope is not updated in this function so that it can be applied
+        simultaneously to all nodes that settle during the iteration. 
         """
-        if self.D_L[ii] >0:
-            rn = self._grid.at_node.dataset['flow__receiver_node'].values[n]
-            # slope to all receiving cells
-            slpn = self._grid.at_node['topographic__steepest_slope'][n]
-            
-            # only consider downslope cells
-            slpn = slpn[np.where(rn != -1)] 
-            rn = rn[np.where(rn != -1)]  
-                     
-            # critical slope
-            if self.opt1:
-                a = self.df_dict['critical slope'][0]
-                b = self.df_dict['critical slope'][1]
-                slpc = a*self._grid.at_node['drainage_area'][n]**b
-            else:
-                slpc = self.df_dict['critical slope'][0]
-            
-            # only consider all cells that slope > Sc
-            rn = rn[slpn>slpc]
-            slpn = slpn[slpn>slpc]            
-
-            rndif = self.dif[rn]
-            slpn = slpn[abs(rndif)>0]  
-            rn = rn[abs(rndif)>0]
-
-            # if slope to downlsope nodes > Sc, adjust elevation of node n
-            if len(rn)>=1:
+        for ii, n in enumerate(arn_u): # for each node in the list, use the slope field, computed from the previous iteration, to compute settlment and settlment direction to adjacent cells
+            if self.D_L[ii] >0:
+                rn = self._grid.at_node.dataset['flow__receiver_node'].values[n]
+                # slope to all receiving cells
+                slpn = self._grid.at_node['topographic__steepest_slope'][n]
                 
-                # destribute material to downslope nodesbased on weighted
-                # average slope (same as multiflow direciton proportions, 
-                # but here only determined for downslope nodes in which
-                # S  > Sc )
+                # only consider downslope cells
+                slpn = slpn[np.where(rn != -1)] 
+                rn = rn[np.where(rn != -1)]  
                          
-                sslp = sum(slpn)
-                pp = slpn/sslp
+                # friction angle
+                if self.opt1:
+                    a = self.mw_dict['friction angle'][0]
+                    b = self.mw_dict['friction angle'][1]
+                    slpc = a*self._grid.at_node['drainage_area'][n]**b
+                else:
+                    slpc = self.mw_dict['friction angle'][0]
                 
-                # determine the total flux / unit width sent to S > Sc downslope cells
-                # mean downslope cell elevation
-                zo = self._grid.at_node['topographic__elevation'][rn].min()
+                # only consider all cells that slope > Sc
+                rn = rn[slpn>slpc]
+                slpn = slpn[slpn>slpc]            
+    
+                rndif = self.dif[rn]
+                slpn = slpn[abs(rndif)>0]  
+                rn = rn[abs(rndif)>0]
+    
+                # if slope to downlsope nodes > Sc, adjust elevation of node n
+                if len(rn)>=1:
+                    
+                    # destribute material to downslope nodesbased on weighted
+                    # average slope (same as multiflow direciton proportions, 
+                    # but here only determined for downslope nodes in which
+                    # S  > Sc )
+                             
+                    sslp = sum(slpn)
+                    pp = slpn/sslp
+                    
+                    # determine the total flux / unit width sent to S > Sc downslope cells
+                    # mean downslope cell elevation
+                    zo = self._grid.at_node['topographic__elevation'][rn].min()
+                    
+                    # node n elevation
+                    zi = self._grid.at_node['topographic__elevation'][n]
+                    
+                    # height of node n using Sc*dx above mean downslope elevation
+                    slp_h = slpc*self._grid.dx             
                 
-                # node n elevation
-                zi = self._grid.at_node['topographic__elevation'][n]
-                
-                # height of node n using Sc*dx above mean downslope elevation
-                slp_h = slpc*self._grid.dx             
-            
-                qso_s = (zi - (zo+slp_h))/2 # out going sediment depth
-                
-                if qso_s < 0: # no negative outflow
-                    qso_s = 0
-                
-                if qso_s > self.D_L[ii]: # settlement out can not exceed deposit
-                    qso_s= self.D_L[ii]
-                
-                qso_s_i = qso_s*pp # proportion sent to each receiving cell                
-                
-                # update the topographic elevation
-                self._grid.at_node['topographic__elevation'][n]=self._grid.at_node['topographic__elevation'][n]-qso_s
-                self._grid.at_node['topographic__elevation'][rn]=self._grid.at_node['topographic__elevation'][rn]+qso_s_i
-                
-                # update the soil thickness
-                self._grid.at_node['soil__thickness'][n] = self._grid.at_node['soil__thickness'][n]-qso_s
-                self._grid.at_node['soil__thickness'][rn] = self._grid.at_node['soil__thickness'][rn]+qso_s_i
+                    qso_s = (zi - (zo+slp_h))/2 # out going sediment depth
+                    
+                    if qso_s < 0: # no negative outflow
+                        qso_s = 0
+                    
+                    if qso_s > self.D_L[ii]: # settlement out can not exceed deposit
+                        qso_s= self.D_L[ii]
+                    
+                    qso_s_i = qso_s*pp # proportion sent to each receiving cell                
+                    
+                    # update the topographic elevation
+                    self._grid.at_node['topographic__elevation'][n]=self._grid.at_node['topographic__elevation'][n]-qso_s
+                    self._grid.at_node['topographic__elevation'][rn]=self._grid.at_node['topographic__elevation'][rn]+qso_s_i
+                    
+                    # update the soil thickness
+                    self._grid.at_node['soil__thickness'][n] = self._grid.at_node['soil__thickness'][n]-qso_s
+                    self._grid.at_node['soil__thickness'][rn] = self._grid.at_node['soil__thickness'][rn]+qso_s_i
+    
 
 
-
-    def scour(self, n, depth, slope, opt = 1):
+    def _scour(self, n, depth, slope, opt = 1):
         """determines the scour depth based on user selected method
         check for requied inputs at beginning of class
         """
+        
+        # if opt = 1:
+        #     Tb = 1700*9.81*df_depth*slpn
+     
+        #     # max erosion depth equals regolith (soil) thickness
+        #     dmx = self._grid.at_node['soil__thickness'][n]
+            
+        #     # erosion depth: 
+        #     E = min(dmx, self.cs*Tb/1000) # convert Tb to kPa
+        # if opt = 2:
+        
+        
         ro_df = 1700
-        ro_s = 2650
-        phi = 35
+        ros = 2650
+        # phi = 0.20944
         g = 9.81
-        Vs = 0.6
-        Ds = 0.25
-        dudz = 7.5/depth
+        nus = 0.6
+        Ds = 0.3
+        # depth = 1
+        # slope = 0.017455
+        # slope_r = 0.017453
+        alpha =self.cs
+        beta = 1
 
         # depth-slope product approximation of hydrostaic/quasi-static 
         # shear stress on channel bed [Pa]
-        theta = np.atan(slope) # convert tan(theta) to theta
+        theta = np.arctan(slope) # convert tan(theta) to theta
         Tbs = ro_df*g*depth*np.sin(theta)
         dmx = self._grid.at_node['soil__thickness'][n]
         
         if opt ==1:
-            # following Frank et al., 2015, use a coulumb friction based rheology
-            # (quasi-static) to determine erosion depth is a linear function
+            # following Frank et al., 2015, approximate erosion depth as a linear
+            # function of total stress under uniform flow conditions
             
-            # erosion depth:
-            Ec = self.cs*Tbs/1000
+            # erosion depth,:
+            Ec = alpha*(Tbs/1000)**beta
         
         if opt == 2:
-            # following Medina et al., use a Voellmy based rheology to determine
-            # scour depth
-            Tres = depth*ro_df*9.81*np.cos(theta)*tan(phi)
-            Tbi = Vs*ro_s*(Ds**2)*(dudz**2)
-            Tb = Tbs+Tbi
+            # shear stress apprixmated as a power functino of inertial shear stress
             
-            Ec = (Tres - Tb)/(1700*9.81*(np.sin(theta)-np.cos(theta)*tan(phi)))            # depth-slope product approximation of total shear stress on channel bed [Pa]
-
-     
-            # max erosion depth equals regolith (soil) thickness
-            dmx = self._grid.at_node['soil__thickness'][n]
             
-            # erosion depth: 
-            E = min(dmx, self.cs*Tb/1000) # convert Tb to kPa
-
-            Tres = df_depth*1700*9.81*np.cos(theta)*tan(slpc)
-            hent = (Tb - Tres)/(1700*9.81)###NOT DONE YET            
-
-            E = min(dmx, Ec) # convert Tb to kPa
-        # if opt == 3:
+            # inertial stresses
+            us = (g*depth*slope)**0.5
+            u = us*5.5*np.log10(depth/Ds)
             
+            dudz = u/depth
+            Tcn = np.cos(slope_r)*nus*ros*(Ds**2)*(dudz**2)
+            Tcs = Tcn*np.tan(phi)
+            
+            E = (alpha*Tcs**beta)
+    
+
+        E = min(dmx, Ec) # convert Tb to kPa
+        
+        return(E)
+                
+    def _deposit(self,qsi,slpn,rn,n):
+        """"""
+        if self.opt1:
+            a = self.mw_dict['friction angle'][0]
+            b = self.mw_dict['friction angle'][1]
+            slpc = a*self._grid.at_node['drainage_area'][n]**b
+        else:
+            slpc = self.mw_dict['friction angle'][0]
+        
+        Lnum = np.max([(1-(slpn/slpc)**2),0])
+        
+        if self.opt2:
+            zo = self._grid.at_node['topographic__elevation'][rn].min()
+            zi = self._grid.at_node['topographic__elevation'][n]
+            if zi<zo and qsi>(zo-zi) and self.opt3:
+                # print('opt3')
+                # print(str(zo-zi+(qsi-(zo-zi))*Lnum)+' ,'+str(qsi*Lnum))
+                # D = min(zo-zi+(qsi-(zo-zi))*Lnum,qsi*Lnum)
+                D = zo-zi+(qsi-(zo-zi))*Lnum
+            else:
+                D = qsi*Lnum # deposition depth
+        else:
+            D = qsi*Lnum
+        
+        return(D)
