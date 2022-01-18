@@ -258,7 +258,7 @@ def test_calculate_landslide_probability_modeled_st_event(example_raster_model_g
     ls_prob = LandslideProbability(
     example_raster_model_grid,
     number_of_iterations=10,
-    groundwater__recharge_distribution="modeled_st_event",
+    groundwater__recharge_distribution="modeled_event_st",
     groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
     groundwater__recharge_standard_deviation=np.random.rand(gridnum),
     seed=7,
@@ -282,7 +282,7 @@ def test_calculate_landslide_probability_modeled_st_event_dry(example_raster_mod
     ls_prob = LandslideProbability(
     example_raster_model_grid,
     number_of_iterations=10,
-    groundwater__recharge_distribution="modeled_st_event",
+    groundwater__recharge_distribution="modeled_event_st",
     groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
     groundwater__recharge_standard_deviation=np.random.rand(gridnum),
     seed=7,
@@ -311,7 +311,7 @@ def test_modeled_st_event_method_negative_st(example_raster_model_grid):
         ls_prob = LandslideProbability(
         example_raster_model_grid,
         number_of_iterations=10,
-        groundwater__recharge_distribution="modeled_st_event",
+        groundwater__recharge_distribution="modeled_event_st",
         groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
         groundwater__recharge_standard_deviation=np.random.rand(gridnum),
         seed=7,
@@ -332,7 +332,7 @@ def test_modeled_st_event_method_st_wrong_shape(example_raster_model_grid):
         ls_prob = LandslideProbability(
         example_raster_model_grid,
         number_of_iterations=10,
-        groundwater__recharge_distribution="modeled_st_event",
+        groundwater__recharge_distribution="modeled_event_st",
         groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
         groundwater__recharge_standard_deviation=np.random.rand(gridnum),
         seed=7,
@@ -350,7 +350,7 @@ def test_calculate_landslide_probability_modeled_st_lognormal_spatial(example_ra
     ls_prob = LandslideProbability(
     example_raster_model_grid,
     number_of_iterations=10,
-    groundwater__recharge_distribution="modeled_st_lognormal_spatial",
+    groundwater__recharge_distribution="modeled_lognormal_spatial_st",
     groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
     groundwater__recharge_standard_deviation=np.random.rand(gridnum),
     seed=7,
@@ -378,7 +378,7 @@ def test_calculate_landslide_probability_modeled_st_lognormal_spatial_dry(exampl
     ls_prob = LandslideProbability(
     example_raster_model_grid,
     number_of_iterations=10,
-    groundwater__recharge_distribution="modeled_st_lognormal_spatial",
+    groundwater__recharge_distribution="modeled_lognormal_spatial_st",
     groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
     groundwater__recharge_standard_deviation=np.random.rand(gridnum),
     seed=7,
@@ -407,7 +407,7 @@ def test_calculate_landslide_probability_modeled_st_lognormal_spatial_swamp(exam
     ls_prob = LandslideProbability(
     example_raster_model_grid,
     number_of_iterations=10,
-    groundwater__recharge_distribution="modeled_st_lognormal_spatial",
+    groundwater__recharge_distribution="modeled_lognormal_spatial_st",
     groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
     groundwater__recharge_standard_deviation=np.random.rand(gridnum),
     seed=7,
@@ -436,7 +436,7 @@ def test_modeled_st_lognormal_spatial_negative_mean(example_raster_model_grid):
         ls_prob = LandslideProbability(
         example_raster_model_grid,
         number_of_iterations=10,
-        groundwater__recharge_distribution="modeled_st_lognormal_spatial",
+        groundwater__recharge_distribution="modeled_lognormal_spatial_st",
         groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
         groundwater__recharge_standard_deviation=np.random.rand(gridnum),
         seed=7,
@@ -459,7 +459,7 @@ def test_modeled_st_lognormal_spatial_negative_stdev(example_raster_model_grid):
         ls_prob = LandslideProbability(
         example_raster_model_grid,
         number_of_iterations=10,
-        groundwater__recharge_distribution="modeled_st_lognormal_spatial",
+        groundwater__recharge_distribution="modeled_lognormal_spatial_st",
         groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
         groundwater__recharge_standard_deviation=np.random.rand(gridnum),
         seed=7,
@@ -480,7 +480,7 @@ def test_modeled_st_lognormal_spatial_wrong_shape_mean(example_raster_model_grid
         ls_prob = LandslideProbability(
         example_raster_model_grid,
         number_of_iterations=10,
-        groundwater__recharge_distribution="modeled_st_lognormal_spatial",
+        groundwater__recharge_distribution="modeled_lognormal_spatial_st",
         groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
         groundwater__recharge_standard_deviation=np.random.rand(gridnum),
         seed=7,
@@ -501,7 +501,7 @@ def test_modeled_st_lognormal_spatial_wrong_shape_stdev(example_raster_model_gri
         ls_prob = LandslideProbability(
         example_raster_model_grid,
         number_of_iterations=10,
-        groundwater__recharge_distribution="modeled_st_lognormal_spatial",
+        groundwater__recharge_distribution="modeled_lognormal_spatial_st",
         groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
         groundwater__recharge_standard_deviation=np.random.rand(gridnum),
         seed=7,
