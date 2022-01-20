@@ -322,7 +322,7 @@ class MassWastingRouter(Component):
         # none
         self.DebrisFlows = MWRu(self._grid,
                                release_dict,
-                               df_dict, save_df_dem = True,
+                               df_dict, save_mw_dem = True,
                                opt1 = False, opt2 = True, 
                                opt3 = True, opt4 = True)
         

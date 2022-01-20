@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
+import pandas as pd
 from landlab import RasterModelGrid
 from landlab import Component, FieldError
 from landlab.components import FlowAccumulator
@@ -35,15 +36,6 @@ class MassWastingRunout(Component):
             "units": "-",
             "mapping": "node",
             "doc": "1 indicates mass wasting event, 0 is no event",
-            },
-        
-        'mass__wasting_volumes': {
-            "dtype": float,
-            "intent": "in",
-            "optional": False,
-            "units": "-",
-            "mapping": "node",
-            "doc": "initial mass wasting volumes",
             },
         
         
@@ -136,6 +128,7 @@ class MassWastingRunout(Component):
        
         
         # set mass wasting parameters
+        
         # material stops at cell when flux / cell width is below this,
         
         if self.opt1:
@@ -153,7 +146,7 @@ class MassWastingRunout(Component):
         if 'scour exponent' in self.mw_dict:
             self.eta = self.mw_dict['scour exponent']
         else:
-            self.eta = 0.33
+            self.eta = 0.2
         
         if 'effective particle diameter' in self.mw_dict:
             self.Dp = self.mw_dict['effective particle diameter']
@@ -292,11 +285,28 @@ class MassWastingRunout(Component):
         self.run_id = dt
             
         # convert map of mass wasting locations and volumes to lists
-        mask = self._grid.at_node['mass__wasting_events'] == 1
-        innL = np.hstack(self._grid.nodes)[mask]
-        ivL = self._grid.at_node['mass__wasting_volumes'][mask]
-                
+        # mask = self._grid.at_node['mass__wasting_events'] == 1
+        
+        # mass wasting cells coded according to LS id
+        mask = self._grid.at_node['mass__wasting_ids'] > 0
+        
+        # innL = np.hstack(self._grid.nodes)[mask]
+        # list of unique ls id
+        self.ls_ids = np.unique(self._grid.at_node['mass__wasting_ids'][mask])
+        
+        # innL is list of lists of nodes in each landslide
+        
+        innL = []
+        ivL = []
+        for ls in self.ls_ids:
+            ls_mask = self._grid.at_node['mass__wasting_ids'] == ls
+            # list of lists, node ids in each landslide
+            innL.append(np.hstack(self._grid.nodes)[ls_mask])
+            # list of lists, volume per node of nodes in each landslide
+            ivL.append(self._grid.at_node['soil__thickness'][ls_mask]*self._grid.dx*self._grid.dy)
+        
         # if nps is a single value (rather than list of values for each mass wasting event)
+        # this still may work, can be set to 1 pulse, no delay for landslide area failures
         if (len(self.nps) ==1) & (len(self.nps) < len(innL)):
             self.nps = np.ones(len(innL))*self.nps
         
@@ -306,7 +316,6 @@ class MassWastingRunout(Component):
         
         # optional parameters
         
-                
         DFcells = {}            
         cL = {}
         # lists for tracking behavior of model
@@ -316,40 +325,66 @@ class MassWastingRunout(Component):
         #For each landslide in list:
         for i,inn in enumerate(innL):
         
+            # ls i id  
+            ls = self.ls_ids[i]
+            
             cL[i] = []
             self.df_evo_maps[i] = {}
-        
-            # set up initial landslide cell
-            iv =ivL[i]/self.nps[i]# initial volume (total volume/number of pulses) 
+              
+            rni = np.array([])
+            rvi = np.array([])
             
-            # initial receiving nodes (cells) from landslide
-            rn = self._grid.at_node.dataset['flow__receiver_node'].values[inn]
+            # order lowest to highest
+            node_z = self._grid.at_node.dataset['topographic__elevation'][inn]
+            zdf = pd.DataFrame({'nodes':inn,'z':node_z})
+            zdf = zdf.sort_values('z')            
             
-            if type(rn) is not np.ndarray: # if only 1 cell, format int, change to np.array
-                rn = np.array([rn])
-            
-            rni = rn[np.where(rn != -1)]
-            
-            # initial receiving proportions from landslide
-            rp = self._grid.at_node.dataset['flow__receiver_proportions'].values[inn]
-            rp = rp[np.where(np.array(rp) > 0)]
-        
-            rvi = rp*iv # volume sent to each receving cell        
+            for ci, ni in enumerate(zdf['nodes'].values):
+                 
+                # get receiving nodes of node ni in landslide i
+                # print(ni)
+                rn = self._grid.at_node.dataset['flow__receiver_node'].values[ni]
+                rn = rn[np.where(rn != -1)]
+                
+                # receiving proportion of qso from cell n to each downslope cell
+                rp = self._grid.at_node.dataset['flow__receiver_proportions'].values[ni]
+                rp = rp[np.where(rp > 0)] # only downslope cells considered
+                
+                # get volume of cith node from list of node volumes for landslide i
+                vo = ivL[i][ci] 
+                rv = rp*vo
+           
+                # store receiving nodes and volumes in temporary arrays
+                rni = np.concatenate((rni,rn), axis = 0) # initial receiving node list
+                rvi = np.concatenate((rvi,rv), axis = 0) # initial step receiving node incoming volume list
+
+                # remove material from cell
+                self._grid.at_node.dataset['topographic__elevation'][ni] =  (                   
+                self._grid.at_node.dataset['topographic__elevation'][ni] - 
+                self._grid.at_node['soil__thickness'][ni])
+                
+                self._grid.at_node['soil__thickness'][ni] = 0
+                
+                # recompute flow directions
+                # update slope for next ls node
+                fd = FlowDirectorMFD(self._grid, surface="topographic__elevation_MW_surface", diagonals=True,
+                        partition_method = self.partition_method)
+                fd.run_one_step()
         
             # now loop through each receiving node, 
             # determine next set of recieving nodes
             # repeat until no more receiving nodes (material deposits)
             
-            DFcells[inn] = []
+            DFcells[ls] = []
             slpr = []
             c = 0
             c2= 0
-            arn = rni 
+            arn = rni
             arv = rvi
+            
             self.DEMdfD = {}
     
             while len(arn)>0 and c < self.itL:
-              
                 # release the initial landslide volume
                 # if first iteration, receiving cell = initial receiving list
                 # initial volume = volume/nps
@@ -372,15 +407,20 @@ class MassWastingRunout(Component):
                 # debris flow for iteration c
                 
                 # for each unique cell in receiving node list arn
-                arn_u = np.unique(arn) # unique arn list
+                arn_u = np.unique(arn).astype(int)  # unique arn list
                 self.D_L = []
 
                 # mass conintuity and next iteration precipitons
                 detaL = []
                 qsoL = []
                 rnL = []
+
+                # print('arn_u')
+                # print(arn_u)
+                # print(arn)
+                # print(arv)
                 for n in arn_u:
-                    
+
                     n = int(n)        
 
                     deta, qso, rn = self._scour_entrain_deposit(n, arv, arn)
@@ -417,7 +457,7 @@ class MassWastingRunout(Component):
                     cL[i].append(c)
                     self.df_evo_maps[i][c] = self._grid.at_node['topographic__elevation'].copy()
                     # save precipitions
-                    DFcells[inn].append(arn)
+                    DFcells[ls].append(arn)
         
                 
                 ## update slope fields after DEM has been updated
@@ -449,6 +489,7 @@ class MassWastingRunout(Component):
                     fd.run_one_step()
                                         
                     # remove debris flow depth from cells this iteration (depth returns next iteration)
+
                     self._grid.at_node['topographic__elevation_MW_surface'][arn_u] = self._grid.at_node['topographic__elevation_MW_surface'][arn_u]-qsoL
                         
                 DEMf = self._grid.at_node['topographic__elevation'].copy()
@@ -522,7 +563,7 @@ class MassWastingRunout(Component):
             
             ###### erosion function
             ######  
-            E = self._scour(n, qsi, slpn, opt = 1)
+            E = self._scour(n, qsi, slpn, opt = 2)
             
             
             # entrainment is mass conservation at cell
@@ -697,10 +738,9 @@ class MassWastingRunout(Component):
             zo = self._grid.at_node['topographic__elevation'][rn].min()
             zi = self._grid.at_node['topographic__elevation'][n]
             if zi<zo and qsi>(zo-zi) and self.opt3:
-                # print('opt3')
-                # print(str(zo-zi+(qsi-(zo-zi))*Lnum)+' ,'+str(qsi*Lnum))
-                # D = min(zo-zi+(qsi-(zo-zi))*Lnum,qsi*Lnum)
+
                 D = zo-zi+(qsi-(zo-zi))*Lnum
+
             else:
                 D = qsi*Lnum # deposition depth
         else:
