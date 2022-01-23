@@ -6,7 +6,7 @@ from landlab import FieldError, RasterModelGrid
 
 # scour_entrain_deposit
 @pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
-class TestScourEntrainDeposit(object):
+class Test_scour_entrain_deposit_updatePD(object):
     
     def test_arn_arv_values_1(self):
         """given a typical list of recieiving nodes and volumes,
@@ -29,7 +29,7 @@ class TestScourEntrainDeposit(object):
 
 # update_dem
 @pytest.mark.xfail(reason = "TDD, class is not yet implemented")
-class TestUpdateDEM(object):
+class Test_update_dem(object):
 
     def test_qs1_deta_value_1(self):
         """test dem updates correctly given depth of debris flow and deta"""
@@ -45,11 +45,12 @@ class TestUpdateDEM(object):
                 
     def test_not_a_float_or_int(self):
         """test throws an error if not a real number"""
-        
+ 
+class Test_update_channel_particle_diameter
     
 # deposit settles
 @pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
-class TestDepositSettles(object):
+class Test_settle(object):
     def test_dem_1(self):
         """test topographic__elevation and soil__thickness change correctly"""
 
@@ -76,7 +77,7 @@ class TestDepositSettles(object):
         
 # scour
 @pytest.mark.xfail(reason = "TDD, test class is not yet implemented") 
-class TestScour(object):
+class Test_scour(object):
 
     def test_opt1(self):
         
@@ -85,5 +86,18 @@ class TestScour(object):
     def test_opt2_hs_is_zero(self):
 
     
+@pytest.mark.xfail(reason = "TDD, test class is not yet implemented") 
+class Test_deposit(object):
+    
+    def test_opt1(self):
+        
+    def test_opt2(self):
+        
+    def test_opt2_hs_is_zero(self):
 
+@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")         
+class Test_particle_diameter_in:
+    
+    
+    
 
