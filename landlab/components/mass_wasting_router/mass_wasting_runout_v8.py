@@ -11,9 +11,6 @@ from landlab.components import(FlowDirectorD8,
                                 FlowDirectorSteepest)
 
 
-# this version contains the old and new function designs. The new functions were
-# written to decrease model time.
-
 class MassWastingRunout(Component):
     
     '''a cellular automata mass wasting model that routes an initial mass wasting  
@@ -588,6 +585,7 @@ class MassWastingRunout(Component):
             vin = np.sum(self.arv[self.arn == n])
             
             # incoming particle diameter (weighted average)
+            # pd_in = np.sum((self.arpd[self.arn == n])*(self.arv[self.arn == n])/vin)
             pd_in = self._particle_diameter_in(n,vin)
            
             # convert to flux/cell width
@@ -603,6 +601,10 @@ class MassWastingRunout(Component):
                 deta = D # (deposition)/cell area
                 # node grain size remains the same                
             else:
+                
+                ### deposition
+                D = self._deposit(qsi, slpn, rn, n)
+                ###
 
                 ### scour
                 if self.VaryDp:   
@@ -613,16 +615,13 @@ class MassWastingRunout(Component):
                 E, pd_up = self._scour(n, qsi, slpn, opt = opt, pd_in = pd_in)                
                 ###
 
-                ### deposition
-                # note: included entrained material
-                D = self._deposit(qsi+E, slpn, rn, n)
-                ###
-
-
                 # entrainment is mass conservation at cell
                 ## flow out
                 qso = qsi-D+E
-                           
+                
+                # particle diameter out (weighted average)
+                # pd_out = np.sum((pd_up*E+pd_in*(qsi-D))/qso)
+                pd_out = self._particle_diameter_out(pd_up,pd_in,qsi,E,D)               
                 ## change in node elevation
                 deta = D-E 
                               
@@ -638,8 +637,7 @@ class MassWastingRunout(Component):
                     vo = qso*self._grid.dx*self._grid.dy # convert qso to volume
                     rv = rp*vo
                
-                    # particle diameter out (weighted average)
-                    pd_out = self._particle_diameter_out(pd_up,pd_in,qsi,E,D)    
+                    # particle diameter
                     rpd = np.ones(len(rv))*pd_out
                
                     # store receiving nodes and volumes in temporary arrays
@@ -655,6 +653,13 @@ class MassWastingRunout(Component):
 
 
             # updated node particle diameter (weighted average)
+
+            # if D >0:
+            #     n_pd = (self._grid.at_node['particle__diameter'][n]*
+            #     self._grid.at_node['soil__thickness'][n]+
+            #     pd_in*D)/(D+self._grid.at_node['soil__thickness'][n])     
+            # else:
+            #     n_pd = self._grid.at_node['particle__diameter'][n]
             n_pd = self._particle_diameter_node(n,pd_in,E,D)
             
             # list of deposition depths at cells in iteration 
@@ -857,8 +862,10 @@ class MassWastingRunout(Component):
     
     def _particle_diameter_in(self,n,vin):
         """determine the weighted average particle diameter of the incoming
-        flow"""       
-        pd_in = np.sum((self.arpd[self.arn == n])*(self.arv[self.arn == n])/vin)        
+        flow"""
+        
+        pd_in = np.sum((self.arpd[self.arn == n])*(self.arv[self.arn == n])/vin)
+        
         return pd_in
 
 
@@ -866,25 +873,27 @@ class MassWastingRunout(Component):
         """determine the weighted average particle diameter of deposited +
         in-situ deposit"""
 
-        if (D+self._grid.at_node['soil__thickness'][n]-E > 0):
+
+        if (D+self._grid.at_node['soil__thickness'][n] > 0):
+            # 
             n_pd = (self._grid.at_node['particle__diameter'][n]* 
             (self._grid.at_node['soil__thickness'][n]-E)+ 
             pd_in*D)/(D+self._grid.at_node['soil__thickness'][n]-E)
         else:
-            n_pd = 0
+            n_pd = self._grid.at_node['particle__diameter'][n]
             
-        if (n_pd <0) or (np.isnan(n_pd)) or (np.isinf(n_pd)):
-            msg = "node particle diameter is negative, nan or inf"
-            raise ValueError(msg)        
+        if (n_pd <=0) or (np.isnan(n_pd)) or (np.isinf(n_pd)):
+            msg = "node particle diameter is zero, negative, nan or inf"
+            # raise ValueError(msg)
+        
         return n_pd
 
     
     def _particle_diameter_out(self,pd_up,pd_in,qsi,E,D):
         """determine the weighted average particle diameter of the outgoing
         flow"""
-        
+               
         pd_out = np.sum((pd_up*E+pd_in*(qsi-D))/(qsi-D+E))
-        
         
         if (pd_out <=0) or (np.isnan(pd_out)) or (np.isinf(pd_out)):
             msg = "out-flowing particle diameter is zero, negative, nan or inf"

@@ -143,10 +143,9 @@ mg.delete_field(loc = 'node', name = 'topographic__steepest_slope')
 fd = FlowDirectorMFD(mg, diagonals=True,
                       partition_method = 'slope')
 fd.run_one_step()
-
-mg.at_node['particle__diameter'] = np.random.uniform(0.1,0.35,z3.shape[0])
-
-
+np.random.seed(seed=7)
+mg.at_node['soil__thickness'] = np.random.uniform(0.85,1.15,z3.shape[0])
+mg.at_node['particle__diameter'] = np.random.uniform(0.05,0.25,z3.shape)
 # hillshade for plots
 mg.at_node['hillshade'] = mg.calc_hillshade_at_node(elevs=z3, alt=30., az=210.)
 
@@ -187,8 +186,8 @@ def plot_values(mg,field,xmin,xmax,ymin,ymax):
 xmin = 80; xmax = 165; ymin = 0; ymax = 80
 field = 'node_id'
 
-plt.figure('values',figsize = (12,8))
-imshow_grid(mg,'topographic__elevation',grid_units=('m','m'),var_name='Elevation(m)',plot_name = 'test',cmap = 'terrain')
+plt.figure(field,figsize = (12,8))
+imshow_grid(mg,'topographic__elevation',grid_units=('m','m'),var_name='Elevation(m)',plot_name = field,cmap = 'terrain')
 plt.plot(mg.node_x[31],mg.node_y[31],'r.')
 plot_values(mg,field,xmin,xmax,ymin,ymax)
 plt.xlim([xmin,xmax]); plt.ylim([ymin,ymax])
@@ -245,8 +244,8 @@ DebrisFlows = MassWastingRunout(mg,release_dict,mw_dict, save_mw_dem = True,
 xmin = 80; xmax = 165; ymin = 0; ymax = 80
 field = 'flow__link_to_receiver_node'
 
-plt.figure('values',figsize = (12,8))
-imshow_grid(mg,'topographic__elevation',grid_units=('m','m'),var_name='Elevation(m)',plot_name = 'test',cmap = 'terrain')
+plt.figure(field,figsize = (12,8))
+imshow_grid(mg,'topographic__elevation',grid_units=('m','m'),var_name='Elevation(m)',plot_name = field,cmap = 'terrain')
 plt.plot(mg.node_x[31],mg.node_y[31],'r.')
 plot_values(mg,field,xmin,xmax,ymin,ymax)
 plt.xlim([xmin,xmax]); plt.ylim([ymin,ymax])
