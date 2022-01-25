@@ -8,6 +8,9 @@ from landlab.components.mass_wasting_router import MassWastingRunout
 
 @pytest.fixture
 def example_mg():
+    """ mg defined from ascii copy of the test landscape, evolved from a
+    flat landscape scored with the network_sediment_transporter test channel 
+    network and uplifted with fluvial and hillslope erosion"""
     z = np.array([0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
     0,128.9351,125.1288,121.8951,121.5981,122.4279,125.8437,129.7477,129.1295,126.3637,126.2999,124.7179,124.6351,125.4752,128.8615,133.1735,137.5371,137.2143,132.6741,128.3733,125.1302,125.0378,124.6693,127.8634,131.9728,133.4289,130.0452,126.8978,126.5699,126.5475,129.8346,132.6919,130.9015,130.7604,132.5556,130.047,126.8566,125.8205,125.8549,126.3244,125.7389,124.8807,125.8977,127.7762,129.8573,131.8035,135.3904,138.5684,140.2276,143.8991,148.8203,154.0504,155.1635,158.6612,0,
     0,124.1115,117.3569,112.5745,112.7323,113.1907,118.3398,125.2376,123.1016,117.2754,118.3131,115.9254,115.9418,116.3323,120.6846,125.9639,133.3221,132.9193,125.5336,120.1675,115.8964,116.7199,115.3059,119.9545,126.9288,128.5662,122.3407,117.7149,118.0632,117.2544,123.5031,126.6386,122.0492,121.33,126.0262,123.8691,118.1511,117.2885,117.5388,118.4573,117.6056,116.1146,117.4141,119.5219,121.7154,123.2019,129.12,130.8789,131.741,136.3899,142.5842,148.0284,144.5167,150.9963,0,
@@ -135,9 +138,10 @@ def example_mg():
 
 @pytest.fixture
 def example_MWRu(example_mg):
-    # esri ascii version of the test landscape, evolved from an uplifting, flat landscape 
-    # scored with the network_sediment_transporter test channel network and sugject to
-    # fluvial and hillslope erosion transport rules
+    """soil depth and particle diameter are uniform accross landscape, default 
+    iteration limit (1000). Option 1 True, option 2 True, option 3 True, 
+    option 4 True"""
+
     
 
     nn = example_mg.number_of_nodes
@@ -168,7 +172,9 @@ def example_MWRu(example_mg):
 
 @pytest.fixture
 def example_MWRu_2(example_mg):
-    """random soil depth"""
+    """random soil depth and particle diameter, set iteration limit to 0, prepares
+    landslides for routing, suitable for testing particle diameter tracking
+    functions, option 1 False, option 2 True, option 3 True, option 4 True"""
     np.random.seed(seed=7)
     nn = example_mg.number_of_nodes
     example_mg.at_node['particle__diameter'] = np.random.uniform(0.05,0.25,nn)
@@ -194,7 +200,116 @@ def example_MWRu_2(example_mg):
                                      opt1 = False, opt2 = True, opt3 = True, opt4 = True)
     
     # set iteration limit to 0, will prepare landslides for routing, but not route
-    example_MWRu.itL = 0
+    # example_MWRu.itL = 0
+    
+    # example_MWRu.run_one_step(dt = 0)
+    
+    return(example_MWRu)
+
+@pytest.fixture
+def example_MWRu_3(example_mg):
+    """random soil depth and particle diameter, set iteration limit to 8, routes
+    landslide to a midchannel location suitable for test the deposit and scour 
+    functions, option 1 False, option 2 True, option 3 True, option 4 True"""
+    np.random.seed(seed=7)
+    nn = example_mg.number_of_nodes
+    example_mg.at_node['particle__diameter'] = np.random.uniform(0.05,0.25,nn)
+    example_mg.at_node['mass__wasting_id'] = (np.ones(nn)*0).astype(int)
+    example_mg.at_node['soil__thickness'] = np.random.uniform(0.35,0.75,nn)
+    ls1 = np.array([570,516,571])
+    
+    example_mg.at_node['mass__wasting_id'][ls1] = int(1)    
+    
+    
+    npu = [1] 
+    nid = [1] 
+    slpc = [0.10]   
+    SD = 0.1
+    cs = 0.0125
+    
+    mw_dict = {'critical slope':slpc, 'minimum flux':SD,
+                'scour coefficient':cs}
+    
+    release_dict = {'number of pulses':npu, 'iteration delay':nid }
+    
+    example_MWRu = MassWastingRunout(example_mg,release_dict,mw_dict, save_mw_dem = True,
+                                     opt1 = False, opt2 = True, opt3 = True, opt4 = True)
+    
+
+    example_MWRu.itL = 8
+    
+    example_MWRu.run_one_step(dt = 0)
+    
+    return(example_MWRu)
+
+
+@pytest.fixture
+def example_MWRu_4(example_mg):
+    """random soil depth and particle diameter, set iteration limit to 8, routes
+    landslide to a midchannel location suitable for test the deposit and scour 
+    functions, option 1 True, option 2 False, option 3 True, option 4 True"""
+    np.random.seed(seed=7)
+    nn = example_mg.number_of_nodes
+    example_mg.at_node['particle__diameter'] = np.random.uniform(0.05,0.25,nn)
+    example_mg.at_node['mass__wasting_id'] = (np.ones(nn)*0).astype(int)
+    example_mg.at_node['soil__thickness'] = np.random.uniform(0.35,0.75,nn)
+    ls1 = np.array([570,516,571])
+    
+    example_mg.at_node['mass__wasting_id'][ls1] = int(1)    
+    
+    
+    npu = [1] 
+    nid = [1] 
+    slpc = [0.10]   
+    SD = 0.1
+    cs = 0.0125
+    
+    mw_dict = {'critical slope':slpc, 'minimum flux':SD,
+                'scour coefficient':cs}
+    
+    release_dict = {'number of pulses':npu, 'iteration delay':nid }
+    
+    example_MWRu = MassWastingRunout(example_mg,release_dict,mw_dict, save_mw_dem = True,
+                                     opt1 = False, opt2 = False, opt3 = True, opt4 = True)
+    
+
+    example_MWRu.itL = 12
+    
+    example_MWRu.run_one_step(dt = 0)
+    
+    return(example_MWRu)
+
+@pytest.fixture
+def example_MWRu_5(example_mg):
+    """random soil depth and particle diameter, set iteration limit to 8, routes
+    landslide to a midchannel location suitable for test the deposit and scour 
+    functions, option 1 True, option 2 True, option 3 True, option 4 True"""
+    np.random.seed(seed=7)
+    nn = example_mg.number_of_nodes
+    example_mg.at_node['particle__diameter'] = np.random.uniform(0.05,0.25,nn)
+    example_mg.at_node['mass__wasting_id'] = (np.ones(nn)*0).astype(int)
+    example_mg.at_node['soil__thickness'] = np.random.uniform(0.35,0.75,nn)
+    ls1 = np.array([570,516,571])
+    
+    example_mg.at_node['mass__wasting_id'][ls1] = int(1)    
+    
+    
+    npu = [1] 
+    nid = [1] 
+    slpc = [0.10]   
+    SD = 0.1
+    cs = 0.0125
+    
+    mw_dict = {'critical slope':slpc, 'minimum flux':SD,
+                'scour coefficient':cs}
+    
+    release_dict = {'number of pulses':npu, 'iteration delay':nid }
+    
+    example_MWRu = MassWastingRunout(example_mg,release_dict,mw_dict, save_mw_dem = True,
+                                     opt1 = False, opt2 = True, opt3 = True, opt4 = True)
+    
+
+    example_MWRu.itL = 12
     
     example_MWRu.run_one_step(dt = 0)
     

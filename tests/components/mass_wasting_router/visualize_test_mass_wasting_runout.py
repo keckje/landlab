@@ -143,27 +143,35 @@ mg.delete_field(loc = 'node', name = 'topographic__steepest_slope')
 fd = FlowDirectorMFD(mg, diagonals=True,
                       partition_method = 'slope')
 fd.run_one_step()
-np.random.seed(seed=7)
-mg.at_node['soil__thickness'] = np.random.uniform(0.85,1.15,z3.shape[0])
-mg.at_node['particle__diameter'] = np.random.uniform(0.05,0.25,z3.shape)
+
 # hillshade for plots
 mg.at_node['hillshade'] = mg.calc_hillshade_at_node(elevs=z3, alt=30., az=210.)
 
+np.random.seed(seed=7)
+nn = mg.number_of_nodes
+mg.at_node['particle__diameter'] = np.random.uniform(0.05,0.25,nn)
+mg.at_node['mass__wasting_id'] = (np.ones(nn)*0).astype(int)
+mg.at_node['soil__thickness'] = np.random.uniform(0.35,0.75,nn)
 
-# confirm that topo matches nmg for later mass wasting router tests
-# nmg from nmg tests
-y_of_node = (0, 100, 200, 200, 300, 400, 400, 125)
-x_of_node = np.array([0, 0, 100, -50, -100, 50, -150, -100])+150
-nodes_at_link = ((1, 0), (2, 1), (1, 7), (3, 1), (3, 4), (4, 5), (4, 6))
-nmg = NetworkModelGrid((y_of_node, x_of_node), nodes_at_link)
-
-#view existing landscape
-plt.figure('topo')
-imshow_grid(mg,'topographic__elevation',grid_units=('m','m'),var_name='Elevation(m)')
-graph.plot_links(nmg,color = 'black', with_id=False, linewidth=1)
-graph.plot_nodes(nmg,color = 'red', with_id=False,markersize=3)
+# mass wasting areas
+ls1 = np.array([570,516,571])
+mg.at_node['mass__wasting_id'] = (np.ones(z3.size)*0).astype(int)
+mg.at_node['mass__wasting_id'][ls1] = int(1)
+# mg.at_node['mass__wasting_id'][ls2] = 2
 
 
+# # confirm that topo matches nmg for later mass wasting router tests
+# # nmg from nmg tests
+# y_of_node = (0, 100, 200, 200, 300, 400, 400, 125)
+# x_of_node = np.array([0, 0, 100, -50, -100, 50, -150, -100])+150
+# nodes_at_link = ((1, 0), (2, 1), (1, 7), (3, 1), (3, 4), (4, 5), (4, 6))
+# nmg = NetworkModelGrid((y_of_node, x_of_node), nodes_at_link)
+
+# #view existing landscape
+# plt.figure('topo')
+# imshow_grid(mg,'topographic__elevation',grid_units=('m','m'),var_name='Elevation(m)')
+# graph.plot_links(nmg,color = 'black', with_id=False, linewidth=1)
+# graph.plot_nodes(nmg,color = 'red', with_id=False,markersize=3)
 
 
 
@@ -198,51 +206,52 @@ plt.clim(z_d.min(),z_d.max()*1.5)
 ###
 
 
-# tests
-
-ls1 = np.array([570,516,571])
-ls2 = np.array([793,738])
-
-mg.at_node['mass__wasting_id'] = (np.ones(z3.size)*0).astype(int)
-mg.at_node['mass__wasting_id'][ls1] = int(1)
-# mg.at_node['mass__wasting_id'][ls2] = 2
 
 
 
-#%% Mass wasting runout
+
+#%% Mass wasting runout, full run
 
 # view test topography and landslide locations
 LLT.plot_node_field_with_shaded_dem(mg,field = 'mass__wasting_id',fontsize = 10)
 LLT.plot_node_field_with_shaded_dem(mg,field = 'soil__thickness',fontsize = 10)
 
-# debris flow control parameters
-# how is the volume released
-npu = [1] # number of pulses, list for each landslide
-nid = [1] # delay between pulses (iterations), list for each landslide
 
-# critical slope at which debris flow stops
-slpc = [0.10]
+mg.at_node['topographic__elevation'][523] = mg.at_node['topographic__elevation'][523]+3
+fd = FlowDirectorMFD(mg, diagonals=True,
+                      partition_method = 'slope')
+fd.run_one_step()
 
-# material stops at cell when volume is below this, 
-SD = 0.1#0.033 #P3.3
 
-# very sensitive to entrainment coefficient
-cs = 0.0125#0.0365#0.135#0365 #P.0365
+
+LLT.plot_node_field_with_shaded_dem(mg,field = 'topographic__elevation',fontsize = 10)
+
+npu = [1] 
+nid = [1] 
+slpc = [0.10]   
+SD = 0.1
+cs = 0.0125
 
 mw_dict = {'critical slope':slpc, 'minimum flux':SD,
             'scour coefficient':cs}
 
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
+example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save_mw_dem = True,
+                                 opt1 = False, opt2 = False, opt3 = True, opt4 = True)
 
-DebrisFlows = MassWastingRunout(mg,release_dict,mw_dict, save_mw_dem = True,
-                                 opt1 = False, opt2 = True, opt3 = True, opt4 = True)# DebrisFlowScourAndDeposition(mg, df_para_dict)
+
+example_MWRu.itL = 5
+
+example_MWRu.run_one_step(dt = 0)
+
+
 
 
 #%%
 # get values for tests
 xmin = 80; xmax = 165; ymin = 0; ymax = 80
-field = 'flow__link_to_receiver_node'
+field = 'particle__diameter'
 
 plt.figure(field,figsize = (12,8))
 imshow_grid(mg,'topographic__elevation',grid_units=('m','m'),var_name='Elevation(m)',plot_name = field,cmap = 'terrain')
@@ -277,23 +286,23 @@ plt.clim(z_d.min(),z_d.max()*1.5)
 
 #%%
 
-DebrisFlows.run_one_step(dt = 0)
+# example_MWRu.run_one_step(dt = 0)
 
 #%%
 Visualize = True
 if Visualize:
     # plot how DEM changes
-    for i in np.arange(0,len(DebrisFlows.ls_ids)):
+    for i in np.arange(0,len(example_MWRu.ls_ids)):
     
-        for c in DebrisFlows.df_evo_maps[i].keys():                  
+        for c in example_MWRu.df_evo_maps[i].keys():                  
             plt.figure('dif'+str(c)+str(i),figsize=(12, 12))
-            mg.at_node['df_topo'] = DebrisFlows.df_evo_maps[i][c]-mg.at_node['topographic__initial_elevation']
+            mg.at_node['df_topo'] = example_MWRu.df_evo_maps[i][c]-mg.at_node['topographic__initial_elevation']
             # imshow_grid_at_node(mg,'df_topo',cmap ='RdBu_r')  
             LLT.plot_node_field_with_shaded_dem(mg,field = 'df_topo', fontsize = 10,cmap = 'RdBu_r', plot_name = 'dem dif{},{}'.format(i,c) )
 
             plt.xticks(fontsize= 8 )
             plt.yticks(fontsize= 8 )
-            plt.clim(-1,1)
+            plt.clim(-.1,.1)
             plt.xlim([xmin*.8,xmax*1.2]); plt.ylim([ymin*.3,ymax])
 
 # scour_entrain_deposit

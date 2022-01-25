@@ -564,7 +564,11 @@ class MassWastingRunout(Component):
         self.arn_r = arn_r
         self.arpd_r = arpd_r
 
-
+    #def vin_qin_pdin(self):
+        #"""determine volume, depth and grain size of incoming material"""
+        
+    #def temp_update_MW_dem
+        #"""update the dem with the temporary flow depth and slope of MW dem (slpn)
     
     def _scour_entrain_deposit_updatePD(self, arn_u):
         """ mass conservation at a grid cell: determines the erosion, deposition
@@ -574,6 +578,7 @@ class MassWastingRunout(Component):
             """function for iteratively determing scour, entrainment and
             deposition depths using node id to look up incoming flux and
             downslope nodes and slopes"""            
+            # np.array([n, vin, qsi, pd_in])
             
             # get average elevation of downslope cells
             # receiving nodes (cells)
@@ -585,14 +590,16 @@ class MassWastingRunout(Component):
             slpn = self._grid.at_node['topographic__steepest_slope'][n].max()
             
             # incoming volume: sum of all upslope volume inputs
-            vin = np.sum(self.arv[self.arn == n])
+            vin = np.sum(self.arv[self.arn == n]) #move
             
             # incoming particle diameter (weighted average)
-            pd_in = self._particle_diameter_in(n,vin)
+            pd_in = self._particle_diameter_in(n,vin) # move
+            # print("n{}, vin{}, pd_in{}".format(n,vin,pd_in))
            
             # convert to flux/cell width
-            qsi = vin/(self._grid.dx*self._grid.dx)
-                                
+            qsi = vin/(self._grid.dx*self._grid.dx) #move
+            if n == 522:
+                print(qsi)                    
             # additional constraint to control debris flow behavoir
             # if flux to a cell is below threshold, debris is forced to stop
             if qsi <=self.SD:
@@ -618,16 +625,20 @@ class MassWastingRunout(Component):
                 D = self._deposit(qsi+E, slpn, rn, n)
                 ###
 
-
                 # entrainment is mass conservation at cell
                 ## flow out
                 qso = qsi-D+E
-                           
+                
+                # small qso are considered zero
+                qso  = np.round(qso,decimals = 8)
+                if n == 522:
+                    print("qso-----{}".format(qsi))                              
                 ## change in node elevation
                 deta = D-E 
                               
                 # material stops at node if flux / cell width is 0 OR node is a 
                 # boundary node
+                
                 if qso>0 and n not in self._grid.boundary_nodes: 
                     
                     # receiving proportion of qso from cell n to each downslope cell
@@ -835,7 +846,7 @@ class MassWastingRunout(Component):
         since using flux per unit contour width (rather than flux), 
         L is (1-(slpn/slpc)**2) rather than dx/(1-(slpn/slpc)**2)  """
         
-        if self.opt1:
+        if self.opt1: # move this
             self.slpc = self.a*self._grid.at_node['drainage_area'][n]**self.b
         
         Lnum = np.max([(1-(slpn/self.slpc)**2),0])
@@ -858,7 +869,13 @@ class MassWastingRunout(Component):
     def _particle_diameter_in(self,n,vin):
         """determine the weighted average particle diameter of the incoming
         flow"""       
-        pd_in = np.sum((self.arpd[self.arn == n])*(self.arv[self.arn == n])/vin)        
+        if (vin == 0):
+            pd_in = 0
+        elif (np.isnan(vin)) or (np.isinf(vin)):
+            msg = "in-flowing volume is nan or inf"
+            raise ValueError(msg)
+        else:           
+            pd_in = np.sum((self.arpd[self.arn == n])*(self.arv[self.arn == n])/vin)        
         return pd_in
 
 
@@ -875,6 +892,7 @@ class MassWastingRunout(Component):
             
         if (n_pd <0) or (np.isnan(n_pd)) or (np.isinf(n_pd)):
             msg = "node particle diameter is negative, nan or inf"
+            # print("n_pd{}, pd_in{}, E{}, D{}, n{}".format(n_pd, pd_in, E, D, n))
             raise ValueError(msg)        
         return n_pd
 
@@ -888,6 +906,7 @@ class MassWastingRunout(Component):
         
         if (pd_out <=0) or (np.isnan(pd_out)) or (np.isinf(pd_out)):
             msg = "out-flowing particle diameter is zero, negative, nan or inf"
+            # print("pd_up{}, pd_in{}, qsi{}, E{}, D{}".format(pd_up, pd_in, qsi, E, D))
             raise ValueError(msg)
         
         return pd_out
