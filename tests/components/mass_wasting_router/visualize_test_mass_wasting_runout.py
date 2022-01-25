@@ -238,10 +238,10 @@ mw_dict = {'critical slope':slpc, 'minimum flux':SD,
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
 example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save_mw_dem = True,
-                                 opt1 = False, opt2 = False, opt3 = True, opt4 = True)
+                                 opt1 = False, opt2 = True, opt3 = True, opt4 = True)
 
 
-example_MWRu.itL = 5
+example_MWRu.itL = 8
 
 example_MWRu.run_one_step(dt = 0)
 
