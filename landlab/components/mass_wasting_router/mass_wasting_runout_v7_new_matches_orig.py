@@ -322,7 +322,8 @@ class MassWastingRunout(Component):
             self.nid = np.ones(len(innL))*self.nid
         
         
-        # data containers for saving model images and behavior statistics       
+        # data containers for saving model images and behavior statistics
+        # DFcells = {}            
         cL = {}      
         self.enL = [] # entrainment depth / regolith depth
         self.dfdL = [] # incoming debris flow thickness (qsi)
@@ -398,26 +399,31 @@ class MassWastingRunout(Component):
                 
                 self._grid.at_node['soil__thickness'][ni] = 0
                 
-                
-                # update slope to reflect node material removed from dem
-                self._update_topographic_slope()
+                # recompute flow directions
+                # update slope for next mw node
+                fd = FlowDirectorMFD(self._grid, surface="topographic__elevation", diagonals=True,
+                        partition_method = self.partition_method)
+                fd.run_one_step()
         
             # now loop through each receiving node in list rni, 
             # determine next set of recieving nodes
             # repeat until no more receiving nodes (material deposits)
-                        
+            
+            
             # data for tests
             pd_r[ls] = []
             st_r[ls] = []
             tss_r[ls] = []
             frn_r[ls] = []
-            te_r[ls] = []            
+            te_r[ls] = []
+            
             arv_r[ls] = []
             arn_r[ls] = []
             arpd_r[ls] = []          
             
+            
             c = 0 # runout-out computation iteration counter
-            c2= 0 # mass wasting event delayed-release counter
+            c2= 0 # mass wasting event delay counter
             
             self.arn = rni
             self.arv = rvi
@@ -442,77 +448,50 @@ class MassWastingRunout(Component):
                         # update pulse counter
                         c2+=1        
                 
-                # receiving node, volume and particle diameter temporary arrays
-                # that become the arrays for the next model step (iteration)
                 self.arn_ns = np.array([])
                 self.arv_ns = np.array([])
                 self.arpd_ns = np.array([])
                 
+                # mwh = [] # list of debris flow thickness at each cell that has
+                # debris flow for iteration c
                 
                 # for each unique cell in receiving node list self.arn
                 arn_u = np.unique(self.arn).astype(int)  # unique arn list
-                
+                self.D_L = []
 
-                # determine the incoming volume and depth to each node in arn_u
+                # mass conintuity and next iteration precipitons
+                detaL = []
+                qsoL = []
+                rnL = []
+                
                 self.vqdat = self.vin_qsi(arn_u) ##
                        
                 if self.opt2:
-                    # update slope fields using the dem surface for scour,
-                    # erosion and qso computations
-                    self._update_topographic_slope()
+                    # update slope fields using the dem surface 
+                    fd = FlowDirectorMFD(self._grid, surface="topographic__elevation", diagonals=True,
+                            partition_method = self.partition_method)
+                    fd.run_one_step()
+                   
+                ### scour_entrain_deposit
 
-                # determine scour, entrain, deposition and outflow depths and
-                # the outflowing particle diameter, arranged in array nudat
                 self.nudat = self._scour_entrain_deposit_updatePD()
                 
                 ###
 
-                # update grid field: topographic__elevation with the values in 
-                # nudat
+                ### update grid field: topographic__elevation (z)
                 self._update_dem()
 
-                ### update grid field: particle__diameter with the values in 
-                # nudat
+                ### update grid field: particle__diameter
                 if self.VaryDp:
                     self._update_channel_particle_diameter()
                 
 
-                ### update slope fields after DEM has been updated for settlement
-                self._update_topographic_slope()                   
-                       
-                if self.opt4:
-                    self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
-                    ### settle unrealistically tall mounds in the deposit                    
-                    self._settle(arn_u)
-                    
-                if self.opt2:
-                    # update the mass wasting surface dem
-                    self._update_E_dem() ##                                 
-                    # update slope for routing using energy slope
-                    self._update_energy_slope()
-                else:
-                    # update slope using routing using topographic slope
-                    self._update_topographic_slope()                                    
-
-                # once all cells in iteration have been evaluated, temporary receiving
-                # node, node volume and node particle diameter arrays become arrays 
-                # for next iteration
-                self.arn = self.arn_ns.astype(int)
-                self.arv = self.arv_ns #   
-                self.arpd = self.arpd_ns
-        
+                                
+                
+                ### save maps for video
 
                 if self.save:
-
                     cL[mw_i].append(c)
-                    
-                    DEMf = self._grid.at_node['topographic__elevation'].copy()
-                    
-                    DEMdf_r = DEMf-self._grid.at_node['topographic__initial_elevation']
-            
-                    self.DEMdfD[str(c)] = {'DEMdf_r':DEMdf_r.sum()*self._grid.dx*self._grid.dy}     
-                    
-                    ### save maps for video
                     self.df_evo_maps[mw_i][c] = self._grid.at_node['topographic__elevation'].copy()
 
                     # data for test
@@ -524,14 +503,75 @@ class MassWastingRunout(Component):
                     arv_r[ls].append(self.arv)
                     arn_r[ls].append(self.arn)
                     arpd_r[ls].append(self.arpd)     
+                
+                
+                ### update slope fields after DEM has been updated for settlement
 
+                # fd = FlowDirectorDINF(self._grid)                   
+                fd = FlowDirectorMFD(self._grid, surface="topographic__elevation" ,diagonals=True,
+                                partition_method = self.partition_method)
+                fd.run_one_step()
 
+                if self.save:
+                    DEMf = self._grid.at_node['topographic__elevation'].copy()
+                    
+                    DEMdf_r = DEMf-self._grid.at_node['topographic__initial_elevation']
+                       
+                if self.opt4:
+
+                    self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
+                                        
+                    ### settle unrealistically tall mounds in the deposit
+                    
+                    self._settle(arn_u)
+                    
+                    ###
+                    
+                    
+                if self.opt2:
+
+                
+                    # update the mass wasting surface dem
+                    self._update_mw_dem() ##
+
+                                 
+                    # update slope using energy surface for routing next iteration
+                    fd = FlowDirectorMFD(self._grid, surface="topographic__elevation_Energy", diagonals=True,
+                            partition_method = self.partition_method)
+                    fd.run_one_step()
+                # else:
+                    # # update slope using energy surface for routing next iteration
+                    # fd = FlowDirectorMFD(self._grid, surface="topographic__elevation", diagonals=True,
+                    #         partition_method = self.partition_method)
+                    # fd.run_one_step()
+                        
+                    # remove debris flow depth from cells this iteration (depth returns next iteration)
+                    # qsoL = self.nudat[:,2].astype(float)
+                    # print(qsoL)
+                    # self._grid.at_node['topographic__elevation_Energy'][arn_u] = self._grid.at_node['topographic__elevation_Energy'][arn_u]-qsoL
+                        
+                
+                if self.save:
+                    DEMf = self._grid.at_node['topographic__elevation'].copy()
+                    
+                    DEMdf_rd = DEMf-self._grid.at_node['topographic__initial_elevation']
+            
+                    self.DEMdfD[str(c)] = {'DEMdf_r':DEMdf_r.sum()*self._grid.dx*self._grid.dy,
+                                      'DEMdf_rd':DEMdf_rd.sum()*self._grid.dx*self._grid.dy}     
+              
+                # once all cells in iteration have been evaluated, temporary receiving
+                # node, node volume and node particle diameter arrays become arrays 
+                # for next iteration
+                self.arn = self.arn_ns.astype(int)
+                arn_u = np.unique(self.arn) # unique arn list
+                self.arv = self.arv_ns #   
+                self.arpd = self.arpd_ns
+        
                 # update iteration counter
                 c+=1
                 
                 if c%20 ==0:
-                    print(c)  
-
+                    print(c)            
             
         # data for test
         self.pd_r = pd_r
@@ -544,16 +584,20 @@ class MassWastingRunout(Component):
         self.arpd_r = arpd_r
 
     def vin_qsi(self,arn_u):
-        """determine volume and depth of incoming material"""
+        """determine volume and depth of incoming material using the energy DEM
+        slope"""
 
-        def VQ(n):           
+        def VQ(n):
+            
             # total incoming volume
-            vin = np.sum(self.arv[self.arn == n])
+            vin = np.sum(self.arv[self.arn == n]) #move
+
             # convert to flux/cell width
-            qsi = vin/(self._grid.dx*self._grid.dx)
+            qsi = vin/(self._grid.dx*self._grid.dx) #move
+ 
             return vin, qsi
 
-        ll=np.array([VQ(n) for n in arn_u], dtype=object)     
+        ll=np.array([VQ(n) for n in arn_u],dtype=object)     
         arn_ur = np.reshape(arn_u,(-1,1))
         vqdat = np.concatenate((arn_ur,ll),axis=1)
     
@@ -566,27 +610,33 @@ class MassWastingRunout(Component):
         debris flow friction angle, particle diameter and the underlying DEM
         slope"""
         
-        # list of deposition depths, used in settlement algorithm
-        self.D_L = []
         def SEDU(vq_r):
             """function for iteratively determing scour, entrainment and
             deposition depths using node id to look up incoming flux and
             downslope nodes and slopes"""            
-
+            # np.array([n, vin, qsi])
             n = vq_r[0]; vin = vq_r[1]; qsi = vq_r[2]
             
             # get average elevation of downslope cells
             # receiving nodes (cells)
             rn = self._grid.at_node.dataset['flow__receiver_node'].values[n]
             rn = rn[np.where(rn != -1)]            
+            # rn = rn[np.where(rp > th)]
                
             # slope at cell (use highest slope)
             slpn = self._grid.at_node['topographic__steepest_slope'][n].max()
             
+            # incoming volume: sum of all upslope volume inputs
+            # vin = np.sum(self.arv[self.arn == n]) #move
             
             # incoming particle diameter (weighted average)
             pd_in = self._particle_diameter_in(n,vin) # move
-                            
+            # print("n{}, vin{}, pd_in{}".format(n,vin,pd_in))
+           
+            # convert to flux/cell width
+            # qsi = vin/(self._grid.dx*self._grid.dx) #move
+            # if n == 522:
+            #     print(qsi)                    
             # additional constraint to control debris flow behavoir
             # if flux to a cell is below threshold, debris is forced to stop
             if qsi <=self.SD:
@@ -671,38 +721,39 @@ class MassWastingRunout(Component):
         return nudat
 
     
-    def _update_E_dem(self):
-        """update the elevation of the energy dem"""
+    def _update_mw_dem(self):
+        """update the topographic elevatic elevation of the mass wasting dem"""
     
         n = self.vpqdat[:,0].astype(int); qsi = self.vpqdat[:,2]; 
-        # Energy dem
+
+        # Topographic elevation MW surface - top surface of the dem + moving mass wasting material thickness
         self._grid.at_node['topographic__elevation_Energy'][n] = self._grid.at_node['topographic__elevation'].copy()[n]+qsi        
 
-    def _update_energy_slope(self):
-        """updates the topographic__slope and flow directions fields using the 
-        topographic__elevation_Energy field"""
-        fd = FlowDirectorMFD(self._grid, surface="topographic__elevation_Energy", diagonals=True,
-                partition_method = self.partition_method)
-        fd.run_one_step()
         
     def _update_dem(self):
         """updates the topographic elevation of the landscape dem and soil 
         thickness fields"""
                
-        n = self.nudat[:,0].astype(int); deta = self.nudat[:,1]
-
-        self._grid.at_node['soil__thickness'][n] = self._grid.at_node['soil__thickness'][n]+deta   
-        # topographic dem
+        n = self.nudat[:,0].astype(int); deta = self.nudat[:,1]; #qso = self.nudat[:,2]; #mwh = qso
+        
+        # Regolith - difference between the fresh bedrock surface and the top surface of the dem
+        self._grid.at_node['soil__thickness'][n] = self._grid.at_node['soil__thickness'][n]+deta 
+    
+        # # update raster model grid regolith thickness and dem
+        # if self.opt2:
+            
+        #     # topographic elevation - does not include thickness of moving debris flow
+        #     self._grid.at_node['topographic__elevation'][n] = self._grid.at_node['topographic__elevation'][n]+deta                    
+        #     # keep list of debris flow depth
+                                   
+        #     # Topographic elevation MW surface - top surface of the dem + moving mass wasting material thickness
+        #     self._grid.at_node['topographic__elevation_Energy'][n] = self._grid.at_node['topographic__elevation'].copy()[n]+qso
+            
+        # else:
+      
+        # Topographic elevation - top surface of the dem
         self._grid.at_node['topographic__elevation'][n] = self._grid.at_node['topographic__elevation'][n]+deta
 
-
-
-    def _update_topographic_slope(self):
-        """updates the topographic__slope and flow directions fields using the 
-        topographic__elevation field"""
-        fd = FlowDirectorMFD(self._grid, surface="topographic__elevation", diagonals=True,
-                partition_method = self.partition_method)
-        fd.run_one_step()
     
     def _update_channel_particle_diameter(self):
         """ for each unique node in receiving node list, update the grain size
