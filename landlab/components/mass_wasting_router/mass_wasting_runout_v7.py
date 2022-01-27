@@ -10,10 +10,6 @@ from landlab.components import(FlowDirectorD8,
                                 FlowDirectorMFD, 
                                 FlowDirectorSteepest)
 
-
-# this version contains the old and new function designs. The new functions were
-# written to decrease model time.
-
 class MassWastingRunout(Component):
     
     '''a cellular automata mass wasting model that routes an initial mass wasting  
