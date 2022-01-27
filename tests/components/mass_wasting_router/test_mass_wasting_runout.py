@@ -106,7 +106,7 @@ class Test_deposit(object):
         slpn = example_MWRu_2._grid.at_node['topographic__steepest_slope'][n].max()
         qsi = 3
         D = example_MWRu_2._deposit(qsi,slpn,rn,n)
-        expected_D = 1.13616
+        expected_D = 2.038154
     
         np.testing.assert_allclose(D, expected_D,rtol = 1e-4)
 
@@ -122,13 +122,13 @@ class Test_deposit(object):
         slpn = example_MWRu_2._grid.at_node['topographic__steepest_slope'][n].max()
         qsi = 3
         D = example_MWRu_2._deposit(qsi,slpn,rn,n)
-        expected_D = 1.35937
+        expected_D = 2.888247
     
         np.testing.assert_allclose(D, expected_D,rtol = 1e-4)
 
 
     def test_opt2_True_Normal_Values_2(self, example_MWRu):
-        """"set iteration limit to 12, routes landslide to a steep, mid channel
+        """"set iteration limit to 6, routes landslide to a steep, mid channel
         location. place 3 m tall dam of material downslope of node 522 (523) 
         test deposition matches expected, option 1 False, option 2 True, 
         option 3 True, option 4 True"""

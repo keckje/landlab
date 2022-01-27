@@ -11,8 +11,7 @@ from landlab.components import(FlowDirectorD8,
                                 FlowDirectorSteepest)
 
 
-# this version contains the old and new function designs. The new functions were
-# written to decrease model time.
+# this version before change in computation sequence
 
 class MassWastingRunout(Component):
     

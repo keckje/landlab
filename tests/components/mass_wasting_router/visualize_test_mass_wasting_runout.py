@@ -216,6 +216,7 @@ plt.clim(z_d.min(),z_d.max()*1.5)
 LLT.plot_node_field_with_shaded_dem(mg,field = 'mass__wasting_id',fontsize = 10)
 LLT.plot_node_field_with_shaded_dem(mg,field = 'soil__thickness',fontsize = 10)
 
+            
 
 mg.at_node['topographic__elevation'][523] = mg.at_node['topographic__elevation'][523]+3
 fd = FlowDirectorMFD(mg, diagonals=True,
@@ -225,6 +226,8 @@ fd.run_one_step()
 
 
 LLT.plot_node_field_with_shaded_dem(mg,field = 'topographic__elevation',fontsize = 10)
+plt.xlim([xmin*.8,xmax*1.2]); plt.ylim([ymin*.3,ymax])
+plt.clim(20,60)
 
 npu = [1] 
 nid = [1] 
@@ -238,10 +241,10 @@ mw_dict = {'critical slope':slpc, 'minimum flux':SD,
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
 example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save_mw_dem = True,
-                                 opt1 = False, opt2 = True, opt3 = True, opt4 = True)
+                                 opt1 = False, opt2 = False, opt3 = True, opt4 = True)
 
 
-example_MWRu.itL = 8
+# example_MWRu.itL = 6
 
 example_MWRu.run_one_step(dt = 0)
 
@@ -302,7 +305,7 @@ if Visualize:
 
             plt.xticks(fontsize= 8 )
             plt.yticks(fontsize= 8 )
-            plt.clim(-.1,.1)
+            plt.clim(-.01,.01)
             plt.xlim([xmin*.8,xmax*1.2]); plt.ylim([ymin*.3,ymax])
 
 # scour_entrain_deposit
