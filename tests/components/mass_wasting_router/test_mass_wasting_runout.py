@@ -81,105 +81,232 @@ class Test_settle(object):
         # bad value
         
 
-@pytest.mark.xfail(reason = "TDD, test class is not yet implemented") 
+# @pytest.mark.xfail(reason = "TDD, test class is not yet implemented") 
 class Test_scour(object):
 
-    def test_opt1(self):
-        """"""        
-    def test_opt2(self):
-        """"""        
-    def test_opt2_hs_is_zero(self):
+    def test_opt1_normal_1(self, example_square_MWRu):
+        """""" 
+        n = 24
+        qsi = 2
+        slope = 0.087489
+        opt = 1
+        depth = qsi        
+        E = example_square_MWRu._scour(n, depth, slope, opt = opt)
+        expected_E = 0.1017184
+        np.testing.assert_allclose(E[0], expected_E, rtol = 1e-4)
+        
+        example_square_MWRu._scour()
+    def test_opt1_normal_1(self, example_square_MWRu):
         """"""
+        n = 24
+        qsi = 2
+        slope = 0.087489
+        example_square_MWRu.slpc = 0.01
+        opt = 1
+        depth = qsi    
+        Dp = 0.25
+        E = example_square_MWRu._scour(n, depth, slope, opt = opt)
+        expected_E = 0.144256
+        np.testing.assert_allclose(E[0], expected_E, rtol = 1e-4)
+        
+    def test_opt2_normal_1(self, example_square_MWRu):
+        """"""
+        n = 24
+        qsi = 2
+        slope = 0.087489
+        example_square_MWRu.slpc = 0.01
+        opt = 2
+        pd_in = 0.25
+        depth = qsi        
+        E = example_square_MWRu._scour(n, depth, slope, opt = opt,pd_in = pd_in)
+        expected_E = 0.031997
+        np.testing.assert_allclose(E[0], expected_E, rtol = 1e-4)
+
+    def test_opt2_normal_2(self, example_square_MWRu):
+        """"""
+        n = 24
+        qsi = 2
+        slope = 0.087489
+        example_square_MWRu.slpc = 0.1
+        opt = 2
+        pd_in = 0.25
+        depth = qsi        
+        E = example_square_MWRu._scour(n, depth, slope, opt = opt,pd_in = pd_in)
+        expected_E = 0.050712
+        np.testing.assert_allclose(E[0], expected_E, rtol = 1e-4)
+
+    def test_opt2_boundary_1(self, example_square_MWRu):
+        """"""
+        n = 24
+        qsi = 2
+        slope = 0.05
+        example_square_MWRu.slpc = 0.05
+        opt = 2
+        pd_in = 0.25
+        depth = qsi        
+        E = example_square_MWRu._scour(n, depth, slope, opt = opt,pd_in = pd_in)
+        expected_E = 0.039494
+        np.testing.assert_allclose(E[0], expected_E, rtol = 1e-4)
     
 # @pytest.mark.xfail(reason = "TDD, test class is not yet implemented") 
 class Test_deposit(object):
     
-    def test_opt2_False_Normal_Values_1(self, example_MWRu_2):
-        """set iteration limit to 12, routes landslide to a channel junction
-        location, option 1 False, option 2 False, option 3 True, option 4 True"""
-        example_MWRu_2.opt2 = False
-        example_MWRu_2.itL = 12   
-        example_MWRu_2.run_one_step(dt = 0)
+    def test_deposit_L_normal_1(self, example_MWRu_2):
+        qsi = 2
+        slpn = 0.05
+        D = example_MWRu_2._deposit_L_metric( qsi, slpn)
+        expected_D = 1.5
+        np.testing.assert_allclose(D, expected_D,rtol = 1e-4)
+        
+    def test_deposit_L_normal_2(self, example_MWRu_2):
+        qsi = 2
+        slpn = 0.2
+        D = example_MWRu_2._deposit_L_metric( qsi, slpn)
+        expected_D = 0
+        np.testing.assert_allclose(D, expected_D,rtol = 1e-4)
+
+    def test_deposit_L_boundary_1(self, example_MWRu_2):
+        qsi = 2
+        slpn = 0.1
+        D = example_MWRu_2._deposit_L_metric( qsi, slpn)
+        expected_D = 0
+        np.testing.assert_allclose(D, expected_D,rtol = 1e-4)
+
+    def test_deposit_L_boundary_2(self, example_MWRu_2):
+        qsi = 2
+        slpn = 0
+        D = example_MWRu_2._deposit_L_metric( qsi, slpn)
+        expected_D = 2
+        np.testing.assert_allclose(D, expected_D,rtol = 1e-4)        
+
+
+    def test_deposit_friction_angle_normal_1(self, example_MWRu_2):
+        qsi = 2
+        zi = 50
+        zo = 50.1
+        D = example_MWRu_2._deposit_friction_angle(qsi,zi,zo)
+        expected_D = 1.3
+        np.testing.assert_allclose(D, expected_D,rtol = 1e-4)  
+        
+    def test_deposit_friction_angle_normal_2(self, example_MWRu_2):
+        qsi = 2
+        zi = 50
+        zo = 49.9
+        D = example_MWRu_2._deposit_friction_angle(qsi,zi,zo)
+        expected_D = 1.2
+        np.testing.assert_allclose(D, expected_D,rtol = 1e-4)  
+
+    def test_deposit_friction_angle_boundary_1(self, example_MWRu_2):
+        qsi = 2
+        zi = 50
+        zo = 50
+        D = example_MWRu_2._deposit_friction_angle(qsi,zi,zo)
+        expected_D = 1.25
+        np.testing.assert_allclose(D, expected_D,rtol = 1e-4)  
+
+    
+    def test_deposit_friction_angle_special_1(self, example_MWRu_2):
+        qsi = 2
+        zi = 50
+        zo = 47
+        D = example_MWRu_2._deposit_friction_angle(qsi,zi,zo)
+        expected_D = 0
+        np.testing.assert_allclose(D, expected_D,rtol = 1e-4)  
+
+    def test_determine_zo_normal_1(self, example_square_MWRu):
+        example_square_MWRu.itL = 1
+        example_square_MWRu.run_one_step(dt = 0)
+        
+        n = 24
+        qsi = 0.2
+        zi = example_square_MWRu._grid.at_node['topographic__elevation'][n]
+        zo = example_square_MWRu._determine_zo(n, zi, qsi)
+        expected_zo = 5.5
+        np.testing.assert_allclose(zo, expected_zo,rtol = 1e-4) 
+
+
+    def test_determine_zo_normal_2(self, example_square_MWRu):
+        example_square_MWRu.itL = 1
+        example_square_MWRu.run_one_step(dt = 0)
+        
+        n = 24
+        qsi = 2
+        zi = example_square_MWRu._grid.at_node['topographic__elevation'][n]
+        zo = example_square_MWRu._determine_zo(n, zi, qsi)
+        expected_zo = 6.3
+        np.testing.assert_allclose(zo, expected_zo,rtol = 1e-4) 
+
+    def test_determine_zo_boundary_1(self, example_square_MWRu):
+        example_square_MWRu.itL = 1
+        example_square_MWRu.run_one_step(dt = 0)
+        
+        n = 24
+        qsi = 0
+        zi = example_square_MWRu._grid.at_node['topographic__elevation'][n]
+        zo = example_square_MWRu._determine_zo(n, zi, qsi)
+        expected_zo = 5
+        np.testing.assert_allclose(zo, expected_zo,rtol = 1e-4)
+
+
+    def test_determine_zo_special_1(self, example_square_MWRu):
+        example_square_MWRu.routing_surface = "energy__elevation"
+        example_square_MWRu.itL = 1
+        example_square_MWRu.settle_deposit = True
+        example_square_MWRu.run_one_step(dt = 0)
+        
+        # make node 24 a pit
+        example_square_MWRu._grid.at_node['topographic__elevation'][24] = 3
+        n = 24
+        qsi = 0
+        zi = example_square_MWRu._grid.at_node['topographic__elevation'][n]
+        zo = example_square_MWRu._determine_zo(n, zi, qsi)
+        expected_zo = None
+        assert(zo, expected_zo)            
+
+    def test_deposit_normal_1(self, example_square_MWRu):
+        """use default iteration limit (1000), look at deposition near outlet"""
+
+        example_square_MWRu.run_one_step(dt = 0)
                 
-        n = 526    
-        rn = example_MWRu_2._grid.at_node.dataset['flow__receiver_node'].values[n]
-        slpn = example_MWRu_2._grid.at_node['topographic__steepest_slope'][n].max()
-        qsi = 3
-        D = example_MWRu_2._deposit(qsi,slpn,rn,n)
-        expected_D = 2.038154
-    
+        n = 9    
+        qsi = 2
+        slpn = example_square_MWRu._grid.at_node['topographic__steepest_slope'][n].max()
+        D = example_square_MWRu._deposit(qsi,slpn,n)
+        expected_D = 1.299793
+        
         np.testing.assert_allclose(D, expected_D,rtol = 1e-4)
-
-    def test_opt2_True_Normal_Values_1(self, example_MWRu_2):
-        """set iteration limit to 12, routes landslide to a channel junction
-        location, option 1 False, option 2 True, option 3 True, option 4 True"""
-
-        example_MWRu_2.itL = 12   
-        example_MWRu_2.run_one_step(dt = 0)
-
-        n = 526    
-        rn = example_MWRu_2._grid.at_node.dataset['flow__receiver_node'].values[n]
-        slpn = example_MWRu_2._grid.at_node['topographic__steepest_slope'][n].max()
-        qsi = 3
-        D = example_MWRu_2._deposit(qsi,slpn,rn,n)
-        expected_D = 2.888247
     
+        
+    def test_deposit_boundary(self, example_square_MWRu):
+        """use default iteration limit (1000), look at deposition near outlet"""
+        example_square_MWRu.run_one_step(dt = 0)
+                
+        n = 10    
+        qsi = 2
+        # slope here happens to be zero
+        slpn = example_square_MWRu._grid.at_node['topographic__steepest_slope'][n].max()
+        D = example_square_MWRu._deposit(qsi,slpn,n)
+        expected_D = 1.452528
+        
         np.testing.assert_allclose(D, expected_D,rtol = 1e-4)
 
 
-    def test_opt2_True_Normal_Values_2(self, example_MWRu):
-        """"set iteration limit to 6, routes landslide to a steep, mid channel
-        location. place 3 m tall dam of material downslope of node 522 (523) 
-        test deposition matches expected, option 1 False, option 2 True, 
-        option 3 True, option 4 True"""
+    def test_deposit_special(self, example_square_MWRu):
+        """use default iteration limit (1000), look at deposition near outlet,
+        routing_surface = topographic__elevation"""
         
-        example_MWRu.itL = 6
-        example_MWRu.run_one_step(dt = 0)
-            
-        n = 522
-        # place dam
-        example_MWRu._grid.at_node['topographic__elevation'][523] = \
-            example_MWRu._grid.at_node['topographic__elevation'][523]+3
+        example_square_MWRu.routing_surface = "topographic__elevation"
+        example_square_MWRu.run_one_step(dt = 0)
+                
+        n = 10    
+        qsi = 2
+        # slope here happens to be zero
+        slpn = example_square_MWRu._grid.at_node['topographic__steepest_slope'][n].max()
+        D = example_square_MWRu._deposit(qsi,slpn,n)
+        expected_D = 2
         
-        rn = example_MWRu._grid.at_node.dataset['flow__receiver_node'].values[n]
-        slpn = example_MWRu._grid.at_node['topographic__steepest_slope'][n].max()
-        qsi = 3
-        D = example_MWRu._deposit(qsi,slpn,rn,n)
-        expected_D = 0
-    
         np.testing.assert_allclose(D, expected_D,rtol = 1e-4)
-
-
-    def test_opt2_False_Normal_Values_2(self, example_MWRu):
-        """"set iteration limit to 12, routes landslide to a steep, mid channel
-        location. place 3 m tall dam of material downslope of node 522 (523) 
-        test deposition matches expected, option 1 False, option 2 False, 
-        option 3 True, option 4 True"""
-
-        example_MWRu.opt2 = False             
-        example_MWRu.itL = 6
-        example_MWRu.run_one_step(dt = 0)
-           
-        n = 522
-        # place dam
-        example_MWRu._grid.at_node['topographic__elevation'][523] = \
-            example_MWRu._grid.at_node['topographic__elevation'][523]+3
-        
-        rn = example_MWRu._grid.at_node.dataset['flow__receiver_node'].values[n]
-        slpn = example_MWRu._grid.at_node['topographic__steepest_slope'][n].max()
-        qsi = 3
-        D = example_MWRu._deposit(qsi,slpn,rn,n)
-        expected_D = 0
-    
-        np.testing.assert_allclose(D, expected_D,rtol = 1e-4)
-
-
-    
-    # def test_opt2_False_Normal_Values_2(self):
-    #     """""" 
-        
-    # def test_opt2_hs_is_zero(self):
-        """"""
+  
 
 # @pytest.mark.xfail(reason = "TDD, test class is not yet implemented")         
 class Test_particle_diameter_in(object):
@@ -192,7 +319,7 @@ class Test_particle_diameter_in(object):
         n = 571
         vin = np.sum(example_MWRu_2.arv[example_MWRu_2.arn == n])
         pd_in = example_MWRu_2._particle_diameter_in(n,vin)
-        expected_pd_in = 0.15166
+        expected_pd_in = 0.147599
         
         np.testing.assert_allclose(pd_in, expected_pd_in,rtol = 1e-4)
         

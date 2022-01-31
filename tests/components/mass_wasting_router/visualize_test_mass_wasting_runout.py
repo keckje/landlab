@@ -157,6 +157,8 @@ mg.at_node['soil__thickness'] = np.random.uniform(0.35,0.75,nn)
 ls1 = np.array([570,516,571])
 mg.at_node['mass__wasting_id'] = (np.ones(z3.size)*0).astype(int)
 mg.at_node['mass__wasting_id'][ls1] = int(1)
+
+
 # mg.at_node['mass__wasting_id'][ls2] = 2
 
 
@@ -218,10 +220,10 @@ LLT.plot_node_field_with_shaded_dem(mg,field = 'soil__thickness',fontsize = 10)
 
             
 
-mg.at_node['topographic__elevation'][523] = mg.at_node['topographic__elevation'][523]+3
-fd = FlowDirectorMFD(mg, diagonals=True,
-                      partition_method = 'slope')
-fd.run_one_step()
+# mg.at_node['topographic__elevation'][523] = mg.at_node['topographic__elevation'][523]+3
+# fd = FlowDirectorMFD(mg, diagonals=True,
+#                       partition_method = 'slope')
+# fd.run_one_step()
 
 
 
@@ -240,11 +242,14 @@ mw_dict = {'critical slope':slpc, 'minimum flux':SD,
 
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
-example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save_mw_dem = True,
-                                 opt1 = False, opt2 = False, opt3 = True, opt4 = True)
+# example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save_mw_dem = True,
+#                                  opt1 = False, opt2 = True, opt3 = True, opt4 = True)
 
 
-# example_MWRu.itL = 6
+example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,
+                                 routing_surface = "topographic__elevation", settle_deposit = True)
+
+example_MWRu.itL = 12
 
 example_MWRu.run_one_step(dt = 0)
 
@@ -265,37 +270,11 @@ z_d = z3[(mg.node_x>=xmin) & (mg.node_x<=xmax) & (mg.node_y>=ymin) & (mg.node_y<
 plt.clim(z_d.min(),z_d.max()*1.5)
 
 
-
-# mg.at_node['topographic__elevation'][ls1]
-# mg.at_node['flow__receiver_node'][ls1]
-# mg.at_node['topographic__steepest_slope'][ls1]
-# mg.at_node['soil__thickness'][ls1]
-# mg.at_node['drainage_area'][ls1]
-# mg.at_node['particle__diameter'][ls1]
-# DebrisFlows.rodf
-# DebrisFlows.g
-# DebrisFlows.slpc
-# DebrisFlows.cs
-# DebrisFlows.eta
-# DebrisFlows.vs
-# DebrisFlows.ros
-# DebrisFlows.a
-# DebrisFlows.b
-
-# DebrisFlows.arv_r
-# DebrisFlows.arn_r
-# DebrisFlows.arpd_r
-
-
-#%%
-
-# example_MWRu.run_one_step(dt = 0)
-
 #%%
 Visualize = True
 if Visualize:
     # plot how DEM changes
-    for i in np.arange(0,len(example_MWRu.ls_ids)):
+    for i in np.arange(0,len(example_MWRu.mw_ids)):
     
         for c in example_MWRu.df_evo_maps[i].keys():                  
             plt.figure('dif'+str(c)+str(i),figsize=(12, 12))
@@ -309,3 +288,9 @@ if Visualize:
             plt.xlim([xmin*.8,xmax*1.2]); plt.ylim([ymin*.3,ymax])
 
 # scour_entrain_deposit
+
+
+
+
+
+

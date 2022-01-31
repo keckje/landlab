@@ -3,10 +3,10 @@
 mean relative wetness and probability of saturation.
 
 Relative wetness and factor-of-safety are based on the infinite slope
-stability model driven by topographic and soils inputs and recharge provided
-by user as inputs to the component. For each node, component simulates mean
-relative wetness as well as the probability of saturation based on Monte Carlo
-simulation of relative wetness where the probability is the number of
+stability model driven by topographic and soils inputs and recharge or saturated
+thickness provided by user as inputs to the component. For each node, component
+simulates mean relative wetness as well as the probability of saturation based 
+on Monte Carlo simulation of relative wetness where the probability is the number of
 iterations with relative wetness >= 1.0 divided by the number of iterations.
 Probability of failure for each node is also simulated in the Monte Carlo
 simulation as the number of iterations with factor-of-safety <= 1.0
@@ -45,9 +45,9 @@ class LandslideProbability(Component):
     stability index (Factor of Safety).
 
     The driving force for failure is provided by the user in the form of
-    groundwater recharge; four options for providing recharge are supported.
-    The model uses topographic and soil characteristics provided as input
-    by the user.
+    groundwater recharge or saturated thickness; four options for providing 
+    recharge are supported. Two options for providing saturated thickness are
+    supported. The model uses topographic and soil characteristics provided as input by the user.
 
     The main method of the LandslideProbability class is
     `calculate_landslide_probability()``, which calculates the mean soil
@@ -381,17 +381,18 @@ class LandslideProbability(Component):
             Number of iterations to run Monte Carlo simulation (default=250).
         groundwater__recharge_distribution: str, optional
             single word indicating recharge distribution, either 'uniform',
-            'lognormal', 'lognormal_spatial,' or 'data_driven_spatial'.
+            'lognormal', 'lognormal_spatial', 'data_driven_spatial',
+            'modeled_event_st' or 'modeled_lognormal_spatial_st'.
             (default='uniform')
         groundwater__recharge_min_value: float, optional (mm/d)
             minium groundwater recharge for 'uniform' (default=20.)
         groundwater__recharge_max_value: float, optional (mm/d)
             maximum groundwater recharge for 'uniform' (default=120.)
         groundwater__recharge_mean: float, optional (mm/d)
-            mean grounwater recharge for 'lognormal'
+            mean groundwater recharge for 'lognormal'
             and 'lognormal_spatial' (default=None)
         groundwater__recharge_standard_deviation: float, optional (mm/d)
-            standard deviation of grounwater recharge for 'lognormal'
+            standard deviation of groundwater recharge for 'lognormal'
             and 'lognormal_spatial' (default=None)
         groundwater__recharge_HSD_inputs: list, optional
             list of 3 dictionaries in order (default=[]) - HSD_dict
@@ -468,7 +469,7 @@ class LandslideProbability(Component):
         elif self._groundwater__recharge_distribution == "modeled_event_st": #/jk/
             print('a single relative wetness computed directly from the \
                   saturated__thickness rmg field, representing recharge from \
-                      a specific storm event') #/jk/
+                 a specific return-interval storm event, like a 100-year event') #/jk/
             if (grid.at_node["saturated__thickness"]<0).any():
                 msg = "saturated__thickness cannot be negative"
                 raise ValueError(msg)
@@ -564,12 +565,12 @@ class LandslideProbability(Component):
             self._Re /= 1000.0  # Convert mm to m
         
         #/jk/
-        elif self._groundwater__recharge_distribution == 'modeled_event_st': #/jk/
-            self._Re = np.ones(self._n)*np.nan #/jk/ # no recharge, depth to water table modeled
-            self._satthick = np.ones(self._n)*np.nan #/jk/ for tests
+        # elif self._groundwater__recharge_distribution == 'modeled_event_st': #/jk/
+        #     self._Re = np.ones(self._n)*np.nan #/jk/ # no recharge, depth to water table modeled
+        #     self._satthick = np.ones(self._n)*np.nan #/jk/ for tests
         #/jk/
         elif self._groundwater__recharge_distribution == 'modeled_lognormal_spatial_st': #/jk/
-            self._Re = np.ones(self._n)*np.nan #/jk/ # no recharge, depth to water table modeled
+            # self._Re = np.ones(self._n)*np.nan #/jk/ # no recharge, depth to water table modeled
             #/jk/ log mu and sigma can not be determined from mean = 0
             if (self._sat_thickness_mean[i] == 0): 
                 self._satthick = np.ones(self._n)*0 #/jk/

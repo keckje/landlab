@@ -259,8 +259,6 @@ def test_calculate_landslide_probability_modeled_st_event(example_raster_model_g
     example_raster_model_grid,
     number_of_iterations=10,
     groundwater__recharge_distribution="modeled_event_st",
-    groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
-    groundwater__recharge_standard_deviation=np.random.rand(gridnum),
     seed=7,
     )
     
@@ -283,8 +281,6 @@ def test_calculate_landslide_probability_modeled_st_event_dry(example_raster_mod
     example_raster_model_grid,
     number_of_iterations=10,
     groundwater__recharge_distribution="modeled_event_st",
-    groundwater__recharge_mean=np.random.randint(2, 7, gridnum).astype(float),
-    groundwater__recharge_standard_deviation=np.random.rand(gridnum),
     seed=7,
     )
     
@@ -343,7 +339,7 @@ def test_modeled_st_event_method_st_wrong_shape(example_raster_model_grid):
 
 def test_calculate_landslide_probability_modeled_st_lognormal_spatial(example_raster_model_grid):
     """test probability matches expected when relative wetness is randomly 
-    determed from a lognormal distribution of saturated thickness - normal value test"""
+    determined from a lognormal distribution of saturated thickness - normal value test"""
     
     gridnum = example_raster_model_grid.number_of_nodes
 
