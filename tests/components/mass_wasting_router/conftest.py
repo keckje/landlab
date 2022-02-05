@@ -138,15 +138,11 @@ def example_mg():
 
 @pytest.fixture
 def example_square_mg():
-    """ mg defined from ascii copy of the test landscape, evolved from a
-    flat landscape scored with the network_sediment_transporter test channel 
-    network and uplifted with fluvial and hillslope erosion"""
+    """ sloped, convergent, irregular surface"""
     dem = np.array([[10,8,4,3,4,7.5,10],[10,9,3.5,4,5,8,10],
                     [10,9,6.5,5,6,8,10],[10,9.5,7,6,7,9,10],[10,10,9.5,8,9,9.5,10],
                     [10,10,10,10,10,10,10],[10,10,10,10,10,10,10]])
-    
-    
-    # cc+=1
+
     dem = np.hstack(dem).astype(float)
     mg = RasterModelGrid((7,7),10)
     _ = mg.add_field('topographic__elevation',
@@ -156,50 +152,78 @@ def example_square_mg():
     mg.set_closed_boundaries_at_grid_edges(True, True, True, True) #close all boundaries
     mg.set_watershed_boundary_condition_outlet_id(3,dem)   
     mg.at_node['node_id'] = np.hstack(mg.nodes)
-    # run flow director, add slope and receiving node fields
     fd = FlowDirectorMFD(mg, diagonals=True,
                           partition_method = 'slope')
     fd.run_one_step()
-    # set up mass wasting router
     nn = mg.number_of_nodes
-    # mass wasting ide
-    mg.at_node['mass__wasting_id'] = np.zeros(mg.number_of_nodes).astype(int)
+    mg.at_node['mass__wasting_id'] = np.zeros(nn).astype(int)
     mg.at_node['mass__wasting_id'][np.array([38])] = 1  
-    # soil depth
     depth = np.ones(nn)*1
     mg.add_field('node', 'soil__thickness',depth)
-    
-    # particle diameter
     np.random.seed(seed=7)
-    nn = mg.number_of_nodes
     mg.at_node['particle__diameter'] = np.random.uniform(0.05,0.25,nn)
-
     return(mg)
 
 
 @pytest.fixture
 def example_square_MWRu(example_square_mg):
-    # run parameters
     npu = [1] 
     nid = [1] 
     slpc = [0.03]   
     SD = 0.01
     cs = 0.02
-    
+
     mw_dict = {'critical slope':slpc, 'minimum flux':SD,
                 'scour coefficient':cs}
     
     release_dict = {'number of pulses':npu, 'iteration delay':nid }
-    
-    
+        
     example_MWRu = MassWastingRunout(example_square_mg,release_dict,mw_dict, save = True,
                                       routing_surface = "energy__elevation", settle_deposit = True)
-
     return(example_MWRu)
 
 
 
+@pytest.fixture
+def example_flat_mg():
+    "small, flat surface"
+    dem = np.ones(25)
+    mg = RasterModelGrid((5,5),10)
+    _ = mg.add_field('topographic__elevation',
+                        dem,
+                        at='node')
+    
+    
+    mg.set_closed_boundaries_at_grid_edges(True, True, True, True) #close all boundaries
+    mg.set_watershed_boundary_condition_outlet_id(3,dem)   
+    mg.at_node['node_id'] = np.hstack(mg.nodes)
+    nn = mg.number_of_nodes
+    mg.at_node['mass__wasting_id'] = np.zeros(mg.number_of_nodes).astype(int)
+    depth = np.ones(nn)*1
+    mg.add_field('node', 'soil__thickness',depth)    
+    return(mg)
 
+@pytest.fixture
+def example_bumpy_mg():
+    """sloped, irregular surface"""
+    dem = np.ones(25)
+    mg = RasterModelGrid((5,5),10)
+    _ = mg.add_field('topographic__elevation',
+                        dem,
+                        at='node')        
+    mg.set_closed_boundaries_at_grid_edges(True, True, True, True) #close all boundaries
+    mg.set_watershed_boundary_condition_outlet_id(3,dem)   
+    mg.at_node['node_id'] = np.hstack(mg.nodes)
+    mg.at_node['topographic__elevation'][np.array([6,7,8,11,13,16,17,18])] = np.array([3,2,5,5,7,9,8,11])   
+    nn = mg.number_of_nodes
+    mg.at_node['mass__wasting_id'] = np.zeros(mg.number_of_nodes).astype(int)
+    depth = np.ones(nn)*1
+    mg.add_field('node', 'soil__thickness',depth)    
+    return(mg)
+
+
+
+####
 @pytest.fixture
 def example_MWRu(example_mg):
     """soil depth and particle diameter are uniform accross landscape, default 

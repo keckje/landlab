@@ -390,7 +390,7 @@ class MassWastingRunout(Component):
                 arn_u = np.unique(self.arn).astype(int)  # unique arn list
                 
                 # determine the incoming volume and depth to each node in arn_u
-                self.vqdat = self.vin_qsi(arn_u) ##
+                self.vqdat = self._vin_qsi(arn_u) ##
                        
                 if self.routing_surface == "energy__elevation":
                     # update slope fields using the dem surface for scour,
@@ -492,12 +492,18 @@ class MassWastingRunout(Component):
             rn = self._grid.at_node.dataset['flow__receiver_node'].values[ni]
             rn = rn[np.where(rn != -1)]
             
+
             # receiving proportion of qso from cell n to each downslope cell
             rp = self._grid.at_node.dataset['flow__receiver_proportions'].values[ni]
             rp = rp[np.where(rp > 0)] # only downslope cells considered
             
-            # get volume (out) of node ni  
-            vo = self._grid.at_node.dataset['soil__thickness'].values[ni]*self._grid.dx*self._grid.dy/self.nps[mw_i]# initial volume (total volume/number of pulses)   
+            # soil thickness at node
+            s_t = self._grid.at_node.dataset['soil__thickness'].values[ni]
+            
+            # initial mass wasting thickness, (total thickness/number of pulses)  
+            imw_t =s_t/self.nps[mw_i]
+            # get volume (out) of node ni   
+            vo = imw_t*self._grid.dx*self._grid.dy# initial volume 
             # divide into proportion going to each receiving node
             rv = rp*vo
             
@@ -514,37 +520,21 @@ class MassWastingRunout(Component):
             rvi = np.concatenate((rvi,rv), axis = 0) 
             rpdi = np.concatenate((rpdi,rpd), axis = 0) 
             
-            # remove material from node
+            # revome entire soil depth from node (regardless of release parameters)
             self._grid.at_node.dataset['topographic__elevation'][ni] =  (                   
-            self._grid.at_node.dataset['topographic__elevation'][ni] - 
-            self._grid.at_node['soil__thickness'][ni])
+            self._grid.at_node.dataset['topographic__elevation'][ni] - s_t)
             
-            self._grid.at_node['soil__thickness'][ni] = 0
+            self._grid.at_node['soil__thickness'][ni] = (
+                self._grid.at_node['soil__thickness'][ni]-s_t)
             
             
             # update slope to reflect node material removed from dem
             self._update_topographic_slope()
 
+
         self.arn = rni
         self.arv = rvi
         self.arpd = rpdi
-
-
-    def vin_qsi(self,arn_u):
-        """determine volume and depth of incoming material"""
-
-        def VQ(n):           
-            # total incoming volume
-            vin = np.sum(self.arv[self.arn == n])
-            # convert to flux/cell width
-            qsi = vin/(self._grid.dx*self._grid.dx)
-            return vin, qsi
-
-        ll=np.array([VQ(n) for n in arn_u], dtype=object)     
-        arn_ur = np.reshape(arn_u,(-1,1))
-        vqdat = np.concatenate((arn_ur,ll),axis=1)
-    
-        return vqdat
         
     
     def _scour_entrain_deposit_updatePD(self):
@@ -561,24 +551,25 @@ class MassWastingRunout(Component):
             downslope nodes and slopes"""            
 
             n = vq_r[0]; vin = vq_r[1]; qsi = vq_r[2]
-            
-            # get average elevation of downslope cells
-            # receiving nodes (cells)
+            # print('n {}'.format(n))
+            # print('vin {}'.format(vin))
+            # print('qsi {}'.format(qsi))
+            # get receiving nodes of node n
             rn = self._grid.at_node.dataset['flow__receiver_node'].values[n]
             rn = rn[np.where(rn != -1)]            
                
-            # slope at cell (use highest slope)
+            # maximum slope at node n
             slpn = self._grid.at_node['topographic__steepest_slope'][n].max()
-            
-            
+            # print("slopn {}".format(slpn))
+            # look up critical slope at node n
             if len(self.mw_dict['critical slope'])>1: # if option 1, critical slope is not constant but depends on location
                 self.slpc = self.a*self._grid.at_node['drainage_area'][n]**self.b
                         
             # incoming particle diameter (weighted average)
             pd_in = self._particle_diameter_in(n,vin) # move
-                            
+            # print("pd_in {}".format(pd_in))                            
             # additional constraint to control debris flow behavoir
-            # if flux to a cell is below threshold, or node is a pit (
+            # if flux is below threshold, or node is a pit (
             # receiver node is itself), debris is forced to stop
             if (qsi <=self.SD) or ((len(rn) == 1) and ([n] == [rn])):
                 D = qsi # all material that enters cell is deposited 
@@ -589,16 +580,13 @@ class MassWastingRunout(Component):
                 # node grain size remains the same                
             else:
 
-
-
-
-
                 ### deposition
                 # note: included entrained material
                 D = self._deposit(qsi, slpn, n)
                 ###
-
+                
                 ### scour (and entrainment) only occur in D is less than qsi
+                ### i.e. material must continue moving past the cell to scour
                 if D < qsi:                
  
                     if self.VaryDp:   
@@ -611,20 +599,23 @@ class MassWastingRunout(Component):
                 else: 
                     E = 0
                     pd_up = 0
-
+                
                 # entrainment is mass conservation at cell
                 ## flow out
                 qso = qsi-D+E
                 
                 # small qso are considered zero
                 qso  = np.round(qso,decimals = 8)
+                
                 # if n == 522:
                 #     print("qso-----{}".format(qsi))                              
                 ## change in node elevation
                 deta = D-E 
-                              
+                            
                 # material stops at node if flux / cell width is 0 OR node is a 
                 # boundary node
+                
+
                 
                 if qso>0 and n not in self._grid.boundary_nodes: 
                     
@@ -635,11 +626,13 @@ class MassWastingRunout(Component):
                     # receiving volume
                     vo = qso*self._grid.dx*self._grid.dy # convert qso to volume
                     rv = rp*vo
+                    # print("rn {}".format(rn))
+                    # print("rv {}".format(rv))
                
                     # particle diameter out (weighted average)
                     pd_out = self._particle_diameter_out(pd_up,pd_in,qsi,E,D)    
                     rpd = np.ones(len(rv))*pd_out
-               
+                    # print("pd_out {}".format(pd_out))
                     # store receiving nodes and volumes in temporary arrays
                     self.arn_ns = np.concatenate((self.arn_ns,rn), axis = 0) # next step receiving node list
                     self.arv_ns = np.concatenate((self.arv_ns,rv), axis = 0) # next step receiving node incoming volume list
@@ -650,6 +643,7 @@ class MassWastingRunout(Component):
                     self.arvL.append(rv)
                     self.arpdL.append(rpd)
 
+
                 
                 # model behavior tracking
                 self.enL.append(E)
@@ -659,10 +653,18 @@ class MassWastingRunout(Component):
 
             # updated node particle diameter (weighted average)
             n_pd = self._particle_diameter_node(n,pd_in,E,D)
+
             
             # list of deposition depths at cells in iteration 
             self.D_L.append(D)            
                 
+            
+            # print("D {}".format(D))
+            # print("E {}".format(E))
+            # print("qso {}".format(qso))
+            # print("deta {}".format(deta))  
+            # print("n_pd {}".format(n_pd))            
+            
             return deta, qso, rn, n_pd
     
         
@@ -674,6 +676,24 @@ class MassWastingRunout(Component):
         nudat = np.concatenate((arn_ur,ll),axis=1)
         # print(nudat)
         return nudat
+
+
+    def _vin_qsi(self,arn_u):
+        """determine volume and depth of incoming material"""
+
+        def VQ(n):           
+            # total incoming volume
+            vin = np.sum(self.arv[self.arn == n])
+            # convert to flux/cell width
+            qsi = vin/(self._grid.dx*self._grid.dx)
+            return vin, qsi
+
+        ll=np.array([VQ(n) for n in arn_u], dtype=object)     
+        arn_ur = np.reshape(arn_u,(-1,1))
+        vqdat = np.concatenate((arn_ur,ll),axis=1)
+    
+        return vqdat
+
 
     
     def _update_E_dem(self):
@@ -735,7 +755,7 @@ class MassWastingRunout(Component):
         simultaneously to all nodes that settle during the iteration. 
         """
         for ii, n in enumerate(arn_u): # for each node in the list, use the slope field, computed from the previous iteration, to compute settlment and settlment direction to adjacent cells
-            if self.D_L[ii] >0:
+            if self.D_L[ii] >0: # only settle if node has had deposition...use dif?
                 rn = self._grid.at_node.dataset['flow__receiver_node'].values[n]
                 # slope to all receiving cells
                 slpn = self._grid.at_node['topographic__steepest_slope'][n]
@@ -747,15 +767,15 @@ class MassWastingRunout(Component):
                 # critical slope
                 if len(self.mw_dict['critical slope'])>1:
                     self.slpc = self.a*self._grid.at_node['drainage_area'][n]**self.b
-
                 
                 # only consider all cells that slope > Sc
                 rn = rn[slpn>self.slpc]
                 slpn = slpn[slpn>self.slpc]            
     
-                rndif = self.dif[rn]
-                slpn = slpn[abs(rndif)>0]  
-                rn = rn[abs(rndif)>0]
+                # only consider areas of depsoition (steep areas in original dem are excluded)
+                # rndif = self.dif[rn]
+                # slpn = slpn[abs(rndif)>0]  
+                # rn = rn[abs(rndif)>0]
     
                 # if slope to downlsope nodes > Sc, adjust elevation of node n
                 if len(rn)>=1:
@@ -770,7 +790,7 @@ class MassWastingRunout(Component):
                     
                     # determine the total flux / unit width sent to S > Sc downslope cells
                     # mean downslope cell elevation
-                    zo = self._grid.at_node['topographic__elevation'][rn].min()
+                    zo = self._grid.at_node['topographic__elevation'][rn].mean()
                     
                     # node n elevation
                     zi = self._grid.at_node['topographic__elevation'][n]
@@ -780,13 +800,17 @@ class MassWastingRunout(Component):
                 
                     qso_s = (zi - (zo+slp_h))/2 # out going sediment depth
                     
-                    if qso_s < 0: # no negative outflow
+                    if qso_s < 0: # no negative 
+                        print("negative outlflow settling, n, {}, rn, {}".format(n,rn))
                         qso_s = 0
                     
                     if qso_s > self.D_L[ii]: # settlement out can not exceed deposit
                         qso_s= self.D_L[ii]
                     
                     qso_s_i = qso_s*pp # proportion sent to each receiving cell                
+                    
+                    # print("qso_s, {}".format(qso_s))
+                    # print("qso_s_i, {}".format(qso_s_i))
                     
                     # update the topographic elevation
                     self._grid.at_node['topographic__elevation'][n]=self._grid.at_node['topographic__elevation'][n]-qso_s
@@ -872,11 +896,9 @@ class MassWastingRunout(Component):
                 
         else:
             D = DL
-        
-        
-        
-        
+                
         return(D)
+
 
     def _determine_zo(self, n, zi, qsi):
         """determine the mean energy elevation of the nodes lower than the

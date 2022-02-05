@@ -61,15 +61,9 @@ def example_raster_model_grid():
     
     sat_thick = np.sort(np.round(100*np.random.uniform(1, 1.5, gridnum).astype(float))/100
     )        
-    sat_thick[sat_thick>hs] = hs[sat_thick>hs]
+    sat_thick[sat_thick>hs] = hs[sat_thick>hs]    
     
-    dtw = grid.at_node["soil__thickness"]-sat_thick
-    
-    dtw[ dtw < 0] = 0 
-    
-    grid.at_node["saturated__thickness"] = dtw
-    
-    grid.at_node["depth__to_water_table"] = dtw
+    grid.at_node["saturated__thickness"] = sat_thick    
     
     grid.at_node["mean__saturated_thickness"] = np.sort(np.round(100*np.random.uniform(0.75, 1.1, gridnum).astype(float))/100
     )

@@ -64,7 +64,8 @@ fd.run_one_step()
 nn = mg.number_of_nodes
 # mass wasting ide
 mg.at_node['mass__wasting_id'] = np.zeros(mg.number_of_nodes).astype(int)
-mg.at_node['mass__wasting_id'][np.array([38])] = 1  
+# mg.at_node['mass__wasting_id'][np.array([38])] = 1  
+mg.at_node['mass__wasting_id'][np.array([31,38])] = np.array([1,1]) 
 # soil depth
 depth = np.ones(nn)*1
 mg.add_field('node', 'soil__thickness',depth)
@@ -139,9 +140,20 @@ release_dict = {'number of pulses':npu, 'iteration delay':nid }
 example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,
                                   routing_surface = "energy__elevation", settle_deposit = True)
 
-# example_MWRu.itL = 1
+# example_MWRu._grid.at_node['soil_thickness'] = np.ones(nn)*0.01
+
+example_MWRu.itL = 0
 
 example_MWRu.run_one_step(dt = 0)
+
+
+plt.figure(field+'_post',figsize = (12,8))
+imshow_grid(mg,'topographic__elevation',grid_units=('m','m'),var_name='Elevation(m)',plot_name = field,cmap = 'terrain')
+plot_values(mg,field,xmin,xmax,ymin,ymax)
+plt.xlim([xmin,xmax]); plt.ylim([ymin,ymax])
+z_d = dem[(mg.node_x>=xmin) & (mg.node_x<=xmax) & (mg.node_y>=ymin) & (mg.node_y<=ymax)]
+
+
 
 
 # plot how DEM changes

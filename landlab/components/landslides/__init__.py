@@ -1,3 +1,3 @@
-from .landslide_probability import LandslideProbability
+from .landslide_probability_v2 import LandslideProbability
 
 __all__ = ["LandslideProbability"]
