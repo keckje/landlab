@@ -1521,34 +1521,49 @@ class DHSVMtoLandlab(Component):
         """
         g = 9.81 # m/s2
         ro = 1000 # kg/m3
-        # q = Q/(b+d)
-        # compute q**
+        
+        # depth slope product for total stress
+        T = (ro)*9.81*d*S #total stress acting on flow [N/m2]
+        
+        # compute q**, RR2011 eq 11
         qss = q/((g*S*D84**3)**0.5)
-        # compute U**
+        # compute U**, RR2011 eq 22
         Uss = (1.443*qss**0.60)*(1+(qss/43.78)**0.8214)**-0.2435
-        # compute U
+        # compute U, RR2011 eq 12
         U = Uss*(g*S*D84)**0.5
         # compute d
         # d = q/U
-        # compute Uo
+        # compute Uo, RR2011 eq 20A, U** replaced with eq 12, q** replaced with eq 11
+        # rearrange to solve for Uo, velocity equivalent to the grain roughness
+        # see notes
         Uo = 3.70*(q**0.4)*(g**0.3)*(S**0.3)*(D84**-0.1)
-        # compute ftot, ntot
-        ft = (8*g*q*S)/(U**3)#(8*g*S)/((U**2)*(q**2))
-        # nt = ((S**0.5)*(d**(2/3)))/(((8*g*d*S)**0.5)/(ft**0.5)) # Darcy-Weisbach 
-        nt = (((q**0.4)*(S**0.3))/U)**(5/3) # mannings wide channel approximation  
-        # compute fo, no
-        fo = (8*g*q*S)/(Uo**3)#(8*g*S)/((Uo**2)*(q**2))
-        # no = ((S**0.5)*(d**(2/3)))/(((8*g*d*S)**0.5)/(fo**0.5)) 
-        no = (((q**0.4)*(S**0.3))/Uo)**(5/3)             
-        # compute Teff using method 1: Wilcock, 2001
-        Teff = 0.052*ro*((9.81*S*D65)**0.25)*(U**1.5) # effective stress on grains               
-        # compute Teff using method 2: Erkan ratio
-        T = (ro)*9.81*d*S #total stress acting on flow [N/m2]
-        Teffr = T*(no/nt)**1.5
-    
-        deff = d*(Teff/T) # equivalent depth of effective flow  
+        # compute total friction factor and roughness ftot, ntot
+        ft = (8*g*q*S)/(U**3) # chezy formula, eq 1
+
+        # nt = (((q**0.4)*(S**0.3))/U)**(5/3) # mannings wide channel approximation  
+        nt = ((S**0.5)*(d**(2/3)))/(((8*g*d*S)**0.5)/(ft**0.5)) # Darcy-Weisbach         
+        # compute grain friction factor and roughness, fo, no
+        fo = (8*g*q*S)/(Uo**3) # chezy formula, eq 1
+
+        # no = (((q**0.4)*(S**0.3))/Uo)**(5/3) # mannings wide channel approximation  
+        no = ((S**0.5)*(d**(2/3)))/(((8*g*d*S)**0.5)/(fo**0.5)) # n from friction factor, RR2011 eq 1              
         
-        return (U,Uo,nt,no,T,Teff,Teffr,deff)
+        # grain roughness approach
+        Teff_e = T*(no/nt)**1.5 # Istanbulluoglu, 2003
+        
+        # grain roughness and velocity approach
+        Teff_w = 0.052*ro*((9.81*S*D65)**0.25)*(U**1.5) # Wilcock 2001             
+        
+        # reduced slope approach
+        Seff_s1 = S*((fo/ft)**0.5)**1.5 # Schneider et al., 2015, Rickenmann 2012 eq 28.12
+        Seff_s2 = S*((U/Uo)**1.5)**1.5 # using RR2011 eq. 27a for (fo/ft)**0.5        
+        # depth slope product using reduced slope
+        Teff_s1 = (ro)*9.81*d*Seff_s1
+        Teff_s2 =  (ro)*9.81*d*Seff_s2       
+    
+        deff = d*(Teff_s1/T) # equivalent depth of effective flow  
+        
+        return (U,Uo,nt,no,T,Teff_w,Teff_e,deff,Teff_s1, Teff_s2)
     
     
     
