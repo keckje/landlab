@@ -368,7 +368,7 @@ class MassWastingEroder(Component):
         reduces the number of parcels entered into a channel network by aggregating
         parcels into larger parcels
 
-        TODO: (1) make self.parcel_volume automatically determined based on a maxmum
+        TODO: (1) make self.parcel_volume automatically determined based on a maximum
         number of parcels per iteration
         (2) add constrain that parcels separated  farther than a specified distance can not be aggregated
 

@@ -71,4 +71,3 @@ def example_parcels(example_nmg):
     parcels = parcel_initializer(discharge_at_link=None,user_parcel_volume=parcel_volume,
                                      user_d50=d50_hydraulic_geometry)    
     return parcels
-    

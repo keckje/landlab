@@ -3,7 +3,7 @@ from .bed_parcel_initializer import (
 )
 #from .parcel import SedimentPulser
 from .sediment_pulser_base import SedimentPulserBase
-from .sediment_pulser_at_links import SedimentPulserAtLinks
+from .sediment_pulser_at_links_v2 import SedimentPulserAtLinks
 from .sediment_pulser_each_parcel import SedimentPulserEachParcel
 
 from .bed_parcel_initializer import (

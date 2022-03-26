@@ -3,25 +3,20 @@ import numpy as np
 from landlab.data_record import DataRecord
 from landlab.grid.network import NetworkModelGrid
 
-_OUT_OF_NETWORK = -2
-
-
 class SedimentPulserBase:
 
     
     """
-    This utility is the base class for several classes that 
-    prepare input for and run the landlab DataRecord "add_item"
-    method on a DataRecord configured for the NetworkSedimentTransporter 
-    component. 
+    This utility is the base class for classes that add a pulse of parcels to 
+    the NetworkModelGrid. 
     
-    In the NetworkSedimentTransporter, items are sediment "parcels". Presently, 
-    this utility has two subclasses for adding sediment parcels to the DataRecord:
+    Given several user defined parametes, it prepares input for and runs 
+    the landlab DataRecord "add_item" method on a DataRecord configured for the 
+    NetworkSedimentTransporter component. 
+    
+    Presently, there are two classes for adding sediment parcels to the DataRecord:
     
     (1) SedimentPulserAtLinks and (2) SedimentPulserEachParcel
-
-    
-    This base class defines a shared __init__ method for the subclasses
 
 
     Parameters
@@ -38,7 +33,7 @@ class SedimentPulserBase:
         Sediment grain density [kg / m^3].
     parcel_volume : float, optional
         parcel volume used for all parcels that do not have a specified volume
-    abrasion_rate: list of floats, optional
+    abrasion_rate: float, optional
         rate that grain size decreases with distance along channel [mm/km?]
     
     
@@ -79,10 +74,10 @@ class SedimentPulserBase:
     def __init__(
         self,
         grid,
-        parcels=None,
+        parcels = None,
         d50 = 0.05,
         std_dev = 0.03,
-        rho_sediment=2650.0,
+        rho_sediment = 2650.0,
         parcel_volume = 0.5,
         abrasion_rate = 0.0
         ):
@@ -99,6 +94,31 @@ class SedimentPulserBase:
             msg = "NetworkSedimentTransporter: grid must be NetworkModelGrid"
             raise ValueError(msg)
             
-    # add checks, messages, prepare tests
-    # see NST and Flow Director for test ideas
 
+
+    def calc_lognormal_distribution_parameters(self, mu_x, sigma_x):
+        '''
+        
+        lognormal distribution parameters determined from mean and standard
+        deviation following Maidment, 1990, Chapter 18, eq. 18.2.6 
+    
+        Parameters
+        ----------
+        mu_x : float
+            mean grain size.
+        sigma_x : float
+            standard deviation of grain sizes.
+    
+        Returns
+        -------
+        mu_y : float
+            mean of natural log of grain size
+        sigma_y : float
+            standard deviation of natural log of grain sizes.
+    
+        '''
+        sigma_y = (np.log(((sigma_x**2)/(mu_x**2))+1))**(1/2)
+        mu_y = np.log(mu_x)-(sigma_y**2)/2        
+    
+        
+        return mu_y, sigma_y

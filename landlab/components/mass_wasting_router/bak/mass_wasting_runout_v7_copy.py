@@ -132,7 +132,7 @@ class MassWastingRunout(Component):
         self.nid = list(self.release_dict['iteration delay'])
        
 
-        if len(self.mw_dict['critical slope'])>1: # change this to check for list input if defined as func of CA
+        if len(self.mw_dict['critical slope'])>1:
             self.a = self.mw_dict['critical slope'][0]
             self.b = self.mw_dict['critical slope'][1]
         else:
@@ -801,7 +801,7 @@ class MassWastingRunout(Component):
                     qso_s = (zi - (zo+slp_h))/2 # out going sediment depth
                     
                     if qso_s < 0: # no negative 
-                        # print("negative outlflow settling, n, {}, rn, {}, qso_s, {}".format(n,rn,qso_s))
+                        print("negative outlflow settling, n, {}, rn, {}".format(n,rn))
                         qso_s = 0
                     
                     if qso_s > self.D_L[ii]: # settlement out can not exceed deposit

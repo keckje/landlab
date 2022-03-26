@@ -868,7 +868,7 @@ class DHSVMtoLandlab(Component):
             
         # roughness and effective stress
 
-        U,Uo,nt,no,T,Teff,Teffr,deff = self.flow_resistance_RR(q,d,S,D65,D84)
+        U,Uo,nt,no,T,Teff,Teffr,deff,Teff_s1,Teff_s2 = self.flow_resistance_RR(q,d,S,D65,D84)
         
         return (Q, q, d, T, U, Uo, nt, no, Teff, Teffr, deff)
     
@@ -1480,6 +1480,8 @@ class DHSVMtoLandlab(Component):
     
     def flow_resistance_RR(self, q,d,S,D65,D84):
         """
+        # TODO: reduce number of returned values
+        
         Computes Manning roughness using Rickenmann and Recking, 2011 form of
         the Ferguson, 2007 flow resistance equation
     

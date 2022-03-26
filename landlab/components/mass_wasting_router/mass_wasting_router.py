@@ -10,7 +10,7 @@ from landlab import imshow_grid, imshow_grid_at_node
 from landlab.utils.grid_t_tools import GridTTools
 
 from landlab.components.mass_wasting_router.landslide_mapper import LandslideMapper as LM
-from landlab.components.mass_wasting_router.mass_wasting_runout import MassWastingRunout as MWRu
+from landlab.components.mass_wasting_router.mass_wasting_runout import MassWastingRunout as MWRu # before v7 can be used, need to modify MWR to create landslide ID field
 from landlab.components.mass_wasting_router.mass_wasting_eroder import MassWastingEroder as MWE
 from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
 
@@ -321,10 +321,18 @@ class MassWastingRouter(Component):
         ### class instance of MassWastingRunout
         # none
         self.DebrisFlows = MWRu(self._grid,
-                               release_dict,
-                               df_dict, save_mw_dem = True,
-                               opt1 = False, opt2 = True, 
-                               opt3 = True, opt4 = True)
+                                release_dict,
+                                df_dict, save_mw_dem = True,
+                                opt1 = False, opt2 = True, 
+                                opt3 = True, opt4 = True)
+        
+        # self.DebrisFlows = MWRu(self._grid,
+        #                         release_dict,
+        #                         df_dict, 
+        #                         save = True,
+        #                         routing_surface = "energy__elevation", 
+        #                         settle_deposit = True)
+        
         
         
         ### class instance of MassWastingEroder

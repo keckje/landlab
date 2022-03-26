@@ -7,26 +7,30 @@ _OUT_OF_NETWORK = -2
 
 class SedimentPulserAtLinks(SedimentPulserBase):
     '''
-    Send a pulse of parcels to specific links (reaches) of a channel network. 
-    Pulse location within each link is random.
+    Send a pulse of parcels to specific links of a channel network. 
+    User specifies the pulse with a list of link IDs and list of the number of 
+    parcels sent to each link. Other attributes can also be specified. Pulse 
+    location within the links is random.
     
     This utility runs the landlab DataRecord "add_item" method on a DataRecord 
-    that has been prepared for the NetworkSedimentTransporter. 
+    that has been prepared for the NetworkSedimentTransporter. In the 
+    NetworkSedimentTransporter, sediment "parcels" are the items added to the 
+    DataRecord
     
-    In the NetworkSedimentTransporter, sediment "parcels" are the items added
-    to the DataRecord
+    SedimentPulserAtLinks is instantiated by specifying the network model grid
+    it will pulse the parcels into and times when a pulse accurs. 
+    If parcel attributes are constant with time and uniform 
+    accross the basin, these constant-uniform-attirbutes can be defined 
+    when SedimentPulserAtLinks is instantiated.
     
-    SedimentPulserAtLinks is instantiated by specifying grain characteristics
-    and the criteria for when a pulse accurs.
-    
-    SedimentPulserAtLinks is run (adds parcels to DataRecrod) by calling the 
-    SedimentPulserAtLinks instance with  a list of links and a list of the number 
-    of parcels added to each link. Parcels are then randomly placed into each link. 
+    SedimentPulserAtLinks is run (adds parcels to DataRecord) by calling the 
+    instance with a list of links and a list of the number of parcels added to each link.
 
-    Optionallly, the user can specify the grain characteristics of the pulse for
-    each link by providing alist of grain characterstics such as d50 and abrasion rates
-    in a list equal in length to the length of the list of links.
-    
+    If parcel attributes do vary with location and time, the user specifies 
+    the varying parcel attributes each time the instance is called with a list for each
+    attribute, with length equal to the length of the number of links included in
+    the pulse.
+
     
     Parameters
     ----------
@@ -143,17 +147,19 @@ class SedimentPulserAtLinks(SedimentPulserBase):
             self._time_to_pulse = time_to_pulse
         
 
-    def __call__(self, time, links=[0], n_parcels_at_link=[100], d50 = None, 
+    def __call__(self, time, links = None, n_parcels_at_link = None, d50 = None, 
                  std_dev = None, rho_sediment = None, parcel_volume = None, 
                  abrasion_rate = None):
         
-        # prepare inputs for pulse_characteritics function
 
-        # convert input lists to np.array if not already
+        # check user provided links and number of parcels
+        assert (links is not None and n_parcels_at_link is not None
+                ), "must provide links and number of parcels entered into each link"                
+         
         links = np.array(links)
         n_parcels_at_link  =np.array(n_parcels_at_link)
 
-        # if parameters are not specified with __Call__ method, use default values
+        # any other parameters are not specified with __Call__ method, use default values
         # default values are specified in the base class and assumed uniform accross 
         # the channel network (all links use the same parameter values)
         if d50 is None: 
@@ -174,45 +180,33 @@ class SedimentPulserAtLinks(SedimentPulserBase):
         if parcel_volume is None: 
             parcel_volume = np.full_like(links, self._parcel_volume, dtype=float)
         else:
-            parcel_volume = np.array(rho_sediment)             
+            parcel_volume = np.array(parcel_volume)             
         
         if abrasion_rate is None: 
             abrasion_rate = np.full_like(links, self._abrasion_rate, dtype=float)
         else:
             abrasion_rate = np.array(abrasion_rate)
 
-        # before running, check inputs < 0 
-        if (np.array([d50,std_dev,rho_sediment, parcel_volume, abrasion_rate]) < 0).any():# check for negative inputs         
-           raise AssertionError("grain size median grain size standard deviation and parcel volume can not be less than zero")
+        # before running, check that no inputs < 0 
+        if (np.array([d50, std_dev, rho_sediment, parcel_volume, abrasion_rate]) < 0).any():# check for negative inputs         
+           raise AssertionError("parcel attributes cannot be less than zero")
                                 
         # before running, check if time to pulse            
         if not self._time_to_pulse(time):
             # if not time to pulse, return the existing parcels
-            print('user provided time not a time-to-pulse')
+            print('user provided time not a time-to-pulse, parcels have not changed')
+            
             return self._parcels
         
         # convert d50 and std_dev to log normal distribution parameters
-        d50_log, std_dev_log = calc_lognormal_distribution_parameters(mu_x = d50, 
+        d50_log, std_dev_log = self.calc_lognormal_distribution_parameters(mu_x = d50, 
                                                                       sigma_x = std_dev)  
-        # approximate d84
-        d84 = d50 * std_dev
-        
-        # approximate active layer depth
-        active_layer_depth = d84 * 2.0
 
-        # approxmate total parcel volume in each reach
-        total_parcel_volume_at_link = calc_total_parcel_volume( 
-            self._grid.at_link["channel_width"][links],
-            self._grid.at_link["reach_length"][links],
-            active_layer_depth,
-        )
-        
         # create times for DataRecord
         variables, items = self._sediment_pulse_stochastic(
             time,
             links,
             n_parcels_at_link,
-            total_parcel_volume_at_link,
             parcel_volume,
             d50_log,
             std_dev_log,
@@ -239,54 +233,52 @@ class SedimentPulserAtLinks(SedimentPulserBase):
         time,
         links,
         n_parcels_at_link,
-        total_parcel_volume_at_link,
         parcel_volume,
         d50_log,
         std_dev_log,
         abrasion_rate,
         rho_sediment
         ):
-        '''
+        """
         specify attributes of pulses added to a Network Model Grid DataRecord 
         at stochastically determined link locations 
-        
-    
+
         Parameters
         ----------
-        time : integer or datetime64 value equal to nst.time
-            time that the pulse is triggered in the network sediment transporter
-        SedimentPulseDF : pandas dataframe
-            each row contains information on the deposition location and volume of
-            a single pulse of sediment. The pulse is divided into n number of 
-            parcels, where n equals the np.ceil(sediment pulse volume / parcel volume)
-            
-            The SedimentPulseDF must include the following columns:
-                'link_#','vol [m^3]','link_downstream_distance_ratio'
-            
-            Optionally, the SedimentPulseDf can include the following columns:
-               'd50 [m]', 'std_dev [m]', rho_sediment '[m^3/kg]', 'parcel_volume [m^3]
-               
-            if the optional columns are not included in SedimentPulseDF, then
-            the instance variables are used to define sediment characateristics 
-            of each pulse.
+        time : int, string, or datetime
+            time that pulse enters the channel network
+        links : list or int
+            ID(s) of links that will recieve a pulse of sediment
+        n_parcels_at_link : list or int
+            DESCRIPTION.
+        parcel_volume : TYPE
+            DESCRIPTION.
+        d50_log : TYPE
+            DESCRIPTION.
+        std_dev_log : TYPE
+            DESCRIPTION.
+        abrasion_rate : TYPE
+            DESCRIPTION.
+        rho_sediment : TYPE
+            DESCRIPTION.
 
-    
         Returns
         -------
-        tuple: (item_id,variables)
-            item_id: dictionary, model grid element and index of element of each parcel
-            variables: dictionary, variable values for al new pulses
-        '''
+        dict
+            DESCRIPTION.
+        dict
+            DESCRIPTION.
+
+        """
                 
-        # create empty np.arrays to be poplated in for loop 
+        # Create np array for each paracel attribute. Length of array is equal 
+        # to the number of parcels (i.e., attribute values are specified for each
+        # parcel)
+        
+        # link id, logD50 and volume
         element_id = np.empty(np.sum(n_parcels_at_link),dtype=int)
-        volume = np.empty(np.sum(n_parcels_at_link))
         grain_size = np.empty(np.sum(n_parcels_at_link))
-        
-        # if len(list(abrasion_rate)) == 1:
-        #     abrasion_rate = (np.full_like(element_id, abrasion_rate, dtype=float))
-        # if len(list(abrasion_rate)) == 1:
-        
+        volume = np.empty(np.sum(n_parcels_at_link))       
         offset = 0    
         for link, n_parcels in enumerate(n_parcels_at_link):
             element_id[offset:offset + n_parcels] = links[link]
@@ -297,7 +289,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
             offset += n_parcels
         starting_link = element_id.copy()
         
-        # abrasion rate and density are presently constant accross network
+        # abrasion rate and density
         abrasion_rate_L = []
         density_L = []
         for c, ei in enumerate(np.unique(element_id)):
@@ -310,23 +302,27 @@ class SedimentPulserAtLinks(SedimentPulserBase):
         element_id = np.expand_dims(element_id, axis=1)
         grain_size = np.expand_dims(grain_size, axis=1)
         volume = np.expand_dims(volume, axis=1)
-    
-        time_arrival_in_link = np.full(np.shape(element_id), time, dtype=float)
-        location_in_link = np.expand_dims(np.random.rand(np.sum(n_parcels_at_link)), axis=1)
-    
-    
-        # 1 = active/surface layer; 0 = subsurface layer
-        active_layer = np.ones(np.shape(element_id))
-    
-        grid_element = ["link"]*np.size(element_id)
-        grid_element = np.expand_dims(grid_element, axis=1)
+        abrasion_rate = np.expand_dims(abrasion_rate, axis=1)
+        density = np.expand_dims(density, axis=1)
         
     
+        # time of arrivial (time instance called)
+        time_arrival_in_link = np.full(np.shape(element_id), time, dtype=float)
+        
+        # link location (distance from link inlet / link length) is stochastically determined
+        location_in_link = np.expand_dims(np.random.rand(np.sum(n_parcels_at_link)), axis=1)
+    
+        # All parcels in pulse are in the active layer (1) rather than subsurface (0)
+        active_layer = np.ones(np.shape(element_id))
+        
+        # specify that parcels are in the links of the network model grid
+        grid_element = ["link"]*np.size(element_id)
+        grid_element = np.expand_dims(grid_element, axis=1)
+           
         return {
             "starting_link": (["item_id"], starting_link),
-            "abrasion_rate": (["item_id"], abrasion_rate),
-            "density": (["item_id"], density),
-            # "lithology": (["item_id"], lithology),
+            "abrasion_rate": (["item_id", "time"], abrasion_rate),
+            "density": (["item_id", "time"], density),
             "time_arrival_in_link": (["item_id", "time"], time_arrival_in_link),
             "active_layer": (["item_id", "time"], active_layer),
             "location_in_link": (["item_id", "time"], location_in_link),
@@ -337,50 +333,29 @@ class SedimentPulserAtLinks(SedimentPulserBase):
 
 
 
-def calc_total_parcel_volume(width, length, sediment_thickness):
-    '''
+# def calc_lognormal_distribution_parameters(mu_x, sigma_x):
+#     '''
     
+#     lognormal distribution parameters determined from mean and standard
+#     deviation following Maidment, 1990, Chapter 18, eq. 18.2.6 
 
-    Parameters
-    ----------
-    width : float
-        reach (link) width [m]
-    length : float [m]
-        link length
-    sediment_thickness : float
-        thickness of particles
+#     Parameters
+#     ----------
+#     mu_x : float
+#         mean grain size.
+#     sigma_x : float
+#         standard deviation of grain sizes.
 
-    Returns
-    -------
-    float
-        volume of sediment
+#     Returns
+#     -------
+#     mu_y : float
+#         mean of natural log of grain size
+#     sigma_y : float
+#         standard deviation of natural log of grain sizes.
 
-    '''
-    return width * length * sediment_thickness
+#     '''
+#     sigma_y = (np.log(((sigma_x**2)/(mu_x**2))+1))**(1/2)
+#     mu_y = np.log(mu_x)-(sigma_y**2)/2        
 
-
-def calc_lognormal_distribution_parameters(mu_x, sigma_x):
-    '''
     
-    lognormal distribution parameters determined from mean and standard
-    deviation following Maidment, 1990, Chapter 18, eq. 18.2.6 
-
-    Parameters
-    ----------
-    mu_x : float
-        mean grain size.
-    sigma_x : float
-        standard deviation of grain sizes.
-
-    Returns
-    -------
-    mu_y : float
-        mean of natural log of grain size
-    sigma_y : float
-        standard deviation of natural log of grain sizes.
-
-    '''
-    sigma_y = (np.log(((sigma_x**2)/(mu_x**2))+1))**(1/2)
-    mu_y = np.log(mu_x)-(sigma_y**2)/2        
-    
-    return mu_y, sigma_y
+#     return mu_y, sigma_y

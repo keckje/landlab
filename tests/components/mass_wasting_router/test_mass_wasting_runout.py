@@ -11,7 +11,7 @@ class Test__prep_initial_mass_wasting_material(object):
         
         def test_single_node(self, example_square_MWRu):
             """test receiving nodes and volumes from initial mass wasting cells
-            are correctly prepared"""
+            are correct, one initial mass wasting node"""
             example_square_MWRu.itL = 0
             example_square_MWRu.run_one_step(dt = 0)
             rn = example_square_MWRu.arn
@@ -23,7 +23,7 @@ class Test__prep_initial_mass_wasting_material(object):
        
         def test_two_nodes(self, example_square_mg):
             """test receiving nodes and volumes from initial mass wasting cells
-            are correctly prepared, two initial nodes"""
+            are correct, two initial mass wasting nodes"""
             example_square_mg.at_node['mass__wasting_id'][np.array([31, 38])] = \
             np.array([1,1])
             npu = [1] 
@@ -55,11 +55,9 @@ class Test__prep_initial_mass_wasting_material(object):
 
 
 class Test_scour_entrain_deposit_updatePD(object):
-    
     def test_normal_1(self, example_square_MWRu):
-        """functions within scour_entrain_deposit_updatePD are
-        tested below. This test checks that the output of those
-        functions are correctly stored the class variable nudat"""
+        """Test that the output of scour_entrain_deposit_updatePD 
+        are correct and stored in the class variable nudat as expected"""
         example_square_MWRu.itL = 1       
         example_square_MWRu.run_one_step(dt = 0)      
         nodes = example_square_MWRu.nudat[:,0].astype(float)
@@ -79,10 +77,9 @@ class Test_scour_entrain_deposit_updatePD(object):
         np.testing.assert_array_almost_equal(rn, rn_e)
         np.testing.assert_array_almost_equal(n_pd, n_pd_e)
         
-    def test_normal_1(self, example_square_MWRu):
-        """functions within scour_entrain_deposit_updatePD are
-        tested below. This test checks that the output of those
-        functions are correctly stored the class variable nudat.
+    def test_special_1(self, example_square_MWRu):
+        """Test that the output of function _scour_entrain_deposit_updatePD 
+        are correct and stored in the class variable nudat as expected
         Special case that qsi is less than the minimum flux
         threshold"""
         nn = example_square_MWRu._grid.number_of_nodes
@@ -109,6 +106,8 @@ class Test_scour_entrain_deposit_updatePD(object):
 
 class Test_vin_qsi(object):
     def test_normal_1(self, example_square_MWRu):
+        """test ouput of function  _vin_qsi is correct and stored
+        in class variable vqdat as expected"""
         example_square_MWRu.itL = 2       
         example_square_MWRu.run_one_step(dt = 0)      
         n = 25
@@ -126,6 +125,7 @@ class Test_vin_qsi(object):
 
 class Test_update_E_dem(object):
     def test_normal_1(self, example_square_MWRu):
+        """run one iteration, check energy dem matches notes"""
         example_square_MWRu.itL = 1       
         example_square_MWRu.run_one_step(dt = 0)
         n = 30
@@ -138,6 +138,7 @@ class Test_update_E_dem(object):
 
 class Test_update_dem(object):
     def test_normal_1(self, example_square_MWRu):
+        """test topographic dem updated correctly"""
         example_square_MWRu.itL = 1       
         example_square_MWRu.run_one_step(dt = 0)
         n = 30
@@ -150,6 +151,7 @@ class Test_update_dem(object):
 
 class Test_update_channel_particle_diameter(object):
     def test_normal_1(self, example_square_MWRu):
+        """test particle diameter updated correctly"""
         example_square_MWRu.itL = 1       
         example_square_MWRu.run_one_step(dt = 0)
         n = 30
@@ -659,12 +661,11 @@ class Test_particle_diameter_out(object):
 # @pytest.mark.xfail(reason = "TDD, test class is not yet implemented")         
 class Test_particle_diameter_node:
     def test_normal_values_1(self, example_square_MWRu):
-        # grid node depth = 1, node particle diameter = 0.075
+        # normal values
         n = 24
         pd_in = 0.2
         D = 0.5
         E = 0.5
-        # grid node depth = 1, node particle diameter = 0.075 
         
         pd_out = example_square_MWRu._particle_diameter_node(n,pd_in,E,D)
         
@@ -673,7 +674,7 @@ class Test_particle_diameter_node:
         np.testing.assert_allclose(pd_out, expected_pd_out,rtol = 1e-4)
 
     def test_normal_values_2(self, example_square_MWRu):
-        # grid node depth = 1, node particle diameter = 0.075
+        # normal values
         n = 24
         pd_in = 0.2
         D = 0.3
@@ -686,7 +687,7 @@ class Test_particle_diameter_node:
         np.testing.assert_allclose(pd_out, expected_pd_out,rtol = 1e-4)
 
     def test_special_values_1(self, example_square_MWRu):
-        # grid node depth = 1, node particle diameter = 0.075
+        # deposition depth is 0
         n = 24
         pd_in = 0.2
         D = 0
@@ -699,7 +700,7 @@ class Test_particle_diameter_node:
         np.testing.assert_allclose(pd_out, expected_pd_out,rtol = 1e-4)
 
     def test_bad_values_1(self, example_square_MWRu):
-        # grid node depth = 1, node particle diameter = 0.075
+        # incoming particle diameter is np.nan
         with pytest.raises(ValueError) as exc_info:
             n = 24
             pd_in = np.nan
@@ -712,7 +713,7 @@ class Test_particle_diameter_node:
         assert exc_info.match("node particle diameter is negative, nan or inf")
 
     def test_bad_values_2(self, example_square_MWRu):
-        # grid node depth = 1, node particle diameter = 0.075
+        # incoming particle diameter is np.inf
         with pytest.raises(ValueError) as exc_info:
             n = 24
             pd_in = np.inf
