@@ -24,7 +24,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
     of parcels added to each link. Parcels are then randomly placed into each link. 
 
     Optionallly, the user can specify the grain characteristics of the pulse for
-    each link by providing alist of grain characterstics such as d50 and abrasion rates
+    each link by providing alist of grain characterstics such as D50 and abrasion rates
     in a list equal in length to the length of the list of links.
     
     
@@ -40,7 +40,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
     time_to_pulse: function, optional
         defines the condition when a pulse occurs using the _pulse_characteristics
         method. If not specified, a pulse occurs when instance is run
-    d50: float, optional
+    D50: float, optional
         median grain size [m]
     std_dev: float, optional
         standard deviation of grain sizes [m]
@@ -59,7 +59,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
         link ID # that parcels are added too
     n_parcels_at_link: list of integers
         number of parcels added to each link listed in links
-    d50 : list of floats, optional 
+    D50 : list of floats, optional 
         median grain size of parcels added to each link listed in links
     std_dev : list of floats, optional
         grain size standard deviation of parcels added to each link listed in links
@@ -97,7 +97,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
     >>> links = [2, 6]
     >>> n_parcels_at_link = [20, 25]
     >>> pulse1 = make_pulse(time=time, links=links, n_parcels_at_link=n_parcels_at_link,
-                   d50=d50, std_dev=std_dev,parcel_volume = parcel_volume)        
+                   D50=D50, std_dev=std_dev,parcel_volume = parcel_volume)        
         
         check contents of DataRecord
     
@@ -111,13 +111,13 @@ class SedimentPulserAtLinks(SedimentPulserBase):
     >>> time = 11
     >>> links = [2, 6]
     >>> n_parcels_at_link = [20, 25]
-    >>> d50 = [0.3, 0.12]
+    >>> D50 = [0.3, 0.12]
     >>> std_dev =  [0.2, 0.1]   
     >>> parcel_volume = [1, 0.5]
     >>> rho_sediment = [2650, 2500]
     >>> abrasion_rate = [.1, .3]
     >>> pulse2 = make_pulse(time=time, links=links, n_parcels_at_link=n_parcels_at_link,
-                   d50=d50, std_dev=std_dev,parcel_volume = parcel_volume, 
+                   D50=D50, std_dev=std_dev,parcel_volume = parcel_volume, 
                    rho_sediment = rho_sediment, abrasion_rate = abrasion_rate)
         
         check contents of DataRecord
@@ -143,7 +143,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
             self._time_to_pulse = time_to_pulse
         
 
-    def __call__(self, time, links=[0], n_parcels_at_link=[100], d50 = None, 
+    def __call__(self, time, links=[0], n_parcels_at_link=[100], D50 = None, 
                  std_dev = None, rho_sediment = None, parcel_volume = None, 
                  abrasion_rate = None):
         
@@ -156,10 +156,10 @@ class SedimentPulserAtLinks(SedimentPulserBase):
         # if parameters are not specified with __Call__ method, use default values
         # default values are specified in the base class and assumed uniform accross 
         # the channel network (all links use the same parameter values)
-        if d50 is None: 
-            d50 = np.full_like(links, self._d50, dtype=float)
+        if D50 is None: 
+            D50 = np.full_like(links, self._D50, dtype=float)
         else:
-            d50 = np.array(d50)        
+            D50 = np.array(D50)        
         
         if std_dev is None: 
             std_dev = np.full_like(links, self._std_dev, dtype=float)
@@ -182,7 +182,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
             abrasion_rate = np.array(abrasion_rate)
 
         # before running, check inputs < 0 
-        if (np.array([d50,std_dev,rho_sediment, parcel_volume, abrasion_rate]) < 0).any():# check for negative inputs         
+        if (np.array([D50,std_dev,rho_sediment, parcel_volume, abrasion_rate]) < 0).any():# check for negative inputs         
            raise AssertionError("grain size median grain size standard deviation and parcel volume can not be less than zero")
                                 
         # before running, check if time to pulse            
@@ -191,11 +191,11 @@ class SedimentPulserAtLinks(SedimentPulserBase):
             print('user provided time not a time-to-pulse')
             return self._parcels
         
-        # convert d50 and std_dev to log normal distribution parameters
-        d50_log, std_dev_log = calc_lognormal_distribution_parameters(mu_x = d50, 
+        # convert D50 and std_dev to log normal distribution parameters
+        D50_log, std_dev_log = calc_lognormal_distribution_parameters(mu_x = D50, 
                                                                       sigma_x = std_dev)  
         # approximate d84
-        d84 = d50 * std_dev
+        d84 = D50 * std_dev
         
         # approximate active layer depth
         active_layer_depth = d84 * 2.0
@@ -214,7 +214,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
             n_parcels_at_link,
             total_parcel_volume_at_link,
             parcel_volume,
-            d50_log,
+            D50_log,
             std_dev_log,
             abrasion_rate,
             rho_sediment
@@ -241,7 +241,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
         n_parcels_at_link,
         total_parcel_volume_at_link,
         parcel_volume,
-        d50_log,
+        D50_log,
         std_dev_log,
         abrasion_rate,
         rho_sediment
@@ -264,7 +264,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
                 'link_#','vol [m^3]','link_downstream_distance_ratio'
             
             Optionally, the SedimentPulseDf can include the following columns:
-               'd50 [m]', 'std_dev [m]', rho_sediment '[m^3/kg]', 'parcel_volume [m^3]
+               'D50 [m]', 'std_dev [m]', rho_sediment '[m^3/kg]', 'parcel_volume [m^3]
                
             if the optional columns are not included in SedimentPulseDF, then
             the instance variables are used to define sediment characateristics 
@@ -291,7 +291,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
         for link, n_parcels in enumerate(n_parcels_at_link):
             element_id[offset:offset + n_parcels] = links[link]
             grain_size[offset:offset + n_parcels] = np.random.lognormal(
-                d50_log[link], std_dev_log[link], n_parcels
+                D50_log[link], std_dev_log[link], n_parcels
             )
             volume[offset:offset + n_parcels] = parcel_volume[link] % n_parcels
             offset += n_parcels

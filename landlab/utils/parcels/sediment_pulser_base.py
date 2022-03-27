@@ -7,17 +7,13 @@ class SedimentPulserBase:
 
     
     """
-    This utility is the base class for classes that add a pulse of parcels to 
-    the NetworkModelGrid. 
+    This utility is the base class of the SedimentPulserAtLinks and 
+    SedimentPulserEachPulse utilities.
     
-    Given several user defined parametes, it prepares input for and runs 
-    the landlab DataRecord "add_item" method on a DataRecord configured for the 
+    The SedimentPulserAtLinks and SedimentPulserEachPulse utilities run the
+    landlab DataRecord "add_item" method on a DataRecord configured for the 
     NetworkSedimentTransporter component. 
     
-    Presently, there are two classes for adding sediment parcels to the DataRecord:
-    
-    (1) SedimentPulserAtLinks and (2) SedimentPulserEachParcel
-
 
     Parameters
     ----------
@@ -25,9 +21,9 @@ class SedimentPulserBase:
         landlab *ModelGrid* to place sediment parcels on.
     parcels: landlab DataRecord 
         Tracks parcel location and variables
-    d50: float, optional
+    D50: float, optional
         median grain size [m]
-    std_dev: float, optional
+    D_sd: float, optional
         standard deviation of grain sizes [m]
     rho_sediment : float, optional
         Sediment grain density [kg / m^3].
@@ -53,30 +49,19 @@ class SedimentPulserBase:
     >>> grid.at_link["reach_length"] = np.full(grid.number_of_links, 100.0)  # m
     >>> make_pulse = SedimentPulserAtLinks(grid, time_to_pulse=time_to_pulse)
     
-    >>> Option 1:
-    >>> def time_to_pulse(time):
-    ...     return True
-    >>> make_pulse = SedimentPulser(grid, time_to_pulse=time_to_pulse)
-    >>> time = 10
-    >>> d50 = [0.3, 0.12]
-    >>> num_pulse_parcels = [20, 25]
-    >>> P_links = [2, 6]
-    >>> P_parcel_volume = [1, 0.5]
-    >>> make_pulse(time, d50, num_pulse_parcels,P_links,P_parcel_volume)
+
+    >>> make_pulse = SedimentPulser(grid)
+    >>> make_pulse.parcels
+    None
     
-    >>> Option 2
-    >>> parcel_df = pd.DataFrame({'vol [m^3]': [0.5, 0.2, 0.5, 1],
-                                  'link_#': [1, 3, 5, 2],
-                                  'link_downstream_distance': []})
-    >>>
-    
+
     """
     def __init__(
         self,
         grid,
         parcels = None,
-        d50 = 0.05,
-        std_dev = 0.03,
+        D50 = 0.05,
+        D_sd = 0.03,
         rho_sediment = 2650.0,
         parcel_volume = 0.5,
         abrasion_rate = 0.0
@@ -84,8 +69,8 @@ class SedimentPulserBase:
         
         self._grid = grid
         self._parcels = parcels
-        self._d50 = d50
-        self._std_dev = std_dev
+        self._D50 = D50
+        self._D_sd = D_sd
         self._rho_sediment = rho_sediment
         self._parcel_volume = parcel_volume
         self._abrasion_rate = abrasion_rate
@@ -97,10 +82,10 @@ class SedimentPulserBase:
 
 
     def calc_lognormal_distribution_parameters(self, mu_x, sigma_x):
-        '''
-        
-        lognormal distribution parameters determined from mean and standard
-        deviation following Maidment, 1990, Chapter 18, eq. 18.2.6 
+        '''        
+        determine mean and standard deviation of the underlying normal distribution
+        of a sample that is lognormally distributed following Maidment, 1990, 
+        Chapter 18, eq. 18.2.6 
     
         Parameters
         ----------

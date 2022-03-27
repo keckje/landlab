@@ -10,7 +10,7 @@ used this script for initial debugging and drafts of tests for pulser
 import pandas as pd
 import numpy as np
 from landlab import NetworkModelGrid
-from landlab.utils.parcels.sediment_pulser_at_links import SedimentPulserAtLinks
+from landlab.utils.parcels.sediment_pulser_at_links_v2 import SedimentPulserAtLinks
 from landlab.utils.parcels.sediment_pulser_each_parcel_v2 import SedimentPulserEachParcel
 
 # example_nmg
@@ -61,14 +61,14 @@ grid.add_field(
 make_pulse = SedimentPulserEachParcel(grid)
 
 
-parcel_df = pd.DataFrame({'vol [m^3]': [0.2, 2.5, 1.5, 1],
+parcel_df = pd.DataFrame({'pulse_volume': [0.2, 2.5, 1.5, 1],
                                   'link_#': [1, 3, 5, 2],
-                                  'link_downstream_distance': [0.8,0.7,0.5,0.2]})
+                                  'normalized_downstream_distance': [0.8,0.7,0.5,0.2]})
 
 
 
 time = 12
-pulse0 = make_pulse(time,SedimentPulseDF=parcel_df)
+pulse0 = make_pulse(time,PulseDF=parcel_df)
 
 
 # specify grain size
@@ -77,15 +77,15 @@ make_pulse = SedimentPulserEachParcel(grid)
 
 
 
-parcel_df = pd.DataFrame({'vol [m^3]': [0.2, 2.5, 1.5, 1],
+parcel_df = pd.DataFrame({'pulse_volume': [0.2, 2.5, 1.5, 1],
                                   'link_#': [1, 3, 5, 2],
-                                  'link_downstream_distance': [0.8,0.7,0.5,0.2],
-                         'D50 [m]': [0.15, 0.2, 0.22, 0.1],
-                         'D stdev [m]': [0, 0, 0, 0]})
+                                  'normalized_downstream_distance': [0.8,0.7,0.5,0.2],
+                         'D50': [0.15, 0.2, 0.22, 0.1],
+                         'D_sd': [0, 0, 0, 0]})
                          # 'D stdev [m]': [0.05, 0.07, 0.1, 0.15, 0.27])
 
 time = 13
-pulse0 = make_pulse(time,SedimentPulseDF=parcel_df)
+pulse0 = make_pulse(time,PulseDF=parcel_df)
 
 print(pulse0.variable_names)
 print(pulse0.dataset['D'])

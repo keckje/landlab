@@ -1,7 +1,10 @@
 import pytest
 import numpy as np
 
-from landlab.utils.parcels import SedimentPulserEachParcel, SedimentPulserAtLinks
+# from landlab.utils.parcels import SedimentPulserEachParcel, SedimentPulserAtLinks
+
+from landlab.utils.parcels.sediment_pulser_at_links_v2 import SedimentPulserAtLinks
+from landlab.utils.parcels.sediment_pulser_each_parcel_v2 import SedimentPulserEachParcel
 
 from landlab import RasterModelGrid
 
