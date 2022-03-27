@@ -8,8 +8,8 @@ _OUT_OF_NETWORK = -2
 class SedimentPulserEachParcel(SedimentPulserBase):
     
     """Send pulses of sediment to specific point locations within the channel 
-    network and divide the pulses into parcels. Pulses can have any volume.
-    Parcels must be less than or equal to a user specified volume.
+    network and divide the pulses into parcels. Pulses may be any volume.
+    Parcels must be less than or equal to a user specified maximum volume.
     
     SedimentPulserEachParcel is instantiated by specifying the network model grid
     it will pulse the parcels into
@@ -42,7 +42,7 @@ class SedimentPulserEachParcel(SedimentPulserBase):
     >>> grid.at_link["reach_length"] = np.full(grid.number_of_links, 100.0)  # m
 
     
-    Instantiate 'SedimentPulserEachParcel' utility
+    Instantiate 'SedimentPulserEachParcel'
     
     >>> make_pulse = SedimentPulserEachParcel(grid)
     
@@ -57,7 +57,7 @@ class SedimentPulserEachParcel(SedimentPulserBase):
     
     >>> parcels = make_pulse(time, PulseDF)
     
-    check element_id of each parcel in contents of DataRecord
+    check element_id of each parcel
     
     >>> print(parcels.dataset['element_id'].values)
     array([[1],[3],[3],[5],[5],[5],[2]]))
@@ -84,7 +84,7 @@ class SedimentPulserEachParcel(SedimentPulserBase):
             
         **kwgs include:
             parcels: landlab DataRecord 
-                Tracks parcel location and variables
+                Tracks parcel location and attributes
             D50: float, optional
                 median grain size [m]
             D_sd: float, optional
@@ -102,8 +102,7 @@ class SedimentPulserEachParcel(SedimentPulserBase):
      
         """specify the location and attributes of each pulse of material added to 
         a Network Model Grid DataRecord 
-        
-        
+          
         Parameters
         ----------
         time : integer or datetime64 value equal to nst.time
@@ -192,8 +191,8 @@ class SedimentPulserEachParcel(SedimentPulserBase):
             item_id: dictionary, model grid element and index of element of each parcel
 
         """
-        # split pulse table into parcels based on a maximum allowable parcel volume.
-        p_np = [] # list of parcels in each pulse
+        # split pulse into parcels.
+        p_np = [] # list of number of parcels in each pulse
         volume = np.array([]) # list of parcel volumes from all pulses
         for index, row in PulseDF.iterrows():
             
