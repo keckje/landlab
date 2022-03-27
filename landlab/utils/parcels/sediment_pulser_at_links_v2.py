@@ -29,8 +29,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
     >>> from landlab import NetworkModelGrid
     >>> from landlab.utils.parcels.sediment_pulser_at_links import SedimentPulserAtLinks
     
-    Create the network model grid. Pulses are added to the links of the network
-    model grid.
+    Create the network model grid the parcels will be added to.
     
     >>> y_of_node = (0, 100, 200, 200, 300, 400, 400, 125)
     >>> x_of_node = (0, 0, 100, -50, -100, 50, -150, -100)
@@ -46,7 +45,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
     >>> def time_to_pulse(time):
     ...     return True
     
-    Instantiate 'SedimentPulserAtLinks' utility
+    Instantiate 'SedimentPulserAtLinks'
 
     >>> make_pulse = SedimentPulserAtLinks(grid, time_to_pulse=time_to_pulse)
     
@@ -58,7 +57,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
     >>> n_parcels_at_link = [2, 3]
     >>> parcels = make_pulse(time=time, links=links, n_parcels_at_link=n_parcels_at_link)       
         
-    check element_id of each parcel in contents of DataRecord
+    Check the element_id of each parcel
     
     >>> print(parcels.dataset['element_id'].values)
     array([[2],[2],[6],[6],[6]])
