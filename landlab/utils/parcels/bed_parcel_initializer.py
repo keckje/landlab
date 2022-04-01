@@ -48,7 +48,7 @@ class BedParcelInitializer:
     gravity : float, optional
         Accelertion due to gravity [m / s^2].
     std_dev : float, optional
-        Standard deviation of of grain size, expressed as a factor of the mean.
+        Standard deviation of lognormal distribution of grain size.
     sed_thickness : float, optional
         Sediment thickness in multiples of d84.
     abrasion_rate : float, optional
@@ -133,11 +133,6 @@ class BedParcelInitializer:
         self.D50 = D50
         d84 = D50 * self._std_dev
 
-    
-        D50_log, D_sd_log = self.calc_lognormal_distribution_parameters(mu_x = D50, 
-                                                              sigma_x = D_sd) 
-
-
         total_parcel_volume_at_link = calc_total_parcel_volume(
             self._grid.at_link["channel_width"],
             self._grid.at_link["reach_length"],
@@ -152,8 +147,8 @@ class BedParcelInitializer:
             total_parcel_volume_at_link,
             max_parcel_volume,
             self._median_number_of_starting_parcels,
-            D50_log,
-            D_sd_log,
+            D50,
+            self._std_dev,
             self._rho_sediment,
             self._abrasion_rate,
             self._extra_parcel_attributes,
@@ -214,7 +209,7 @@ def parcel_characteristics(
     total_parcel_volume_at_link,
     max_parcel_volume,
     median_number_of_starting_parcels,
-    D50_log,
+    D50,
     std_dev,
     rho_sediment,
     abrasion_rate,
@@ -252,7 +247,7 @@ def parcel_characteristics(
     for link, n_parcels in enumerate(n_parcels_at_link):
         element_id[offset:offset + n_parcels] = link
         grain_size[offset:offset + n_parcels] = np.random.lognormal(
-            np.log(D50[link]), np.log(std_dev[link]), n_parcels
+            np.log(D50[link]), np.log(std_dev), n_parcels
         )
         # volume[offset] = (
         #                 total_parcel_volume_at_link[link]
@@ -368,31 +363,3 @@ def calc_D50_grain_size_hydraulic_geometry(user_D50,drainage_area):
         raise ValueError(msg)
         
     return D50
-
-
-def calc_lognormal_distribution_parameters(self, mu_x, sigma_x):
-    '''        
-    determine mean and standard deviation of the underlying normal distribution
-    of a sample that is lognormally distributed following Maidment, 1990, 
-    Chapter 18, eq. 18.2.6 
-
-    Parameters
-    ----------
-    mu_x : float
-        mean grain size.
-    sigma_x : float
-        standard deviation of grain sizes.
-
-    Returns
-    -------
-    mu_y : float
-        mean of natural log of grain size
-    sigma_y : float
-        standard deviation of natural log of grain sizes.
-
-    '''
-    sigma_y = (np.log(((sigma_x**2)/(mu_x**2))+1))**(1/2)
-    mu_y = np.log(mu_x)-(sigma_y**2)/2        
-
-    
-    return mu_y, sigma_y

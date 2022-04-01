@@ -182,7 +182,7 @@ class Test_BedParcelInitializer(object):
         EI = parcels.dataset['element_id']
         SLe = np.array([0,1,2,3,4,5,5,6])
         SL = parcels.dataset['starting_link']
-        ARe = np.ones(8)*0
+        ARe = np.ones(8)*0.1
         AR = parcels.dataset['abrasion_rate']
         De = np.ones(8)*2650
         D = parcels.dataset['density']
