@@ -192,7 +192,7 @@ class SedimentPulserAtLinks(SedimentPulserBase):
         D50_log, D_sd_log = self.calc_lognormal_distribution_parameters(mu_x = D50, 
                                                                       sigma_x = D_sd)  
 
-        # create times for DataRecord
+        # create items and variables for DataRecord
         variables, items = self._sediment_pulse_stochastic(
             time,
             links,

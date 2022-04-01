@@ -10,8 +10,8 @@ from .bed_parcel_initializer import (
     parcel_characteristics,
     determine_approx_parcel_volume,
     calc_total_parcel_volume,
-    calc_d50_grain_size,
-    calc_d50_grain_size_hydraulic_geometry,
+    calc_D50_grain_size,
+    calc_D50_grain_size_hydraulic_geometry,
 )
 
 
@@ -27,7 +27,7 @@ __all__ = ["BedParcelInitializer",
            "parcel_characteristics",
            "determine_approx_parcel_volume",
            "calc_total_parcel_volume",
-           "calc_d50_grain_size",
-           "calc_d50_grain_size_hydraulic_geometry",
+           "calc_D50_grain_size",
+           "calc_D50_grain_size_hydraulic_geometry",
            "calc_total_parcel_volume",
            "calc_lognormal_distribution_parameters"]
