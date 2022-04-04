@@ -420,8 +420,8 @@ class MassWastingEroder(Component):
               inlet to deposition location in link to length of link
 
             '''
-            return row['link_downstream_distance [m]']/self.linklength[int(row['link_#'])]
-
+            # return row['link_downstream_distance [m]']/self.linklength[int(row['link_#'])]
+            return row['normalized_downstream_distance']/self.linklength[int(row['link_#'])]
         if len(self.FENodes) == 0:
             FEDn = []
             parcelDF = pd.DataFrame([])
@@ -457,7 +457,8 @@ class MassWastingEroder(Component):
                         link_d = self.Ldistlist[i]
                         ld = link_d[en]
                         linkID = i
-                        mwlink = OrderedDict({'mw_unit':h,'vol [m^3]':self.FEV[h],'raster_grid_cell_#':FEDn,'link_#':linkID,'link_cell_#':search,'raster_grid_to_link_offset [m]':offset,'link_downstream_distance [m]':ld})
+                        mwlink = OrderedDict({'mw_unit':h,'pulse_volume':self.FEV[h],'raster_grid_cell_#':FEDn,'link_#':linkID,'link_cell_#':search,'raster_grid_to_link_offset [m]':offset,'normalized_downstream_distance':ld})
+                        # mwlink = OrderedDict({'mw_unit':h,'vol [m^3]':self.FEV[h],'raster_grid_cell_#':FEDn,'link_#':linkID,'link_cell_#':search,'raster_grid_to_link_offset [m]':offset,'link_downstream_distance [m]':ld})
                         Lmwlink.append(mwlink)
                         break #for now use the first link found - later, CHANGE this to use largest order channel
                     else:

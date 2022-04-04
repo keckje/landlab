@@ -7,77 +7,31 @@ _OUT_OF_NETWORK = -2
 
 class SedimentPulserEachParcel(SedimentPulserBase):
     
-    '''
-    Send a pulse of sediment to specific links and link locations of a channel 
-    network and divide the pulse into parcels
-    
-
+    """Send pulses of sediment to specific point locations within the channel 
+    network and divide the pulses into parcels. Pulses may be any volume.
+    Parcels must be less than or equal to a user specified maximum volume.
     
     SedimentPulserEachParcel is instantiated by specifying the network model grid
     it will pulse the parcels into
     
+    SedimentPulserEachParcel is run (adds parcels to DataRecrod) by calling the 
+    SedimentPulserEachParcel instance with the time that pulses are added to 
+    the channel network and a sediment pulse table (PulseDF) 
     
-    The sediment pulse table is a pandas dataframe. It has columns for the link,
-    distance on link, volume of material in pulse, parcel volume that the pulse
-    is divided into, and optionally grain characteristics specific to the material 
-    in the pulse.
+    PulseDF is a pandas dataframe that at a minimum, it must have columns 'Link#'
+    'normalized_downstream_distance' and 'pulse_volume'. Optionally, the parcel 
+    volume that the pulse is divided into and grain characteristics of each pulse
+    can also be specified in PulseDF.
     
-    
-    SedimentPulserCatalog is run (adds parcels to DataRecrod) by calling the 
-    SedimentPulserCatalog instance with  a the time that pulses are added to 
-    the channel network and a sediment pulse catalog (pandas dataframe that lists 
-    the volume of the pulse,the link number and the distance on the link that 
-    the pulse enters the channel network. Grain characteristics of the pulse use
-    the instance sediment characteristics.
 
-    Optionallly, the user can include grain characteristics of each pulse in the
-    sediment pulse catalog
-     
-    Parameters
-    ----------
-    
-    Instantiation parameters:
-        
-    grid : ModelGrid
-        landlab *ModelGrid* to place sediment parcels on.
-    parcels: landlab DataRecord 
-        Tracks parcel location and variables
-    d50: float, optional
-        median grain size [m]
-    std_dev: float, optional
-        standard deviation of grain sizes [m]
-    rho_sediment : float, optional
-        Sediment grain density [kg / m^3].
-    parcel_volume : float, optional
-        parcel volume used for all parcels that do not have a specified volume [m^3]
-    abrasion_rate: list of floats, optional
-        rate that grain size decreases with distance along channel [mm/km?]
-     
-    
-    Run instance parameters:
-    time : integer or datetime64 value equal to nst.time
-        time that the pulse is triggered in the network sediment transporter
-    SedimentPulseDF : pandas dataframe
-        each row contains information on the deposition location and volume of
-        a single pulse of sediment. The pulse is divided into n number of 
-        parcels, where n equals the np.ceil(sediment pulse volume / parcel volume)
-        For details on the format of the DataFrame, see docstring below in the
-        function _sediment_pulse_dataframe below
-        
-
-        
-
-    # Complete pulser at links
-    # complete pulser each parcel
-    # complete tests
-    # draft parcel collector
-    
-    
 
     Examples
     --------
     >>> from landlab import NetworkModelGrid
     >>> from landlab.utils.parcels.sediment_pulser_at_links import SedimentPulserAtLinks
+
+    Create the network model grid. Pulses are added to the links of the network
+    model grid.
 
     >>> y_of_node = (0, 100, 200, 200, 300, 400, 400, 125)
     >>> x_of_node = (0, 0, 100, -50, -100, 50, -150, -100)
@@ -88,23 +42,27 @@ class SedimentPulserEachParcel(SedimentPulserBase):
     >>> grid.at_link["reach_length"] = np.full(grid.number_of_links, 100.0)  # m
 
     
-        Instantiate 'SedimentPulserAtLinks' utility for the network model
-        grid and pulse criteria
-
-    >>> make_pulse = SedimentPulserAtLinks(grid, time_to_pulse=time_to_pulse)
+    Instantiate 'SedimentPulserEachParcel'
     
-        Run the instance with inputs for the time, link location, number of
-        parcels using the instance grain characterstics for all links
-
-    >>> time = 10
-    >>> links = [2, 6]
-    >>> n_parcels_at_link = [20, 25]
-    >>> pulse1 = make_pulse(time=time, links=links, n_parcels_at_link=n_parcels_at_link,
-                   d50=d50, std_dev=std_dev,parcel_volume = parcel_volume)        
-        
-        check contents of DataRecord
+    >>> make_pulse = SedimentPulserEachParcel(grid)
     
-    '''
+    Define the PulseDF and time of the pulse
+
+    >>> PulseDF = pd.DataFrame({'pulse_volume': [0.2, 1, 1.1, 0.5],
+                                      'link_#': [1, 3, 5, 2],
+                                      'normalized_downstream_distance': [0.8,0.7,0.5,0.2]})    
+    >>> time = 7
+    
+    Run the instance
+    
+    >>> parcels = make_pulse(time, PulseDF)
+    
+    check element_id of each parcel
+    
+    >>> print(parcels.dataset['element_id'].values)
+    array([[1],[3],[3],[5],[5],[5],[2]]))
+
+    """
      
     def __init__(
         self,
@@ -113,26 +71,68 @@ class SedimentPulserEachParcel(SedimentPulserBase):
         ):
                
         SedimentPulserBase.__init__(self, grid,**kwgs)
-        
-    
-    def __call__(self, time, SedimentPulseDF = None):
-        
 
-
-        if SedimentPulseDF is None: # if no PulseDF provided, raise error. Should at least provide an empty PulseDF
+        """
+        instantiate SedimentPulserEachParcel
+        
+        Parameters
+        ----------
+        
             
-            raise('SedimentPulseDF was not specified')
+        grid : ModelGrid
+            landlab *ModelGrid* to place sediment parcels on.
+            
+        **kwgs include:
+            parcels: landlab DataRecord 
+                Tracks parcel location and attributes
+            D50: float, optional
+                median grain size [m]
+            D_sd: float, optional
+                standard deviation of grain sizes [m]
+            rho_sediment : float, optional
+                Sediment grain density [kg/m^3].
+            parcel_volume : float
+                parcel volume [m^3]
+            abrasion_rate: float
+                rate that grain size decreases with distance along channel [mm/km?]
+        """
+   
+    def __call__(self, time, PulseDF = None):
+        
+     
+        """specify the location and attributes of each pulse of material added to 
+        a Network Model Grid DataRecord 
+          
+        Parameters
+        ----------
+        time : integer or datetime64 value equal to nst.time
+            time that the pulse is triggered in the network sediment transporter
+        PulseDF : pandas dataframe
+            each row contains information on the deposition location and volume of
+            a single pulse of sediment. The pulse is divided into 'n' number of 
+            parcels, where 'n' equals the np.ceil(pulse volume / parcel volume)
+            For details on the format of the DataFrame, see the docstring for
+            function _sediment_pulse_dataframe 
+            
+            
+        Returns
+        -------
+            self._parcels
+                a DataRecord containing all information on each individual parcel
+        """
+
+        if PulseDF is None: # if no PulseDF provided, raise error. Should at least provide an empty PulseDF
+            msg = 'PulseDF was not specified'
+            raise ValueError(msg)
             
         else: # PulseDf was provided
             
-            if SedimentPulseDF.empty == True: # if empty, pulser stops, returns the existing parcels, call stops
+            if PulseDF.empty == True: # if empty, pulser stops, returns the existing parcels, call stops
                 return self._parcels
-                print('PulserDF is EMPTY')
+                print('PulseDF is EMPTY')
             
             variables, items = self._sediment_pulse_dataframe(time,  # create variabels and and items needed to create the data record
-                SedimentPulseDF,
-                point_pulse = True)
-            print('created parcel dictionary')
+                PulseDF)
         
         if self._parcels is None: # if no parcels, create parcels
             self._parcels = DataRecord(
@@ -142,141 +142,158 @@ class SedimentPulserEachParcel(SedimentPulserBase):
                 data_vars=variables,
                 dummy_elements={"link": [_OUT_OF_NETWORK]},
             )
-            print('Parcels is NONE')
+            print('Parcels not provided, created a new DataRecord')
         else: # else use the add item method to add parcels
             self._parcels.add_item(time=[time], new_item=items, new_item_spec=variables)
-            print('added parcels')
+            print('Added parcels to DataRecord')
         return self._parcels
 
-
-
-    def _sediment_pulse_dataframe(self, time, SedimentPulseDF, point_pulse = True):
+    def _sediment_pulse_dataframe(self, time, PulseDF):
         
-        '''
-        specify attributes of pulses added to a Network Model Grid DataRecord 
-        at specific channel netowrk locations (link, distance on link)
-        
-    
+        """
+        converts PulseDF to a dataset that describes the network location and
+        attributes of each individual parcel
+
         Parameters
         ----------
-        time : integer or datetime64 value equal to nst.time
-            time that the pulse is triggered in the network sediment transporter
-        SedimentPulseDF : pandas dataframe
-            each row contains information on the deposition location and volume of
-            a single pulse of sediment. The pulse is divided into n number of 
-            parcels, where n equals the np.ceil(sediment pulse volume / parcel volume)
+        time : integer or datetime64 
+        
+        PulseDF : pandas dataframe
             
-            The SedimentPulseDF must include the following columns:
-                'link_#','vol [m^3]','link_downstream_distance_ratio'
+            The PulseDF must include the following columns:
+                'link_#', 'pulse_volume', 'normalized_downstream_distance'
             
-            Optionally, the SedimentPulseDf can include the following columns:
-               'd50 [m]', 'std_dev [m]', rho_sediment '[m^3/kg]', 'parcel_volume [m^3]'
-               
-            if the optional columns are not included in SedimentPulseDF, then
-            the instance variables are used to define sediment characateristics 
-            of each pulse.
-
-    
+            Optionally, PulseDF can include the following columns:
+               'D50', 'D_sd', 'abrasion_rate', 'rho_sediment', 'parcel_volume'
+                             
+            Values in each columne are defined as follows:
+                
+            'link_#': int - link number pulse enters the channel network
+            'pulse_volume: float - total volume of the pulse [m^3]
+            'normalized_downstream_distance': float - distance from link inlet 
+                                                      divided by link length
+            'D50': float - median grain size [m]
+            'D_sd': float - grain-size standard deviation [m]
+            'abrasion_rate': float - rate that grain size decreases with 
+                                     distance along channel [mm/km?]
+            'rho_sediment': float - density grains [kg/m^3]
+            'parcel_volume': float - maximum volume of one parcel [m^3]
+                
+            
+            if the optional columns are not included in PulseDF, those parameters
+            are assumed uniform across the basin, constant with time and equal
+            to the corrisponding class variables. 
+   
         Returns
         -------
-        tuple: (item_id,variables)
+        tuple: (variables, items)
+            variables: dictionary, attribute values for all new parcels
             item_id: dictionary, model grid element and index of element of each parcel
-            variables: dictionary, variable values for al new pulses
-     
-    
-       ###CHECK, may be inconsitecy in use of parcel and pulse, a pulse should be divided into parcels, more parcels
-       than pulses
-        '''
-        #(1) create parcels for each landslide pulse
 
-        p_np = []
-        if 'parcel_volume [m^3]' in SedimentPulseDF:       
-            for index, row in SedimentPulseDF.iterrows():
-                p_np.append(int(row['vol [m^3]']/row['parcel_volume [m^3]'])) #number of parcels in pulse = volume pulse/volume 1 parcel        
-        else:               
-            for index, row in SedimentPulseDF.iterrows():
-                p_np.append(int(row['vol [m^3]']/self._parcel_volume)) #number of parcels in pulse = volume pulse/volume 1 parcel
-     
-        num_pulse_parcels = sum(p_np) # total number of parcels that enter network for timestep t
-    
-       
-        LinkDistanceRatio = np.array([]) #create 1 x num_pulse_parcels array that lists distance ratio of each link. 
-        for i,val in enumerate(SedimentPulseDF['link_downstream_distance'].values):
-            # print(val)
-            if point_pulse:
-                LinkDistanceRatio = np.concatenate((LinkDistanceRatio,np.ones(p_np[i])*val)) #enter channel at single point
+        """
+        # split pulse into parcels.
+        p_np = [] # list of number of parcels in each pulse
+        volume = np.array([]) # list of parcel volumes from all pulses
+        for index, row in PulseDF.iterrows():
+            
+            # set the maximum allowable parcel volume using either
+            # the default value or value in PulseDF
+            if 'parcel_volume' in PulseDF:
+                mpv = row['parcel_volume']
             else:
-                # determine length of deposit, and depth and scale spacing for entry points using logspace?
-                LinkDistanceRatio = np.concatenate((LinkDistanceRatio,np.linspace(val,0.99,p_np[i]))) #enter channel distributed from deposition point to end of link
-        
-        new_location_in_link = np.expand_dims(LinkDistanceRatio, axis=1)
-        
-        #(3)create 1xnum_pulse_parcels array that lists the link each parcel is entered into.
-        newpar_element_id = np.array([]) 
-        for i, row in SedimentPulseDF.iterrows():       
-            newpar_element_id = np.concatenate((newpar_element_id,np.ones(p_np[i])*row['link_#']))        
-    
-        newpar_element_id = np.expand_dims(newpar_element_id.astype(int), axis=1) #change format to 1Xn array
-        new_starting_link = np.squeeze(newpar_element_id)
-    
-        #(4)create 1xn array of zeros to append to array of distance parcels traveled before tiemestep t (zero because parcels did not exist before timestep)
-        newpar_dist = np.zeros(num_pulse_parcels,dtype=int)          
-                 
-        #(5) create time stamp of zero for each parcel before parcel existed        
-        new_time_arrival_in_link = time* np.ones(
-            np.shape(newpar_element_id)) #arrives at current time in nst model
-        
-        #(6) compute total volume of all parcels entered into network during timestep
-        new_volume = self._parcel_volume*np.ones(np.shape(newpar_element_id)) #SedimentPulseDF['vol [m^3]'].values /100  # volume of each parcel (m3) divide by 100 because large parcels break model
-        #new_volume = np.expand_dims(new_volume, axis=1)
-        
-        #(7) assign grain properties -lithology ,activity, density, abrasion rate, diameter,- this can come from dataframe parcelDF
-        new_lithology = ["pulse_material"] * np.size(
-            newpar_element_id)  
-        
-        new_active_layer = np.ones(
-            np.shape(newpar_element_id))  # 1 = active/surface layer; 0 = subsurface layer
-        
-        new_density = 2650 * np.ones(np.size(newpar_element_id))  # (kg/m3)
+                mpv = self._parcel_volume
             
-        new_abrasion_rate = 0 * np.ones(np.size(newpar_element_id))
+            # split the pulse into parcels
+            if row['pulse_volume'] < mpv:
+                # only one partial parcel volume
+                v_p = np.array([row['pulse_volume']])
+            else:
+                # number of whole parcels
+                n_wp = int(np.floor(row['pulse_volume']/mpv))
+                # array of volumes, whole parcels
+                v_wp = np.ones(n_wp)*mpv
+                # volume of last parcel, a partial parcel
+                v_pp = np.array([row['pulse_volume']%mpv])
+                # array of all parcel volumes
+                # partial parcel included if volume > 0
+                if v_pp>0:
+                    v_p = np.concatenate((v_wp, v_pp))
+                else:
+                    v_p = v_wp
+            volume = np.concatenate((volume, v_p))                   
+            p_np.append(len(v_p)) 
+        volume = np.expand_dims(volume, axis=1)
+
+
+        # link location    
+        LinkDistanceRatio = np.array([])
+        for i,val in enumerate(PulseDF['normalized_downstream_distance'].values):
+            # parcels from the same pulse enter channel at the same point   
+            LinkDistanceRatio = np.concatenate((LinkDistanceRatio,np.ones(p_np[i])*val))        
+        location_in_link = np.expand_dims(LinkDistanceRatio, axis=1)
         
-        try:
-            p_parcel_D  = SedimentPulseDF['d50 [m]'] # grain size in parcel : Change to read parcelDF
-        except:
-            p_parcel_D = self._d50
+        # element id and starting link
+        element_id = np.array([]) 
+        for i, row in PulseDF.iterrows():       
+            element_id = np.concatenate((element_id,np.ones(p_np[i])*row['link_#']))            
+        starting_link = element_id.copy()
+        element_id = np.expand_dims(element_id.astype(int), axis=1)
+
+        # specify that parcels are in the links of the network model grid
+        grid_element = ["link"]*np.size(element_id)
+        grid_element = np.expand_dims(grid_element, axis=1)
+        
+        # time of arrivial (time instance called)
+        time_arrival_in_link = np.full(np.shape(element_id), time, dtype=float)
             
-        if 'd50 [m]' in SedimentPulseDF.columns:
-            p_parcel_D  = SedimentPulseDF['d50 [m]'] # grain size in parcel : Change to read parcelDF
+        # All parcels in pulse are in the active layer (1) rather than subsurface (0)
+        active_layer = np.ones(np.shape(element_id))
+                
+        if 'rho_sediment' in PulseDF.columns:
+            density = np.array([]) 
+            for i, row in PulseDF.iterrows():       
+                density = np.concatenate((density,np.ones(p_np[i])*row['rho_sediment']))   
+            density = density
         else:
-            p_parcel_D = self._d50
-            
-        new_D = p_parcel_D * np.ones(np.shape(newpar_element_id))
-    
-    
-        #(8) assign part of grid that parcel is deposited (node vs link)    
-        newpar_grid_elements = np.array(
-            np.empty(
-                (np.shape(newpar_element_id)), dtype=object)) 
+            density = self._rho_sediment * np.ones(np.shape(starting_link))          
         
-        newpar_grid_elements.fill("link")
+        if 'abrasion_rate' in PulseDF.columns:
+            abrasion_rate = np.array([]) 
+            for i, row in PulseDF.iterrows():       
+                abrasion_rate = np.concatenate((abrasion_rate,np.ones(p_np[i])*row['abrasion_rate']))   
+            abrasion_rate = abrasion_rate
+        else:
+            abrasion_rate = self._abrasion_rate* np.ones(np.shape(starting_link))           
+                    
+        if 'D50' in PulseDF.columns and 'D_sd' in PulseDF.columns:
+            grain_size = np.array([]) 
+            for i, row in PulseDF.iterrows():       
+                # det D50 and D_sd
+                n_parcels = p_np[i]
+                D50 = row['D50']
+                D_sd = row['D_sd']
+                D50_log, D_sd_log = self.calc_lognormal_distribution_parameters(mu_x = D50, sigma_x = D_sd)
+                grain_size_pulse = np.random.lognormal(D50_log, D_sd_log, n_parcels)
+                grain_size = np.concatenate((grain_size,grain_size_pulse))
+        else:
+            n_parcels = sum(p_np)
+            D50 = self._D50
+            D_sd = self._D_sd
+            D50_log, D_sd_log = self.calc_lognormal_distribution_parameters(mu_x = D50, sigma_x = D_sd)
+            grain_size = np.random.lognormal(D50_log, D_sd_log, n_parcels)       
         
-        item_id = {"grid_element": newpar_grid_elements,
-                 "element_id": newpar_element_id}
-    
-        #(9) construct dictionary of all parcel variables to be entered into data recorder
-        variables = {
-            "starting_link": (["item_id"], new_starting_link),
-            "abrasion_rate": (["item_id"], new_abrasion_rate),
-            "density": (["item_id"], new_density),
-            #"lithology": (["item_id"], new_lithology),
-            "time_arrival_in_link": (["item_id", "time"], new_time_arrival_in_link),
-            "active_layer": (["item_id", "time"], new_active_layer),
-            "location_in_link": (["item_id", "time"], new_location_in_link),
-            "D": (["item_id", "time"], new_D),
-            "volume": (["item_id", "time"], new_volume),
-        }
+        grain_size = np.expand_dims(grain_size, axis=1)
+                   
+        item_id = {"grid_element": grid_element,
+                 "element_id": element_id}
         
-        print('TOTAL PARCEL VOLUME ADDED THIS STEP')
-        print(np.nansum(new_volume))
-        return variables,item_id
+        return {
+            "starting_link": (["item_id"], starting_link),
+            "abrasion_rate": (["item_id"], abrasion_rate),
+            "density": (["item_id"], density),
+            "time_arrival_in_link": (["item_id", "time"], time_arrival_in_link),
+            "active_layer": (["item_id", "time"], active_layer),
+            "location_in_link": (["item_id", "time"], location_in_link),
+            "D": (["item_id", "time"], grain_size),
+            "volume": (["item_id", "time"], volume),
+        }, {"grid_element": grid_element, "element_id": element_id}

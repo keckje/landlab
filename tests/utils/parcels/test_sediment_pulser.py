@@ -2,16 +2,16 @@ import pytest
 import numpy as np
 import pandas as pd
 
+#NOTE: need to update expected values of density and abrasion rate
+
 # from landlab.utils.parcels import SedimentPulserEachParcel, SedimentPulserAtLinks
 
-from landlab.utils.parcels.sediment_pulser_at_links_v2 import SedimentPulserAtLinks
-from landlab.utils.parcels.sediment_pulser_each_parcel_v2 import SedimentPulserEachParcel
+from landlab.utils.parcels.sediment_pulser_at_links import SedimentPulserAtLinks
+from landlab.utils.parcels.sediment_pulser_each_parcel import SedimentPulserEachParcel
 
 from landlab import RasterModelGrid
 
-from landlab.utils.parcels import (
-                                    calc_lognormal_distribution_parameters,
-                                    )
+
 
 def always_time_to_pulse(time):
     return True
@@ -21,18 +21,18 @@ def time_to_pulse_list(time):
     return time in Ptime
 
 
-
-def test_calc_lognormal_distribution_parameters():
+def test_calc_lognormal_distribution_parameters(example_nmg):
     """check lognormal distribution mean and standard deviation with values 
     calculated in excel"""
+    pulser = SedimentPulserEachParcel(example_nmg)
     mu_x = 0.1; sigma_x = 0.05
-    mu_y, sigma_y = calc_lognormal_distribution_parameters(mu_x,sigma_x)
+    mu_y, sigma_y = pulser.calc_lognormal_distribution_parameters(mu_x,sigma_x)
     mu_y_e = -2.41416; sigma_y_e = 0.472381
     np.testing.assert_allclose(np.array([mu_y,sigma_y]), 
                                np.array([mu_y_e, sigma_y_e]), rtol = 1e-4)
      
     mu_x = 0.33; sigma_x = 0.33
-    mu_y, sigma_y = calc_lognormal_distribution_parameters(mu_x,sigma_x)
+    mu_y, sigma_y = pulser.calc_lognormal_distribution_parameters(mu_x,sigma_x)
     mu_y_e = -1.45524; sigma_y_e = 0.832555
     np.testing.assert_allclose(np.array([mu_y,sigma_y]), 
                                np.array([mu_y_e, sigma_y_e]), rtol = 1e-4)    
@@ -59,9 +59,9 @@ class Test_SedimentPulserAtLinks(object):
         EI = parcels.dataset['element_id']
         SLe = np.zeros(10).astype(int)
         SL = parcels.dataset['starting_link']
-        ARe = np.expand_dims(np.ones(10)*0, axis=1)
+        ARe = np.ones(10)*0
         AR = parcels.dataset['abrasion_rate']
-        De = np.expand_dims(np.ones(10)*2650, axis=1)
+        De = np.ones(10)*2650
         D = parcels.dataset['density']
         TAe = np.expand_dims(np.ones(10)*time, axis=1)
         TA = parcels.dataset['time_arrival_in_link']
@@ -113,9 +113,9 @@ class Test_SedimentPulserAtLinks(object):
         EI = parcels.dataset['element_id']
         SLe = np.array([2,2,6,6,6])
         SL = parcels.dataset['starting_link']
-        ARe = np.expand_dims(np.ones(5)*0, axis=1)
+        ARe = np.ones(5)*0
         AR = parcels.dataset['abrasion_rate']
-        De = np.expand_dims(np.ones(5)*2650, axis=1)
+        De = np.ones(5)*2650
         D = parcels.dataset['density']
         TAe = np.expand_dims(np.ones(5)*time, axis=1)
         TA = parcels.dataset['time_arrival_in_link']
@@ -179,12 +179,9 @@ class Test_SedimentPulserAtLinks(object):
         EI = parcels.dataset['element_id']
         SLe = np.array([ 0.,  0.,  2.,  2.,  6.,  6.,  6.])
         SL = parcels.dataset['starting_link']
-        ARe = np.array([[ 0. ,  np.nan], [ 0. ,  np.nan], [ np.nan,  0.1], [ np.nan,  0.1],
-                        [ np.nan,  0.3], [ np.nan,  0.3], [ np.nan,  0.3]])
+        ARe = np.array([ 0. ,  0. ,  0.1,  0.1,  0.3,  0.3,  0.3])
         AR = parcels.dataset['abrasion_rate']
-        De = np.array([[ 2650.,    np.nan], [ 2650.,    np.nan], [   np.nan,  2650.],
-                       [   np.nan,  2650.], [   np.nan,  2500.], [   np.nan,  2500.],
-                       [   np.nan,  2500.]])
+        De = np.array([ 2650.,  2650.,  2650.,  2650.,  2500.,  2500.,  2500.])
         D = parcels.dataset['density']
         TAe = np.array([[ 11.,  np.nan], [ 11.,  np.nan], [ np.nan,  12.], [ np.nan,  12.],
                         [ np.nan,  12.], [ np.nan,  12.], [ np.nan,  12.]])
@@ -261,9 +258,9 @@ class Test_SedimentPulserEachParcel(object):
         EI = parcels.dataset['element_id']
         SLe = np.array([1,3,3,5,5,5,2])
         SL = parcels.dataset['starting_link']
-        ARe = np.expand_dims(np.ones(7)*0, axis=1)
+        ARe = np.ones(7)*0
         AR = parcels.dataset['abrasion_rate']
-        De = np.expand_dims(np.ones(7)*2650, axis=1)
+        De = np.ones(7)*2650
         D = parcels.dataset['density']
         TAe = np.expand_dims(np.ones(7)*time, axis=1)
         TA = parcels.dataset['time_arrival_in_link']
@@ -318,11 +315,9 @@ class Test_SedimentPulserEachParcel(object):
         EI = parcels.dataset['element_id']
         SLe = np.array([1,1,3,5,5,2,2,2])
         SL = parcels.dataset['starting_link']
-        ARe = np.expand_dims(np.array([0.01,0.01,0.02,0.005,0.005,0.03,0.03,
-                                       0.03]), axis=1)
+        ARe = np.array([0.01,0.01,0.02,0.005,0.005,0.03,0.03,0.03])
         AR = parcels.dataset['abrasion_rate']
-        De = np.expand_dims(np.array([2650, 2650, 2300, 2750, 2750, 2100, 2100,
-                                       2100]), axis=1)
+        De = np.array([2650, 2650, 2300, 2750, 2750, 2100, 2100,2100])
         D = parcels.dataset['density']
         TAe = np.expand_dims(np.ones(8)*time, axis=1)
         TA = parcels.dataset['time_arrival_in_link']
@@ -387,13 +382,9 @@ class Test_SedimentPulserEachParcel(object):
         EI = parcels.dataset['element_id']
         SLe = np.array([ 1, 3, 3, 5, 5, 2, 2, 2])
         SL = parcels.dataset['starting_link']
-        ARe = np.array([[ 0.   ,    np.nan],[ 0.   ,    np.nan],[ 0.   ,    np.nan],
-                        [   np.nan,  0.005],[   np.nan,  0.005],[   np.nan,  0.03 ],
-                        [   np.nan,  0.03 ],[   np.nan,  0.03 ]])
+        ARe = np.array([ 0.   ,  0.   ,  0.   ,  0.005,  0.005,  0.03 ,  0.03 ,  0.03 ])
         AR = parcels.dataset['abrasion_rate']
-        De = np.array([[ 2650.,    np.nan],[ 2650.,    np.nan],[ 2650.,    np.nan], 
-                       [   np.nan,  2650.],[   np.nan,  2650.],[   np.nan,  2650.],
-                       [   np.nan,  2650.],[   np.nan,  2650.]])
+        De = np.array([ 2650.,  2650.,  2650.,  2650.,  2650.,  2650.,  2650.,  2650.])
         D = parcels.dataset['density']
         TAe = np.array([[  7.,  np.nan],[  7.,  np.nan],[  7.,  np.nan],[ np.nan,   8.],
                         [ np.nan,   8.],[ np.nan,   8.],[ np.nan,   8.],[ np.nan,   8.]])
@@ -491,19 +482,9 @@ class Test_SedimentPulserEachParcel(object):
         EI = parcels.dataset['element_id']
         SLe = np.array([ 0, 0, 5, 5, 5, 6])
         SL = parcels.dataset['starting_link']
-        ARe = np.array([[ 0.   ,    np.nan,    np.nan,    np.nan],
-                       [ 0.   ,    np.nan,    np.nan,    np.nan],
-                       [   np.nan,  0.005,    np.nan,    np.nan],
-                       [   np.nan,  0.005,    np.nan,    np.nan],
-                       [   np.nan,    np.nan,  0.   ,    np.nan],
-                       [   np.nan,    np.nan,    np.nan,  0.   ]])
+        ARe = np.array([ 0.   ,  0.   ,  0.005,  0.005,  0.   ,  0.   ])
         AR = parcels.dataset['abrasion_rate']
-        De = np.array([[ 2650.,    np.nan,    np.nan,    np.nan],
-                       [ 2650.,    np.nan,    np.nan,    np.nan],
-                       [   np.nan,  2650.,    np.nan,    np.nan],
-                       [   np.nan,  2650.,    np.nan,    np.nan],
-                       [   np.nan,    np.nan,  2650.,    np.nan],
-                       [   np.nan,    np.nan,    np.nan,  2650.]])
+        De = np.array([ 2650.,  2650.,  2650.,  2650.,  2650.,  2650.])
         D = parcels.dataset['density']
         TAe = np.array([[  7.,  np.nan,  np.nan,  np.nan],
                        [  7.,  np.nan,  np.nan,  np.nan],
@@ -595,9 +576,9 @@ class Test_SedimentPulserEachParcel(object):
         EI = parcels.dataset['element_id']
         SLe = np.array([1,3,3,5,5,5,2])
         SL = parcels.dataset['starting_link']
-        ARe = np.expand_dims(np.ones(7)*0, axis=1)
+        ARe = np.ones(7)*0
         AR = parcels.dataset['abrasion_rate']
-        De = np.expand_dims(np.ones(7)*2650, axis=1)
+        De = np.ones(7)*2650
         D = parcels.dataset['density']
         TAe = np.expand_dims(np.ones(7)*time1, axis=1)
         TA = parcels.dataset['time_arrival_in_link']

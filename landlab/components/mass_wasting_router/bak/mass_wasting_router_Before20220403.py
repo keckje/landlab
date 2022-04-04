@@ -144,8 +144,8 @@ class MassWastingRouter(Component):
             TerraceWidth = 1,
             mass_wasting_threshold = 0.75, 
             min_mw_cells = 1,
-            release_dict = {'number of pulses':[1], # mass wasting runout
-                            'iteration delay':[1] },
+            release_dict = {'number of pulses':[2], # mass wasting runout
+                            'iteration delay':[2] },
             df_dict = {'critical slope':[0.1], 
                        'minimum flux':0.03,
                        'scour coefficient':0.02},
@@ -320,18 +320,18 @@ class MassWastingRouter(Component):
         
         ### class instance of MassWastingRunout
         # none
-        # self.DebrisFlows = MWRu(self._grid,
-        #                         release_dict,
-        #                         df_dict, save_mw_dem = True,
-        #                         opt1 = False, opt2 = True, 
-        #                         opt3 = True, opt4 = True)
-        
         self.DebrisFlows = MWRu(self._grid,
                                 release_dict,
-                                df_dict, 
-                                save = True,
-                                routing_surface = "energy__elevation", 
-                                settle_deposit = True)
+                                df_dict, save_mw_dem = True,
+                                opt1 = False, opt2 = True, 
+                                opt3 = True, opt4 = True)
+        
+        # self.DebrisFlows = MWRu(self._grid,
+        #                         release_dict,
+        #                         df_dict, 
+        #                         save = True,
+        #                         routing_surface = "energy__elevation", 
+        #                         settle_deposit = True)
         
         
         
@@ -449,7 +449,7 @@ class MassWastingRouter(Component):
             
             ## route debris flows, update dem           
             self.DebrisFlows.run_one_step(dt)
-            self.DFcells_dict[self._time_idx] = self.DebrisFlows.arn_r
+            self.DFcells_dict[self._time_idx] = self.DebrisFlows.DFcells
             self.StormDEM_dict[self._time_idx] = self.DebrisFlows._grid.at_node['topographic__elevation'].copy()                
             # print('scour and deposition')
        

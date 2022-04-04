@@ -109,7 +109,7 @@ class BedParcelInitializer:
             msg = "NetworkSedimentTransporter: grid must be NetworkModelGrid"
             raise ValueError(msg)
 
-    def __call__(self, discharge_at_link=None,user_parcel_volume=None,
+    def __call__(self, discharge_at_link=None, user_parcel_volume=None,
                  user_D50=None):
         
         if discharge_at_link is not None: # D50 = f(dominant discharge)

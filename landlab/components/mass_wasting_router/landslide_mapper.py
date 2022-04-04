@@ -21,6 +21,8 @@ class LandslideMapper(Component):
     probability and returns a table and raster model grid fields that indicate
     the location and summarize the attributes of each mapped landslide
     
+    TODO: make modify DEM and soil thickness in mapper? a run option
+    
     author: Jeff Keck
     
     """
@@ -601,12 +603,13 @@ class LandslideMapper(Component):
                                     })
                 LSclump[c] = dff
     
+                # modify DEM and soil thickness in mapper?
                 # subtract 90% of soil depth from dem,
-                self._grid.at_node['topographic__elevation'][df1.cell] = self._grid.at_node['topographic__elevation'][df1.cell] - 0.9*self._grid.at_node['soil__thickness'][df1.cell]
+                # self._grid.at_node['topographic__elevation'][df1.cell] = self._grid.at_node['topographic__elevation'][df1.cell] - 0.9*self._grid.at_node['soil__thickness'][df1.cell]
     
     
                 # set soil thickness to 0 at landslide cells
-                self._grid.at_node['soil__thickness'][df1.cell] =0
+                # self._grid.at_node['soil__thickness'][df1.cell] =0
     
                 # once all lists that share cells are appended to clump df1
                 # remove initial cell list from list
@@ -646,21 +649,31 @@ class LandslideMapper(Component):
             # self.LS_df_dict[self._time_idx] = LS_df.copy()
             # self.LSclump_dict[self._time_idx] = LSclump.copy(); print('SAVED A CLUMP')
      
-            # prepare MassWastingSED rmg inputs "mass__wasting_events" and "mass__wasting_volumes"
-    
+            # prepare raster model grid fields "mass__wasting_events", "mass__wasting_volumes"
+            # and "mass__wasting_ids"
+                
             mw_events = np.zeros(np.hstack(self._grid.nodes).shape[0])
             mw_events_volumes = np.zeros(np.hstack(self._grid.nodes).shape[0])
-            
+            mw_event_ids = np.zeros(np.hstack(self._grid.nodes).shape[0])
     
             ivL = self.LS_df['vol [m^3]'][0::1].values # initial volume list
             innL = self.LS_df['cell'][0::1].values.astype('int') # initial node number list        
             
+            #ls clump
             mw_events[innL] = 1
             mw_events_volumes[innL] = ivL 
             
             self._grid.at_node["mass__wasting_events"] = mw_events.astype(int)
             self._grid.at_node["mass__wasting_volumes"] = mw_events_volumes
-
+            
+            mw_id = 1
+            for key in self.LSclump:
+                
+                nds = self.LSclump[key]['cell'].values.astype(int)
+                mw_event_ids[nds] = mw_id
+                # mw_id+=1
+                
+            self._grid.at_node["mass__wasting_id"] = mw_event_ids
 
 
     def run_one_step(self):
