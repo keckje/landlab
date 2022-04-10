@@ -3,15 +3,11 @@ import numpy as np
 import pandas as pd
 
 # from landlab.utils.parcels import SedimentPulserEachParcel, SedimentPulserAtLinks
-
-from landlab.utils.parcels.sediment_pulser_at_links_v2 import SedimentPulserAtLinks
-from landlab.utils.parcels.sediment_pulser_each_parcel_v2 import SedimentPulserEachParcel
+from landlab.components.network_sediment_transporter.sediment_pulser_base import SedimentPulserBase
+from landlab.components.network_sediment_transporter.sediment_pulser_at_links import SedimentPulserAtLinks
+from landlab.components.network_sediment_transporter.sediment_pulser_each_parcel import SedimentPulserEachParcel
 
 from landlab import RasterModelGrid
-
-from landlab.utils.parcels import (
-                                    calc_lognormal_distribution_parameters,
-                                    )
 
 def always_time_to_pulse(time):
     return True
@@ -20,19 +16,18 @@ def time_to_pulse_list(time):
     Ptime = [19,20,22,23,24,75,76]
     return time in Ptime
 
-
-
-def test_calc_lognormal_distribution_parameters():
+def test_calc_lognormal_distribution_parameters(example_nmg2):
     """check lognormal distribution mean and standard deviation with values 
     calculated in excel"""
     mu_x = 0.1; sigma_x = 0.05
-    mu_y, sigma_y = calc_lognormal_distribution_parameters(mu_x,sigma_x)
+    PulserBase = SedimentPulserBase(grid = example_nmg2)
+    mu_y, sigma_y = PulserBase.calc_lognormal_distribution_parameters(mu_x,sigma_x)
     mu_y_e = -2.41416; sigma_y_e = 0.472381
     np.testing.assert_allclose(np.array([mu_y,sigma_y]), 
                                np.array([mu_y_e, sigma_y_e]), rtol = 1e-4)
      
     mu_x = 0.33; sigma_x = 0.33
-    mu_y, sigma_y = calc_lognormal_distribution_parameters(mu_x,sigma_x)
+    mu_y, sigma_y = PulserBase.calc_lognormal_distribution_parameters(mu_x,sigma_x)
     mu_y_e = -1.45524; sigma_y_e = 0.832555
     np.testing.assert_allclose(np.array([mu_y,sigma_y]), 
                                np.array([mu_y_e, sigma_y_e]), rtol = 1e-4)    
@@ -235,8 +230,7 @@ class Test_SedimentPulserAtLinks(object):
                            n_parcels_at_link = n_parcels_at_link)
         
         assert parcels == None
-        
-    
+          
 # @pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
 class Test_SedimentPulserEachParcel(object):
     def test_normal_1(self, example_nmg2):
@@ -288,8 +282,6 @@ class Test_SedimentPulserEachParcel(object):
         np.testing.assert_allclose(D, De, rtol = 1e-4)        
         np.testing.assert_allclose(V, Ve, rtol = 1e-4)
         
-        
-
     def test_normal_2(self, example_nmg2):
         """all attributes specified in Pulse"""
         
@@ -346,8 +338,7 @@ class Test_SedimentPulserEachParcel(object):
         np.testing.assert_allclose(LL, LLe, rtol = 1e-4)
         np.testing.assert_allclose(D, De, rtol = 1e-4)        
         np.testing.assert_allclose(V, Ve, rtol = 1e-4)          
-        
-        
+              
     def test_normal_3(self, example_nmg2):
         """two pulses. First, only minimum attributes specified, 
         second, two parcels in link two and three parcels in link six 
@@ -422,8 +413,7 @@ class Test_SedimentPulserEachParcel(object):
         np.testing.assert_allclose(LL, LLe, rtol = 1e-4)
         np.testing.assert_allclose(D, De, rtol = 1e-4)        
         np.testing.assert_allclose(V, Ve, rtol = 1e-4)        
-        
-        
+              
     def test_normal_4(self, example_nmg2):
         """Series of pulses using both the SedimentPulserAtlinks and 
         SedimentPulserEachParcel."""
@@ -553,7 +543,7 @@ class Test_SedimentPulserEachParcel(object):
         np.testing.assert_allclose(D, De, rtol = 1e-4)        
         np.testing.assert_allclose(V, Ve, rtol = 1e-4) 
 
-    def test_special_1(self, example_nmg2):
+    def test_bad_1(self, example_nmg2):
         """test exception raised if instance is called without specifying the
         pulserDF"""
         
@@ -568,7 +558,7 @@ class Test_SedimentPulserEachParcel(object):
         assert exc_info.match(msg_e)
         
         
-    def test_special_2(self, example_nmg2):
+    def test_special_1(self, example_nmg2):
         """test that calling with an empty PulseDF returns the existing
         datarecord"""
         
