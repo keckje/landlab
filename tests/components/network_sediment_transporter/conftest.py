@@ -2,7 +2,6 @@ import numpy as np
 import pytest
 
 from landlab.components import FlowDirectorSteepest, NetworkSedimentTransporter
-from landlab.components.network_sediment_transporter.bed_parcel_initializers import BedParcelInitializerDischarge, BedParcelInitializerDepth, BedParcelInitializerArea, BedParcelInitializerUserD50
 from landlab.data_record import DataRecord
 from landlab.grid.network import NetworkModelGrid
 
@@ -106,6 +105,14 @@ def example_flow_director(example_nmg):
     fd.run_one_step()
     return fd
 
+@pytest.fixture()
+def example_parcels(example_nmg):
+    parcel_initializer = BedParcelInitializerUserD50(example_nmg,
+                                           user_d50 = 0.05)
+
+    parcels = parcel_initializer()
+    return parcels
+
 
 @pytest.fixture()
 def example_nmg2():
@@ -147,4 +154,3 @@ def example_nmg2():
         ) # km2
 
     return grid
-
