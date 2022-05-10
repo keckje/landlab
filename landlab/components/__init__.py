@@ -5,6 +5,7 @@ from .depression_finder import DepressionFinderAndRouter
 from .depth_dependent_diffusion import DepthDependentDiffuser
 from .depth_dependent_taylor_soil_creep import DepthDependentTaylorDiffuser
 from .detachment_ltd_erosion import DepthSlopeProductErosion, DetachmentLtdErosion
+from .distributed_hydrology_generator import DHSVMtoLandlab
 from .diffusion import LinearDiffuser
 from .dimensionless_discharge import DimensionlessDischarge
 from .discharge_diffuser import DischargeDiffuser
@@ -29,7 +30,25 @@ from .landslides import LandslideProbability
 from .lateral_erosion import LateralEroder
 from .lithology import LithoLayers, Lithology
 from .marine_sediment_transport import SimpleSubmarineDiffuser
+from .mass_wasting_router import ( 
+	LandslideMapper,
+	MassWastingRunout,
+    MassWastingEroder,
+	MassWastingRouter
+    )
 from .network_sediment_transporter import NetworkSedimentTransporter
+from .network_sediment_transporter.bed_parcel_initializers import (
+    BedParcelInitializerDischarge,
+    BedParcelInitializerDepth,
+    BedParcelInitializerArea,
+    BedParcelInitializerUserD50,
+    _parcel_characteristics,
+    _determine_approx_parcel_volume,
+    calc_total_parcel_volume,
+    calc_d50_discharge,
+    calc_d50_depth,
+    calc_d50_dArea_scaling,
+)
 from .nonlinear_diffusion import PerronNLDiffuse
 from .normal_fault import NormalFault
 from .overland_flow import (
