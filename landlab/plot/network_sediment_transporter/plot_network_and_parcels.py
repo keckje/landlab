@@ -459,7 +459,7 @@ def plot_network_and_parcels(
     # make axes equal
     ax.axis("equal")
 
-    return fig
+    return fig, X, Y
 
 
 def _get_xy_of_polylines(x_of_polylines, y_of_polylines):
