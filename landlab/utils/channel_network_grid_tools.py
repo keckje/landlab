@@ -262,11 +262,10 @@ class ChannelNetworkGridTools(Component):
         # map_nmg1_links_to_nmg2_links
         
         ### used for matching finer detail network model grid to equivalent 
-        coarser scale network model grid
-        determine the closest dhsvm nmg (nmg_d) link to each link in the landlab
-        nmg. Note, the landlab nmg id of the dhsmv network is used, not the DHSVM
-        network id (arcID) To translate the nmg_d link id to the DHSVM network id: 
-            self.nmg_d.at_link['arcid'][i], where i is the nmg_d link id.
+        coarser scale network model grid determine the closest dhsvm nmg (nmg_d) 
+        link to each link in the landlab nmg. Note, the landlab nmg id of the dhsmv
+        network is used, not the DHSVM network id (arcID) To translate the nmg_d link
+        id to the DHSVM network id: self.nmg_d.at_link['arcid'][i], where i is the nmg_d link id.
         '''
         
         #compute distance between deposit and all network cells
@@ -366,6 +365,7 @@ class ChannelNetworkGridTools(Component):
 
 
     def min_distance_to_network(self, cellid, ChType = 'debrisflow'):
+        """LM"""
         def distance_to_network(row):
             '''GTT only
             compute distance between a cell and the nearest debris flow network 
