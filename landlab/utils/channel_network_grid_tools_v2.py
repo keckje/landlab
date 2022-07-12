@@ -19,6 +19,7 @@ class ChannelNetworkGridTools(Component):
     use the GridTTools call method when instantiated
     
     TODO: split into two classes, both contained within channel_network_grid_tools
+    # clean up - get rid of unneeded functions and class variables
     # use format of parcel initializer -
         base class - ChannelNetworkToolsBase
             children classes: ChannelNetworkToolsInterpretor
@@ -171,7 +172,6 @@ class ChannelNetworkGridTools(Component):
 
     def extract_terrace_nodes(self):
         """MWR
-
         """
      
         for i in range(self.TerraceWidth):
@@ -311,14 +311,16 @@ class ChannelNetworkGridTools(Component):
         # self.LinkMapL = LinkMapL
 
 
-    def DHSVM_network_to_RMG_Mapper(self,xyDf_d):
+    # def DHSVM_network_to_RMG_Mapper(self,xyDf_d):
+    def map_nmg_links_to_rmg_channel_nodes(self, xyDf_d):
         """DtoL
         # this function appears to give same output as map_nmg_links_to_rmg_nodes 
         # try to get rid of this function
-        # map_rmg_nodes_to_nmg_links
+        # map_nmg_nodes_to_rmg_links
+        # map_nmg_links_to_rmg_channel_nodes
         
         Determine the closest link to each RMG channel node
-        output can be used to map nmg field values to the rmg
+        output can be used to map between nmg link field values rmg node field values
 
         Channel nodes are identified based on a simple contributing area threshold
         using ChannelMapper().  
@@ -336,11 +338,11 @@ class ChannelNetworkGridTools(Component):
 
         NodeMapper ={}
         ncn = self.ChannelNodes.shape[0] # number of channel nodes
-        for i, node in enumerate(self.ChannelNodes):# for each node in the channel node list
+        for i, node in enumerate(self.ChannelNodes):# for each node in the rmg channel node list
             XY = [self.gridx[i], self.gridy[i]] # get x and y coordinate of node
-            nmg_d_dist = xyDf_d.apply(Distance,axis=1) # compute the distance to all dhsvm nodes
+            nmg_d_dist = xyDf_d.apply(Distance,axis=1) # compute the distance to all nmg nodes
             offset = nmg_d_dist.min() # find the minimum distance
-            mdn = xyDf_d['linkID'].values[(nmg_d_dist == offset).values][0]# link id of minimum distance node
+            mdn = xyDf_d['linkID'].values[(nmg_d_dist == offset).values][0]# link id of minimum distance nmg node
             NodeMapper[i] = mdn # dhsmve link for node i
             if i%20 == 0:
                 print(str(np.round((i/ncn)*100))+' % RMG nodes mapped to equivalent DHSVM link')

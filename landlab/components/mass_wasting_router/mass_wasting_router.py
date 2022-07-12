@@ -9,8 +9,8 @@ from landlab import imshow_grid, imshow_grid_at_node
 from landlab.components.mass_wasting_router.landslide_mapper import LandslideMapper as LM
 from landlab.components.mass_wasting_router.mass_wasting_runout import MassWastingRunout as MWRu # before v7 can be used, need to modify MWR to create landslide ID field
 from landlab.components.mass_wasting_router.mass_wasting_eroder import MassWastingEroder as MWE
-from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
-
+# from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
+from landlab.utils.channel_network_grid_tools_v3 import ChannelNetworkToolsMapper
 
 
 class MassWastingRouter(Component):
@@ -291,9 +291,9 @@ class MassWastingRouter(Component):
 
         
         # instantiate channel network grid tools
-        self.gt = ChannelNetworkGridTools(grid = grid, nmgrid = nmgrid, Ct = Ct, BCt = BCt)
+        self.gt = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid, Ct = Ct, BCt = BCt)
 
-        ## define channel and fluvia channel networks in the raster model grid
+        ## define channel and fluvial channel networks in the raster model grid
         self.gt.extract_channel_nodes(Ct,BCt)        
 
         ## create the nmg to rmg node mapper

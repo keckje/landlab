@@ -18,6 +18,10 @@ from .watershed import (
     get_watershed_outlet,
 )
 
+from .channel_network_grid_tools_v3 import(
+    ChannelNetworkToolsInterpretor,
+    ChannelNetworkToolsMapper)
+
 __all__ = [
     "add_halo",
     "count_repeated_values",

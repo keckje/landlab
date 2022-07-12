@@ -12,7 +12,7 @@ from landlab.components import(FlowDirectorD8,
                                 FlowDirectorMFD, 
                                 FlowDirectorSteepest)
 from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
-
+from landlab.utils.channel_network_grid_tools_v3 import ChannelNetworkToolsInterpretor 
 
 class LandslideMapper(Component):
 
@@ -97,7 +97,7 @@ class LandslideMapper(Component):
         PartOfChannel_buffer = 10, # may not need this parameter            
         mass_wasting_threshold = 0.75,  # landslide mapping parameters
         min_mw_cells = 1,
-        gt = None
+        gti = None,
         ):
 
         
@@ -134,16 +134,21 @@ class LandslideMapper(Component):
             self.mwclump = grid.add_zeros('node',
                                         'mass__wasting_clumps')                                          
 
-        # instantiate channel network grid tools or use  provided instance
-        if gt != None:
-            self.gt = gt
+        # instantiate channel network grid tools or use provided instance
+        if gti != None:
+            self.gti = gti
             # check if ChannelNodes already created                   
         else:
-            self.gt = ChannelNetworkGridTools(grid = grid,Ct = Ct,BCt = BCt)
+            self.gti = ChannelNetworkGridTools(grid = grid,Ct = Ct,BCt = BCt)
+
+        # if gtm != None:
+        #     self.gtm = gtm
+        # else:
+        #     self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
 
 
         if not hasattr(gt,"ChannelNodes"):
-            self.gt.extract_channel_nodes(Ct,BCt)
+            self.gti.extract_channel_nodes(Ct,BCt)
 
         
         ### prep LandslideMapper
@@ -184,7 +189,7 @@ class LandslideMapper(Component):
         # self.grid.at_node['high__MW_probability'] = self.hmwprob # change to mass__wasting_potential
 
         #create mass wasting unit list
-        self.LS_cells = self.gt.nodes[mask].flatten()
+        self.LS_cells = self.gti.nodes[mask].flatten() # could just use rnodes
         # print(self.LS_cells)
 
                 
@@ -201,8 +206,8 @@ class LandslideMapper(Component):
             #change to use mg.adjacent_nodes_at_node[] and mg.diagonal_adjacent_nodes_at_node[]
     
             '''
-            gc = self.gt.gc
-            gr = self.gt.gr
+            gc = self.gti.gc
+            gr = self.gti.gr
             
             u = n-gc
             ur = n-gc+1
@@ -256,8 +261,8 @@ class LandslideMapper(Component):
         acn - list of int, adjacent cell number
         '''
         
-        xd = self.gt.xdif[n]
-        yd = self.gt.ydif[n]
+        xd = self.gti.xdif[n]
+        yd = self.gti.ydif[n]
         
         '''       
         functions that check if cell is not divergent based on center cell direction
@@ -381,8 +386,8 @@ class LandslideMapper(Component):
             }[x]
         
             
-        ydal = self.gt.ydif[ac]
-        xdal = self.gt.xdif[ac]
+        ydal = self.gti.ydif[ac]
+        xdal = self.gti.xdif[ac]
         
         #create mask for adjacent cells using  check if not divergent (True) or divergent (false)
         if yd > 0 and xd == 0:
@@ -482,7 +487,7 @@ class LandslideMapper(Component):
         c = 0
         
         loc.append(int(StartCell))
-        dist.append((self.gt.xdif[int(StartCell)]**2+self.gt.ydif[int(StartCell)]**2)**.5)
+        dist.append((self.gti.xdif[int(StartCell)]**2+self.gti.ydif[int(StartCell)]**2)**.5)
                        
         flow = True
         
@@ -490,7 +495,7 @@ class LandslideMapper(Component):
             
             slope  = self._grid.at_node['topographic__slope'][loc[c]]
             #compute distance between deposit and all debris flow network cells
-            cdist, nc = self.gt.min_distance_to_network(loc[c],  ChType = 'debrisflow')
+            cdist, nc = self.gti.min_distance_to_network(loc[c],  ChType = 'debrisflow')
             #TO DO need to change so that if distance to network is less than minimum, then stop
             
             
@@ -498,7 +503,7 @@ class LandslideMapper(Component):
             # print(cdist)
             if cdist > self.POCbuffer: # downslope distance measured to POCbuffer from channel    
                 loc.append(self._grid.at_node['flow__receiver_node'][loc[c]])
-                dist.append((self.gt.xdif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2+self.gt.ydif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2)**.5)
+                dist.append((self.gti.xdif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2+self.gti.ydif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2)**.5)
                 c=c+1
                 if loc[-1] == loc[-2]: # check that runout is not stuck at same node # NEED TO DEBUG
                     break
