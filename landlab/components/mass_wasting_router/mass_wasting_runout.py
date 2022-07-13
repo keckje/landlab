@@ -14,7 +14,9 @@ class MassWastingRunout(Component):
     
     '''a cellular automata mass wasting model that routes an initial mass wasting  
     volume (e.g., a landslide) through a watershed, determines Scour, Entrainment
-    and Depostion depths and updates the DEM. 
+    and Depostion depths, tracks grain size and updates the DEM. This model is
+    intended for modeling the runout of individually mapped landslides and landslides
+    inferred from a landslide hazard map.
         
     author: Jeff Keck
     '''

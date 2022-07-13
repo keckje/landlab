@@ -147,7 +147,7 @@ class LandslideMapper(Component):
         #     self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
 
 
-        if not hasattr(gt,"ChannelNodes"):
+        if not hasattr(gti,"ChannelNodes"):
             self.gti.extract_channel_nodes(Ct,BCt)
 
         
