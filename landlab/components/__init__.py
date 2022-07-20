@@ -22,6 +22,7 @@ from .flow_director import (
 )
 from .fracture_grid import FractureGridGenerator
 from .gflex import gFlex
+from .gravel_river_transporter import GravelRiverTransporter
 from .groundwater import GroundwaterDupuitPercolator
 from .hack_calculator import HackCalculator
 from .hand_calculator import HeightAboveDrainageCalculator
@@ -113,6 +114,7 @@ COMPONENTS = [
     FlowDirectorSteepest,
     FractureGridGenerator,
     gFlex,
+    GravelRiverTransporter,
     GroundwaterDupuitPercolator,
     HackCalculator,
     HeightAboveDrainageCalculator,
