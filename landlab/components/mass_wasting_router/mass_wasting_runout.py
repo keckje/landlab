@@ -17,7 +17,8 @@ class MassWastingRunout(Component):
     and Depostion depths, tracks grain size and updates the DEM. This model is
     intended for modeling the runout of individually mapped landslides and landslides
     inferred from a landslide hazard map.
-        
+    
+    TODO: add constraint that depth can't exceed max depth?'add flow approximation?
     author: Jeff Keck
     '''
     
@@ -305,6 +306,7 @@ class MassWastingRunout(Component):
         # data containers for saving model images and behavior statistics       
         cL = {} 
         self.df_evo_maps = {} # copy of dem after each routing iteration
+        self.topo_evo_maps = {}
         self.enL = [] # entrainment depth / regolith depth
         self.dfdL = [] # incoming debris flow thickness (qsi)
         self.TdfL = [] # basal shear stress       
@@ -327,6 +329,7 @@ class MassWastingRunout(Component):
             # prep data containers
             cL[mw_i] = []
             self.df_evo_maps[mw_i] = {}
+            self.topo_evo_maps[mw_i] = {}
             self.DEMdfD = {}
 
             # prep data containers for tests
@@ -453,7 +456,7 @@ class MassWastingRunout(Component):
                     
                     ### save maps for video
                     self.df_evo_maps[mw_i][c] = self._grid.at_node['energy__elevation'].copy()
-
+                    self.topo_evo_maps[mw_i][c] = self._grid.at_node['topographic__elevation'].copy()
                     # data for tests
                     if self.VaryDp:
                         self.pd_r[mw_id].append(self._grid.at_node['particle__diameter'].copy())

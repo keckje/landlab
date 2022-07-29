@@ -111,8 +111,9 @@ _ = mg.add_field('topographic__elevation',
 pf = mg.nodes[:,cc]
 
 # ls nodes, last 6 excluding the very last
-lsn = pf[-6:-1]
-lsn = [3]
+# lsn = pf[-6:-1]
+lsn = [305, 319, 333, 347]
+# lsn  = [ 320, 333,346]
 dem_copy = dem.copy()
 
 
@@ -199,7 +200,7 @@ mg.at_node['mass__wasting_id'] = np.zeros(mg.number_of_nodes).astype(int)
 
 mg.at_node['mass__wasting_id'][lsn] = 1  
 # soil depth
-depth = np.ones(nn)*2
+depth = np.ones(nn)*10
 mg.add_field('node', 'soil__thickness',depth)
 
 
@@ -207,7 +208,7 @@ mg.add_field('node', 'soil__thickness',depth)
 npu = [1] 
 nid = [1] 
 slpc = [0.03]   
-SD = 0.01
+SD = 0.1
 cs = 0.02
 
 mw_dict = {'critical slope':slpc, 'minimum flux':SD,
@@ -217,7 +218,7 @@ release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
 
 example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,
-                                  routing_surface = "energy__elevation", settle_deposit = True)
+                                  routing_surface = "topographic__elevation", settle_deposit = True)
 
 example_MWRu.run_one_step(dt = 0)
 
