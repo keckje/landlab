@@ -230,7 +230,7 @@ for i in np.arange(0,len(example_MWRu.mw_ids)):
 
     for c in example_MWRu.df_evo_maps[i].keys():   
         if c%pi == 0:    
-            plt.figure('slope'+str(c)+str(i),figsize=(12, 12))
+            plt.figure('df'+str(c)+str(i),figsize=(12, 12))
             s_mg.at_node['topographic__elevation'] = example_MWRu.df_evo_maps[i][c]
             # run flow director, add slope and receiving node fields
             s_fd = FlowDirectorMFD(s_mg, diagonals=True,
@@ -242,6 +242,19 @@ for i in np.arange(0,len(example_MWRu.mw_ids)):
             proportions = s_mg.at_node['flow__receiver_proportions']
             LLT.drainage_plot_jk(s_mg, proportions = proportions, title='Basic Ramp',surf_cmap="Greys",clim = [dem.min(),dem.max()*1.2])
             
+            plt.figure('topo'+str(c)+str(i),figsize=(12, 12))
+            s_mg.at_node['topographic__elevation'] = example_MWRu.topo_evo_maps[i][c]
+            # run flow director, add slope and receiving node fields
+            s_fd = FlowDirectorMFD(s_mg, diagonals=True,
+                                  partition_method = 'slope')
+            s_fd.run_one_step()
+            
+            
+            receivers = s_mg.at_node['flow__receiver_node']
+            proportions = s_mg.at_node['flow__receiver_proportions']
+            LLT.drainage_plot_jk(s_mg, proportions = proportions, title='Basic Ramp',surf_cmap="Greys",clim = [dem.min(),dem.max()*1.2])
+            
+
 
 
 # plot how DEM changes
