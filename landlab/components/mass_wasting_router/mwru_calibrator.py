@@ -94,7 +94,7 @@ class MWRu_calibrator():
         self.plot_tf = True
 
     def __call__(self, max_number_of_runs = 50):
-        "instantiate the class"
+        """instantiate the class"""
         self.mbLdf_o = self._channel_profile_deposition("observed")
         self._MCMC_sampler(max_number_of_runs)
 
