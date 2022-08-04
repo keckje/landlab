@@ -17,8 +17,7 @@ class MassWastingRunout(Component):
     and Depostion depths, tracks grain size and updates the DEM. This model is
     intended for modeling the runout of individually mapped landslides and landslides
     inferred from a landslide hazard map.
-    
-    TODO: add constraint that depth can't exceed max depth?'add flow approximation?
+
     author: Jeff Keck
     '''
     

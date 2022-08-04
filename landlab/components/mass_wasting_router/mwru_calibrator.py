@@ -13,6 +13,11 @@ from landlab import imshow_grid
 from landlab import imshow_grid_at_node
 
 class MWRu_calibrator():
+    """an adaptive Markov Chain Monte Carlo calibration utitlity for calibrating
+    MassWastingRunout to observed landslide runout and/or scour and deposition
+    
+    author: Jeff Keck
+    """
     
     def __init__(self,
                  MassWastingRunout,
