@@ -24,6 +24,7 @@ class MWRu_calibrator():
                  params,
                  profile_calib_dict,
                  prior_distribution = "uniform",
+                 extent_only = False,
                  omega_metric = "runout",
                  RMSE_metric = "Vd",
                  jump_size = 0.2,
@@ -86,6 +87,7 @@ class MWRu_calibrator():
         self.params = params
         self.pcd = profile_calib_dict        
         self.prior_distribution = prior_distribution
+        self.extent_only = extent_only
         self.omega_metric = omega_metric
         self.RMSE_metric = RMSE_metric
         self.jump_size = jump_size
@@ -95,7 +97,8 @@ class MWRu_calibrator():
 
     def __call__(self, max_number_of_runs = 50):
         """instantiate the class"""
-        self.mbLdf_o = self._channel_profile_deposition("observed")
+        if not self.extent_only:
+            self.mbLdf_o = self._channel_profile_deposition("observed")
         self._MCMC_sampler(max_number_of_runs)
 
         
@@ -305,15 +308,19 @@ class MWRu_calibrator():
             # run simulation with updated parameter
             self.it = i
             self._simulation()
-            # get modeled deposition profile
-            mbLdf_m = self._channel_profile_deposition("modeled")
-            # determine RMSE metric
-            observed = self.mbLdf_o[self.RMSE_metric]; modeled = mbLdf_m[self.RMSE_metric]
-            RMSE = self._RMSE(observed, modeled)
-            # determine deposition overlap metric, omegaT
-            omegaT = self._omegaT(metric = self.omega_metric)
-            # determine psoterior likilhood: product of RMSE, omegaT and prior liklihood
-            candidate_posterior = prior_t*(1/RMSE)*omegaT
+            if self.extent_only:
+                omegaT = self._omegaT(metric = "runout")
+                candidate_posterior = prior_t*omegaT
+            else:
+                # get modeled deposition profile
+                mbLdf_m = self._channel_profile_deposition("modeled")
+                # determine RMSE metric
+                observed = self.mbLdf_o[self.RMSE_metric]; modeled = mbLdf_m[self.RMSE_metric]
+                RMSE = self._RMSE(observed, modeled)
+                # determine deposition overlap metric, omegaT
+                omegaT = self._omegaT(metric = self.omega_metric)
+                # determine psoterior likilhood: product of RMSE, omegaT and prior liklihood
+                candidate_posterior = prior_t*(1/RMSE)*omegaT
             
             # decide to jump or not to jump
             if i == 0:
@@ -340,8 +347,10 @@ class MWRu_calibrator():
             for key in self.params:
                 p_table = p_table+[jump_size[key], candidate_value[key],previous_value[key]]
                 p_nms = p_nms+['jump_size_'+key, 'candidate_value_'+key, 'previous_value_'+key]
-
-            LHList.append([i, prior_t,1/RMSE,omegaT,candidate_posterior,acceptance_ratio, rv, msg, previous_posterior]+p_table)
+            if self.extent_only:
+                LHList.append([i, prior_t,omegaT,candidate_posterior,acceptance_ratio, rv, msg, previous_posterior]+p_table)
+            else:
+                LHList.append([i, prior_t,1/RMSE,omegaT,candidate_posterior,acceptance_ratio, rv, msg, previous_posterior]+p_table)
             
             # adjust jump size every N_cycles
             if i%self.N_cycles == 0:
@@ -352,7 +361,11 @@ class MWRu_calibrator():
             print('MCMC iteration '+str(i))
 
         self.LHvals = pd.DataFrame(LHList)
-        self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'omegaT', 'candidate_posterior','acceptance_ratio', 'random value','msg','previous_posterior']+p_nms
+        if self.extent_only:
+            self.LHvals.columns = ['iteration', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'previous_posterior']+p_nms
+        else:
+            self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'previous_posterior']+p_nms
+
         self.calibration_values = self.LHvals[self.LHvals['previous_posterior'] == self.LHvals['previous_posterior'].max()] # {'SD': previous_value_SD, 'cs': previous_value_cs}
 
 
