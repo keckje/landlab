@@ -1,5 +1,6 @@
 # Requirements extracted from pyproject.toml
 # [project.dependencies]
+spyder
 bmipy
 matplotlib
 netcdf4

@@ -230,9 +230,9 @@ class MWRu_calibrator():
         return prior
 
 
-    def _candidate_value(self, previous_value, key):
+    def _candidate_value(self, selected_value, key):
         """determine the candidate parameter value as a random value from
-        a normal distribution with mean equal to previous accepted value and 
+        a normal distribution with mean equal to the presently selected value and 
         standard deviation equal to the jump size"""
         min_val = self.params[key][0]
         max_val = self.params[key][1]
@@ -241,7 +241,7 @@ class MWRu_calibrator():
         pass_ = False
         # candidate value cant be outside of the max and min values
         while pass_ is False:
-            candidate_value = np.random.normal(previous_value, jump_size)
+            candidate_value = np.random.normal(selected_value, jump_size)
             if (candidate_value < min_val) or (candidate_value > max_val):
                 pass_ = False
             else:
@@ -275,17 +275,17 @@ class MWRu_calibrator():
         LHList = []
         ar = [] # list for tracking acceptance ratio
         # dictionaries to store trial values
-        previous_value = {}
+        selected_value = {}
         candidate_value = {}
         prior = {}
         jump_size = {}
         for i in range(number_of_runs):
             if i == 0:
                 for key in self.params:
-                    previous_value[key] = self.params[key][2]
+                    selected_value[key] = self.params[key][2]
             # select a candidate valye for the jump
             for key in self.params:
-                candidate_value[key], jump_size[key] = self._candidate_value(previous_value[key], key)
+                candidate_value[key], jump_size[key] = self._candidate_value(selected_value[key], key)
             # liklihood of parameter given the min and max values
             
             prior_t = 1
@@ -326,7 +326,7 @@ class MWRu_calibrator():
             if i == 0:
                 acceptance_ratio = 1 # always accept the first candidate vlue
             else:
-                acceptance_ratio = min(1, candidate_posterior/previous_posterior)
+                acceptance_ratio = min(1, candidate_posterior/selected_posterior)
            # pick a random number between 0 and 1 assuming a uniform distribution
            # if number less than acceptance ratio, go with new parameter value. 
            # if larger than ratio go with old parameter value
@@ -334,23 +334,23 @@ class MWRu_calibrator():
            # acceptance ratio (1)
             rv = np.random.uniform(0,1,1)
             if rv < acceptance_ratio:
-                previous_posterior = candidate_posterior
+                selected_posterior = candidate_posterior
                 for key in self.params:
-                    previous_value[key] = candidate_value[key]
+                    selected_value[key] = candidate_value[key]
                 msg = 'jumped to new value'; ar.append(1)
             else :
-                previous_value = previous_value
+                selected_value = selected_value
                 msg = 'staying put'; ar.append(0)
             
             p_table = []
             p_nms = []
             for key in self.params:
-                p_table = p_table+[jump_size[key], candidate_value[key],previous_value[key]]
-                p_nms = p_nms+['jump_size_'+key, 'candidate_value_'+key, 'previous_value_'+key]
+                p_table = p_table+[jump_size[key], candidate_value[key],selected_value[key]]
+                p_nms = p_nms+['jump_size_'+key, 'candidate_value_'+key, 'selected_value_'+key]
             if self.extent_only:
-                LHList.append([i, prior_t,omegaT,candidate_posterior,acceptance_ratio, rv, msg, previous_posterior]+p_table)
+                LHList.append([i, prior_t,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             else:
-                LHList.append([i, prior_t,1/RMSE,omegaT,candidate_posterior,acceptance_ratio, rv, msg, previous_posterior]+p_table)
+                LHList.append([i, prior_t,1/RMSE,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             
             # adjust jump size every N_cycles
             if i%self.N_cycles == 0:
@@ -362,11 +362,11 @@ class MWRu_calibrator():
 
         self.LHvals = pd.DataFrame(LHList)
         if self.extent_only:
-            self.LHvals.columns = ['iteration', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'previous_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
         else:
-            self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'previous_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
 
-        self.calibration_values = self.LHvals[self.LHvals['previous_posterior'] == self.LHvals['previous_posterior'].max()] # {'SD': previous_value_SD, 'cs': previous_value_cs}
+        self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] # {'SD': selected_value_SD, 'cs': selected_value_cs}
 
 
 def profile_distance(mg, xsd):
