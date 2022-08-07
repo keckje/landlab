@@ -357,14 +357,14 @@ class MWRu_calibrator():
             p_table = []
             p_nms = []
             for key in self.params:
-                p_table = p_table+[jump_size[key], candidate_value[key],previous_value[key]]
-                p_nms = p_nms+['jump_size_'+key, 'candidate_value_'+key, 'previous_value_'+key]
+                p_table = p_table+[jump_size[key], candidate_value[key],selected_value[key]]
+                p_nms = p_nms+['jump_size_'+key, 'candidate_value_'+key, 'selected_value_'+key]
             if self.method == "omega":
-                LHList.append([i, prior_t,omegaT,candidate_posterior,acceptance_ratio, rv, msg, previous_posterior]+p_table)
+                LHList.append([i, prior_t,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             elif self.method == "RMSE":
-                LHList.append([i, prior_t,1/RMSE,candidate_posterior,acceptance_ratio, rv, msg, previous_posterior]+p_table)
+                LHList.append([i, prior_t,1/RMSE,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             elif self.method == "both":
-                LHList.append([i, prior_t,1/RMSE,omegaT,candidate_posterior,acceptance_ratio, rv, msg, previous_posterior]+p_table)
+                LHList.append([i, prior_t,1/RMSE,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
 
             # adjust jump size every N_cycles
             if i%self.N_cycles == 0:
@@ -376,11 +376,11 @@ class MWRu_calibrator():
 
         self.LHvals = pd.DataFrame(LHList)
         if self.method == "omega":
-            self.LHvals.columns = ['iteration', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'previous_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
         elif self.method == "RMSE":
-            self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'previous_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
         elif self.method == "both":
-            self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'previous_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
 
         self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] # {'SD': selected_value_SD, 'cs': selected_value_cs}
 
