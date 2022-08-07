@@ -112,6 +112,7 @@ class MWRu_calibrator():
         channel centerline"""
         # reset the dem to the initial dem and soil to initial soil depth
         self.MWRu.grid.at_node['topographic__elevation'] = self.MWRu.grid.at_node['topographic__initial_elevation'].copy()
+        self.MWRu.grid.at_node['energy__elevation'] = self.MWRu.grid.at_node['topographic__elevation'].copy()
         self.MWRu.grid.at_node['soil__thickness'] = self.initial_soil_depth.copy()
         # run the model
         self.MWRu.run_one_step(dt = 0)
