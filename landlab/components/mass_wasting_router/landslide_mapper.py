@@ -96,6 +96,7 @@ class LandslideMapper(Component):
         MW_to_channel_threshold = 50,
         PartOfChannel_buffer = 10, # may not need this parameter            
         mass_wasting_threshold = 0.75,  # landslide mapping parameters
+        threshold_type = "greater_than",
         min_mw_cells = 1,
         gti = None,
         ):
@@ -154,6 +155,7 @@ class LandslideMapper(Component):
         ### prep LandslideMapper
         self.MW_to_C_threshold = MW_to_channel_threshold # maximum distance [m] from channel for downslope clumping
         self.mass_wasting_threshold = mass_wasting_threshold # probability of landslide threshold
+        self.threshold_type = threshold_type
         self.min_mw_cells = min_mw_cells # minimum number of cells to be a mass wasting clump
               
         
@@ -175,8 +177,13 @@ class LandslideMapper(Component):
 
         # keep as (nxr)x1 array, convert to pd dataframe
         # a_df = pd.DataFrame(a)
-
-        mask = a > self.mass_wasting_threshold
+        if self.threshold_type == 'greater_than':
+            mask = a > self.mass_wasting_threshold
+        elif self.threshold_type == 'less_than':
+            mask = a < self.mass_wasting_threshold
+        else:
+            raise FieldError(
+                'not an accepted threshold type!')
 
         # boolean list of which grid cells are landslides
         self._this_timesteps_landslides = mask

@@ -24,7 +24,7 @@ class MWRu_calibrator():
                  params,
                  profile_calib_dict,
                  prior_distribution = "uniform",
-                 extent_only = False,
+                 method = 'both',
                  omega_metric = "runout",
                  RMSE_metric = "Vd",
                  jump_size = 0.2,
@@ -59,6 +59,11 @@ class MWRu_calibrator():
                     np.array of distance at each node from outlet, output from channel profiler
                 cL : float
                     length of grid cell for modeled grid
+        prior_distribution: string
+            can be "uniform" or "normal"
+        
+        method: string
+            can be "RMSE", "omega" or "both"
                     
         omega_metric: string
             can be "runout", "deposition" or "scour". Default is "runout"
@@ -87,7 +92,7 @@ class MWRu_calibrator():
         self.params = params
         self.pcd = profile_calib_dict        
         self.prior_distribution = prior_distribution
-        self.extent_only = extent_only
+        self.method = method
         self.omega_metric = omega_metric
         self.RMSE_metric = RMSE_metric
         self.jump_size = jump_size
@@ -97,7 +102,7 @@ class MWRu_calibrator():
 
     def __call__(self, max_number_of_runs = 50):
         """instantiate the class"""
-        if not self.extent_only:
+        if (self.method == "both") or (self.method == "RMSE"):
             self.mbLdf_o = self._channel_profile_deposition("observed")
         self._MCMC_sampler(max_number_of_runs)
 
@@ -308,10 +313,17 @@ class MWRu_calibrator():
             # run simulation with updated parameter
             self.it = i
             self._simulation()
-            if self.extent_only:
+            if self.method == "omega":
                 omegaT = self._omegaT(metric = "runout")
                 candidate_posterior = prior_t*omegaT
-            else:
+            elif self.method == "RMSE":
+                mbLdf_m = self._channel_profile_deposition("modeled")
+                # determine RMSE metric
+                observed = self.mbLdf_o[self.RMSE_metric]; modeled = mbLdf_m[self.RMSE_metric]
+                RMSE = self._RMSE(observed, modeled)
+                # determine psoterior likilhood: product of RMSE, omegaT and prior liklihood
+                candidate_posterior = prior_t*(1/RMSE)         
+            elif self.method == "both":
                 # get modeled deposition profile
                 mbLdf_m = self._channel_profile_deposition("modeled")
                 # determine RMSE metric
@@ -347,9 +359,11 @@ class MWRu_calibrator():
             for key in self.params:
                 p_table = p_table+[jump_size[key], candidate_value[key],previous_value[key]]
                 p_nms = p_nms+['jump_size_'+key, 'candidate_value_'+key, 'previous_value_'+key]
-            if self.extent_only:
+            if self.method == "omega":
                 LHList.append([i, prior_t,omegaT,candidate_posterior,acceptance_ratio, rv, msg, previous_posterior]+p_table)
-            else:
+            elif self.method == "RMSE":
+                LHList.append([i, prior_t,1/RMSE,candidate_posterior,acceptance_ratio, rv, msg, previous_posterior]+p_table)
+            elif self.method == "both":
                 LHList.append([i, prior_t,1/RMSE,omegaT,candidate_posterior,acceptance_ratio, rv, msg, previous_posterior]+p_table)
             
             # adjust jump size every N_cycles
@@ -361,9 +375,11 @@ class MWRu_calibrator():
             print('MCMC iteration '+str(i))
 
         self.LHvals = pd.DataFrame(LHList)
-        if self.extent_only:
+        if self.method == "omega":
             self.LHvals.columns = ['iteration', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'previous_posterior']+p_nms
-        else:
+        elif self.method == "RMSE":
+            self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'previous_posterior']+p_nms        
+        elif self.method == "both":   
             self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'previous_posterior']+p_nms
 
         self.calibration_values = self.LHvals[self.LHvals['previous_posterior'] == self.LHvals['previous_posterior'].max()] # {'SD': previous_value_SD, 'cs': previous_value_cs}
