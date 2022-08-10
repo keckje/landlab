@@ -220,7 +220,18 @@ class MWRu_calibrator():
         """
         RMSE = (((observed-modeled)**2).mean())**0.5
         return RMSE
-
+    
+    def _deposition_thickness_error(self, metric = 'mean'):
+        """computes the deposition thickness error (DTE)"""
+        if metric == 'max':
+            h_o = self.mg.at_node['dem_dif_o'].max()
+            h_m = self.mg.at_node['dem_dif_m'].max()
+        if metric == 'mean':
+            h_o = self.mg.at_node['dem_dif_o'].mean()
+            h_m = self.mg.at_node['dem_dif_m'].mean()            
+        
+        DTE = 1/(1+np.abs(np.log(h_m/h_o)))
+        return DTE
 
     def _prior_probability(self, value, key):
         """get prior liklihood of parameter value"""
@@ -332,8 +343,10 @@ class MWRu_calibrator():
                 RMSE = self._RMSE(observed, modeled)
                 # determine deposition overlap metric, omegaT
                 omegaT = self._omegaT(metric = self.omega_metric)
+                # determine the difference in thickness
+                DTE = self._deposition_thickness_error()
                 # determine psoterior likilhood: product of RMSE, omegaT and prior liklihood
-                candidate_posterior = prior_t*(1/RMSE)*omegaT
+                candidate_posterior = prior_t*(1/RMSE)*omegaT*DTE
 
             # decide to jump or not to jump
             if i == 0:
@@ -365,7 +378,7 @@ class MWRu_calibrator():
             elif self.method == "RMSE":
                 LHList.append([i, prior_t,1/RMSE,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             elif self.method == "both":
-                LHList.append([i, prior_t,1/RMSE,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                LHList.append([i, prior_t,1/RMSE,DTE,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
 
             # adjust jump size every N_cycles
             if i%self.N_cycles == 0:
@@ -381,7 +394,7 @@ class MWRu_calibrator():
         elif self.method == "RMSE":
             self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
         elif self.method == "both":
-            self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'DTE', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
 
         self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] # {'SD': selected_value_SD, 'cs': selected_value_cs}
 
