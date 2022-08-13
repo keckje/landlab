@@ -561,7 +561,9 @@ class LandslideProbability(Component):
 
         self._nodal_values = self._grid.at_node
 
-        # create list for storing Factor of Safety values from each iteration    
+        # create list for storing soil depth and Factor of Safety values from 
+        # each iteration    
+        self._hs_list = []
         self._FS_list = []
         
     def calculate_factor_of_safety(self, i):
@@ -717,7 +719,9 @@ class LandslideProbability(Component):
         self._FS = (self._C_dim / np.sin(np.arctan(self._theta))) + (
             np.cos(np.arctan(self._theta)) * (Y / np.sin(np.arctan(self._theta)))
         )
-        
+        # store "self._n" soil depth and factor of safety values used to determine
+        # probability at node i
+        self._hs_list.append(self._hs)
         self._FS_list.append(self._FS)
         count = 0
         for val in self._FS:  # find how many FS values <= 1
@@ -757,9 +761,11 @@ class LandslideProbability(Component):
         self._grid.at_node["soil__mean_relative_wetness"] = self._mean_Relative_Wetness
         self._grid.at_node["landslide__probability_of_failure"] = self._prob_fail
         self._grid.at_node["soil__probability_of_saturation"] = self._prob_sat
-        self._FSarray = np.array(self._FS_list) # array of n iterations of
-        # factor of safety values for each core node
-
+        # arrays of n iterations of factor of safety values and soil depth for 
+        # each core node
+        self._FSarray = np.array(self._FS_list)
+        self._hsarray = np.array(self._hs_list)
+        
     def _seed_generator(self, seed=0):
         """Method to initiate random seed.
 
