@@ -138,7 +138,7 @@ class MWRu_calibrator():
         node_slope = mg.at_node['topographic__steepest_slope']
         cL = self.pcd['cL']
 
-        def cv_mass_change(el,dem,demd,dA,channel_nodes,node_slope,channel_distance):
+        def cv_mass_change(el,dem,demd,el_l,el_h,dA,channel_nodes,node_slope,channel_distance):
 
             # cumulative downstream deposition and upstream scour
             # dp: change > 0; Mask dem to get matching array of elevation
@@ -180,7 +180,7 @@ class MWRu_calibrator():
 
         mbL = []
         for el in np.linspace(el_l,el_h,100):
-            mbL.append(cv_mass_change(el, dem, demd,cL**2,channel_nodes, node_slope, channel_distance))
+            mbL.append(cv_mass_change(el, dem, demd,el_l,el_h,cL**2,channel_nodes, node_slope, channel_distance))
         mbLdf = pd.DataFrame(mbL)
         mbLdf.columns = ['Vu','Vd','dV','Vt', 'slope', 'node','distance']
         return mbLdf
