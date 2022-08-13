@@ -148,16 +148,16 @@ class MWRu_calibrator():
 
             # sum masked dp and and sc
             # deposition below elevation
-            dpe = np.nansum(dp[dem_dp<el])
+            dpe = np.nansum(dp[(dem_dp<el)&(dem_dp>=el_l)])
             # scour above elevation
-            sce = np.nansum(sc[dem_sc>el])
+            sce = np.nansum(sc[(dem_sc>el)&(dem_sc<=el_h)])
             # multiply by cell area to get volume
             Vt = dpe*dA
             dV = sce*dA
 
             # cumulative volumetric change in the upstream and downstream directions
-            dd = np.nansum(demd[dem<el])
-            du = np.nansum(demd[dem>el])
+            dd = np.nansum(demd[(dem<el) & (dem>=el_l)])
+            du = np.nansum(demd[(dem>el) & (dem<=el_h)])
             # multiply by cell area to get volume
             Vd = dd*dA
             Vu = du*dA
