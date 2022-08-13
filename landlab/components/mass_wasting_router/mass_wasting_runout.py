@@ -364,6 +364,7 @@ class MassWastingRunout(Component):
             c_dr = 0 # mass wasting event delayed-release counter
               
             while len(self.arn)>0 and c < self.itL:
+                self.c = c
                 # release the initial landslide volume
                 # if first iteration, receiving cell = initial receiving list
                 # initial volume = volume/nps
@@ -579,7 +580,7 @@ class MassWastingRunout(Component):
             # additional constraint to control debris flow behavoir
             # if flux is below threshold, or node is a pit (
             # receiver node is itself), debris is forced to stop
-            if (qsi <=self.SD) or ((len(rn) == 1) and ([n] == [rn])):
+            if (qsi <=self.SD) or ((len(rn) == 1) and ([n] == [rn])) or self.c == self.itL-1:
                 D = qsi # all material that enters cell is deposited 
                 qso = 0 # debris stops, so qso is 0
                 E = 0 # no erosion
@@ -997,14 +998,13 @@ class MassWastingRunout(Component):
             raise ValueError(msg)        
         return n_pd
 
-    
-    def _particle_diameter_out(self,pd_up,pd_in,qsi,E,D):
+    @staticmethod
+    def _particle_diameter_out(pd_up,pd_in,qsi,E,D):
         """determine the weighted average particle diameter of the outgoing
         flow"""
         
         pd_out = np.sum((pd_up*E+pd_in*(qsi-D))/(qsi-D+E))
-        
-        
+                
         if (pd_out <=0) or (np.isnan(pd_out)) or (np.isinf(pd_out)):
             msg = "out-flowing particle diameter is zero, negative, nan or inf"
             print("pd_up{}, pd_in{}, qsi{}, E{}, D{}".format(pd_up, pd_in, qsi, E, D))
