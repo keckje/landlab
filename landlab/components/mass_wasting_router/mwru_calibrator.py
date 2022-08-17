@@ -229,8 +229,8 @@ class MWRu_calibrator():
         if metric == 'mean':
             h_o = self.mg.at_node['dem_dif_o'].mean()
             h_m = self.mg.at_node['dem_dif_m'].mean()            
-        
-        DTE = 1/(1+np.abs(np.log(h_m/h_o)))
+
+        DTE = 1/(np.exp(np.abs(h_o-h_m)))
         return DTE
 
     def _prior_probability(self, value, key):
