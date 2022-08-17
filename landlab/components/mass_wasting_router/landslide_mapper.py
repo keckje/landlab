@@ -531,7 +531,7 @@ class LandslideMapper(Component):
 
         """
 
-        #single cell clump
+        # minimum number of cells criteria
         groupALS_l = []
         for i, v in enumerate(self.LS_cells):
             # print(v)
@@ -563,7 +563,7 @@ class LandslideMapper(Component):
                     #print(i)
                     df2 = pd.DataFrame({'cell':list(groupALS_lc[i])}) # set cell list i as df2
                     # check if df1 and df2 share cells (if no shared cells, dfm.shape = 0)
-                    dfm = pd.merge(df1,df2, on = 'cell', how= "inner")
+                    dfm = pd.merge(df1,df2, on = 'cell', how= "inner") # if no cells shared, dfm is an empty dataframe
     
                     if dfm.shape[0] > 0: # if shared cells
                         groupALS_lc.remove(groupALS_lc[i]) # cell list i is removed from groupALS_lc

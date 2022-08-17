@@ -415,7 +415,8 @@ class MassWastingRunout(Component):
                 if self.VaryDp:
                     self._update_channel_particle_diameter()
                 
-                ### update slope fields after DEM has been updated for settlement
+                ### update topographic slope field for deposition to detemine where
+                # settling will occur - move this innto settle_deposit
                 self._update_topographic_slope()                   
                        
                 if self.settle_deposit:
@@ -934,6 +935,13 @@ class MassWastingRunout(Component):
 
 
     def _deposit_L_metric(self, qsi, slpn):
+        """
+        ----------
+        qsi : float
+            in coming flux per unit contour width
+        slpn : float
+            slope of node, measured in downslope direction (downslope is postive)
+        """
         
         Lnum = np.max([(1-(slpn/self.slpc)**2),0])
         
