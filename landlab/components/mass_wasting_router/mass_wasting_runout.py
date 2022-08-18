@@ -112,7 +112,8 @@ class MassWastingRunout(Component):
     run_id = 0, 
     itL = 1000,
     routing_surface = "energy__elevation",
-    settle_deposit = False):
+    settle_deposit = False,
+    deposition_rule = "both"):
         
         super().__init__(grid)
 
@@ -125,6 +126,7 @@ class MassWastingRunout(Component):
         self.routing_surface = routing_surface
         self.settle_deposit = settle_deposit
         self.VaryDp = self._grid.has_field('node', 'particle__diameter')
+        self.deposition_rule = deposition_rule
         
         if self.VaryDp:
             print(' running with spatially variable Dp ')
@@ -709,8 +711,7 @@ class MassWastingRunout(Component):
     def _update_E_dem(self):
         """update energy__elevation"""
     
-        n = self.vqdat[:,0].astype(int); qsi = self.vqdat[:,2]; 
-        
+        n = self.vqdat[:,0].astype(int); qsi = self.vqdat[:,2];         
         # energy slope is equal to the topographic elevation potential energy
         self._grid.at_node['energy__elevation'] = self._grid.at_node['topographic__elevation'].copy()
         # plus the pressure potential energy
@@ -886,26 +887,31 @@ class MassWastingRunout(Component):
         Campforts, et al., 2020 but is flux per unit contour width (rather than flux), 
         and L is (1-(slpn/slpc)**2) rather than dx/(1-(slpn/slpc)**2)"""
                 
-        
-        DL = self._deposit_L_metric(qsi, slpn)
-        
-        if self.routing_surface == "energy__elevation":
-
-            # elevation at node i
-            zi = self._grid.at_node['topographic__elevation'][n]
-            
-            zo = self._determine_zo(n, zi, qsi )
-
-            if zo:
-
-                Dc = self._deposit_friction_angle(qsi, zi, zo)
-            else: # a pit in the energy elevation surface
-                Dc = qsi 
-          
+        if self.deposition_rule == "L_metric":
+            D = self._deposit_L_metric(qsi, slpn)
+        elif self.deposition_rule == "critical_slope":
+            D = self._deposit_friction_angle(qsi, n)
+        elif self.deposition_rule == "both":
+            DL = self._deposit_L_metric(qsi, slpn)
+            Dc = self._deposit_friction_angle(qsi, n) 
             D = min(DL,Dc)
+        # if self.routing_surface == "energy__elevation": # not needed, energy surface tracked regardless of routing method
+
+            # # elevation at node i
+            # zi = self._grid.at_node['topographic__elevation'][n]
+            
+            # zo = self._determine_zo(n, zi, qsi )
+
+            # if zo:
+
+                # Dc = self._deposit_friction_angle(qsi, zi, zo)
+            # else: # a pit in the energy elevation surface
+            #     Dc = qsi 
+          
+            # D = min(DL,Dc)
                 
-        else:
-            D = DL
+        # else:
+        #     D = DL
                 
         return(D)
 
@@ -949,23 +955,32 @@ class MassWastingRunout(Component):
         
         return(DL)
     
-    def _deposit_friction_angle(self, qsi, zi, zo):
+    def _deposit_friction_angle(self, qsi, n):
         
         slp_h = self.slpc*self._grid.dx
         
-        if zo>zi:            
-
-            Dc = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)
+            # elevation at node i
+        zi = self._grid.at_node['topographic__elevation'][n]
         
-        elif (zo<=zi) and ((zi-zo)<=(qsi+slp_h)):
+        zo = self._determine_zo(n, zi, qsi )
+        
+        if zo:
+        
+            if zo>zi:            
+    
+                Dc = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)
             
-            Dc = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)
-        else:
-            Dc = 0
-        
-        if Dc <0:
-            print("negative deposition!! n {}, qsi{}, ei {}, DL {}, Dc {}".format(n,qsi,ei,DL,Dc))
-            raise(ValueError)
+            elif (zo<=zi) and ((zi-zo)<=(qsi+slp_h)):
+                
+                Dc = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)
+            else:
+                Dc = 0
+            
+            if Dc <0:
+                print("negative deposition!! n {}, qsi{}, ei {}, DL {}, Dc {}".format(n,qsi,ei,DL,Dc))
+                raise(ValueError)
+        else: # a pit in the energy elevation surface
+            Dc = qsi 
             
         return(Dc)
     

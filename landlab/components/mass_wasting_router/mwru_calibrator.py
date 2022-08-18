@@ -98,6 +98,8 @@ class MWRu_calibrator():
         self.jump_size = jump_size
         self.N_cycles = N_cycles
         self.initial_soil_depth = self.mg.at_node['soil__thickness'].copy()
+        if self.mg.has_field("particle__diameter", at="node"):
+            self.initial_particle_diameter = self.mg.at_node["particle__diameter"].copy()
         self.plot_tf = True
 
     def __call__(self, max_number_of_runs = 50):
@@ -114,6 +116,9 @@ class MWRu_calibrator():
         self.MWRu.grid.at_node['topographic__elevation'] = self.MWRu.grid.at_node['topographic__initial_elevation'].copy()
         self.MWRu.grid.at_node['energy__elevation'] = self.MWRu.grid.at_node['topographic__elevation'].copy()
         self.MWRu.grid.at_node['soil__thickness'] = self.initial_soil_depth.copy()
+        if self.mg.has_field("particle__diameter", at="node"):
+            self.mg.at_node["particle__diameter"] = self.initial_particle_diameter.copy()
+            
         # run the model
         self.MWRu.run_one_step(dt = 0)
         # create the modeldiff_m field
