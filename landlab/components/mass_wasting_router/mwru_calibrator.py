@@ -232,8 +232,8 @@ class MWRu_calibrator():
             h_o = self.mg.at_node['dem_dif_o'].max()
             h_m = self.mg.at_node['dem_dif_m'].max()
         if metric == 'mean':
-            h_o = self.mg.at_node['dem_dif_o'].mean()
-            h_m = self.mg.at_node['dem_dif_m'].mean()            
+            h_o = self.mg.at_node['dem_dif_o'][self.mg.at_node['dem_dif_m']>0].mean()
+            h_m = self.mg.at_node['dem_dif_m'][self.mg.at_node['dem_dif_m']>0].mean()            
 
         DTE = 1/(np.exp(np.abs(h_o-h_m)))
         return DTE
@@ -327,6 +327,7 @@ class MWRu_calibrator():
                 if key == "t_avg":
                     # adjust thickness of landslide with id = 1
                     self.MWRu._grid.at_node['soil__thickness'][self.MWRu._grid.at_node['mass__wasting_id'] == 1] = candidate_value[key]
+            
             # run simulation with updated parameter
             self.it = i
             self._simulation()

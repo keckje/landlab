@@ -18,6 +18,8 @@ class MassWastingRunout(Component):
     intended for modeling the runout of individually mapped landslides and landslides
     inferred from a landslide hazard map.
 
+    TODO: change particle diameter to a function that is applied to all fields that will be tracked
+    
     author: Jeff Keck
     '''
     
@@ -928,11 +930,11 @@ class MassWastingRunout(Component):
         ei = qsi+zi
         
         # nodes below incoming energy surface
-        rn_e = adj_n[self._grid.at_node['energy__elevation'][adj_n]<ei]
+        rn_e = adj_n[self._grid.at_node['topographic__elevation'][adj_n]<ei]
                   
         if len(rn_e) > 0: 
                        
-            zo = self._grid.at_node['energy__elevation'][rn_e].mean()
+            zo = self._grid.at_node['topographic__elevation'][rn_e].mean()
             
         else:  # a pit in the energy elevation surface
             zo = None
