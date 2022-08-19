@@ -232,7 +232,7 @@ class MWRu_calibrator():
             h_o = self.mg.at_node['dem_dif_o'].max()
             h_m = self.mg.at_node['dem_dif_m'].max()
         if metric == 'mean':
-            h_o = self.mg.at_node['dem_dif_o'][self.mg.at_node['dem_dif_m']>0].mean()
+            h_o = self.mg.at_node['dem_dif_o'][self.mg.at_node['dem_dif_o']>0].mean()
             h_m = self.mg.at_node['dem_dif_m'][self.mg.at_node['dem_dif_m']>0].mean()            
 
         DTE = 1/(np.exp(np.abs(h_o-h_m)))
