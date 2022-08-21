@@ -23,6 +23,15 @@ class LandslideMapper(Component):
     
     TODO: make modify DEM and soil thickness in mapper? a run option
     
+    TODO: look into replaceing pandas dataframe and pd.merge(inner) with np.in1d(array1,array2)
+        and pd.erge(outer) call with np.unique(), get rid of dataframe operations
+        
+    TODO: look at replacing the NotDivergent function with the landlab convergence function
+    
+    TODO: see if image procesing packages can be used to clump
+    
+    TODO: rethink how to combine clumps and remove them from the initial clump list
+    
     author: Jeff Keck
     
     """
@@ -526,8 +535,7 @@ class LandslideMapper(Component):
         """maps hillslope scale landslides from a raster model grid fields of
         topographic elevation and landslide factor of saftey or landslide probability
 
-        TODO: look into replaceing pandas dataframe and pd.merge(inner) with np.in1d(array1,array2)
-            and pd.erge(outer) call with np.unique(), get rid of dataframe operations
+
 
         """
 
