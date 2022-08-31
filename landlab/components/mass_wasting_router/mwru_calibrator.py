@@ -100,7 +100,7 @@ class MWRu_calibrator():
         self.initial_soil_depth = self.mg.at_node['soil__thickness'].copy()
         if self.mg.has_field("particle__diameter", at="node"):
             self.initial_particle_diameter = self.mg.at_node["particle__diameter"].copy()
-        self.plot_tf = True
+        self.plot_tf = False
 
     def __call__(self, max_number_of_runs = 50):
         """instantiate the class"""

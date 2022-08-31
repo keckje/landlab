@@ -19,10 +19,6 @@ class MassWastingRunout(Component):
     inferred from a landslide hazard map.
 
     TODO: change particle diameter to a function that is applied to all fields that will be tracked
-    change dictionary keys to aruguements in the call function
-    probably don't need to separate user options into children classes
-    use cython or try to restructure SEDU function so that it can be applied with 
-    vector operations, the filter all changes to correct cells where computations should not have occurred
     
     author: Jeff Keck
     '''
@@ -934,11 +930,11 @@ class MassWastingRunout(Component):
         ei = qsi+zi
         
         # nodes below incoming energy surface
-        rn_e = adj_n[self._grid.at_node['energy__elevation'][adj_n]<ei]
+        rn_e = adj_n[self._grid.at_node['topographic__elevation'][adj_n]<ei]
                   
         if len(rn_e) > 0: 
                        
-            zo = self._grid.at_node['energy__elevation'][rn_e].mean()
+            zo = self._grid.at_node['topographic__elevation'][rn_e].mean()
             
         else:  # a pit in the energy elevation surface
             zo = None
