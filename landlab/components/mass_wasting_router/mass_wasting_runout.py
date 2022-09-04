@@ -119,7 +119,9 @@ class MassWastingRunout(Component):
     itL = 1000,
     routing_surface = "energy__elevation",
     settle_deposit = False,
-    deposition_rule = "both"):
+    deposition_rule = "both",
+    average_velocity = 0,
+    dist_to_full_flux_constraint = 50):
         
         super().__init__(grid)
 
@@ -133,6 +135,8 @@ class MassWastingRunout(Component):
         self.settle_deposit = settle_deposit
         self.VaryDp = self._grid.has_field('node', 'particle__diameter')
         self.deposition_rule = deposition_rule
+        self.average_velocity = average_velocity
+        self.dist_to_full_flux_constraint = dist_to_full_flux_constraint
         
         if self.VaryDp:
             print(' running with spatially variable Dp ')
@@ -181,9 +185,12 @@ class MassWastingRunout(Component):
             self.g = self.mw_dict['gravity'] 
         else:
             self.g = 9.81
-        
+
         # density of debris flow mixture
         self.rodf = self.vs*self.ros+(1-self.vs)*self.rof
+        # distance equivalent iteration
+        self.d_it = int(self.dist_to_full_flux_constraint/self._grid.dx)
+        
         
         
         # define initial topographic + mass wasting thickness topography
@@ -373,6 +380,7 @@ class MassWastingRunout(Component):
               
             while len(self.arn)>0 and c < self.itL:
                 self.c = c
+                self.SD_v = self.SD*(min(c/self.d_it,1))
                 # release the initial landslide volume
                 # if first iteration, receiving cell = initial receiving list
                 # initial volume = volume/nps
@@ -589,7 +597,7 @@ class MassWastingRunout(Component):
             # additional constraint to control debris flow behavoir
             # if flux is below threshold, or node is a pit (
             # receiver node is itself), debris is forced to stop
-            if (qsi <=self.SD) or ((len(rn) == 1) and ([n] == [rn])) or self.c == self.itL-1:
+            if (qsi <=self.SD_v) or ((len(rn) == 1) and ([n] == [rn])) or self.c == self.itL-1:
                 D = qsi # all material that enters cell is deposited 
                 qso = 0 # debris stops, so qso is 0
                 E = 0 # no erosion
@@ -721,7 +729,7 @@ class MassWastingRunout(Component):
         # energy slope is equal to the topographic elevation potential energy
         self._grid.at_node['energy__elevation'] = self._grid.at_node['topographic__elevation'].copy()
         # plus the pressure potential energy
-        self._grid.at_node['energy__elevation'][n] = self._grid.at_node['energy__elevation'].copy()[n]+qsi        
+        self._grid.at_node['energy__elevation'][n] = self._grid.at_node['energy__elevation'].copy()[n]+qsi+(self.average_velocity**2)/(2*self.g)
 
 
     def _update_energy_slope(self):
@@ -934,11 +942,11 @@ class MassWastingRunout(Component):
         ei = qsi+zi
         
         # nodes below incoming energy surface
-        rn_e = adj_n[self._grid.at_node['energy__elevation'][adj_n]<ei]
+        rn_e = adj_n[self._grid.at_node['topographic__elevation'][adj_n]<ei]
                   
         if len(rn_e) > 0: 
                        
-            zo = self._grid.at_node['energy__elevation'][rn_e].mean()
+            zo = self._grid.at_node['topographic__elevation'][rn_e].mean()
             
         else:  # a pit in the energy elevation surface
             zo = None
