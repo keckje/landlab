@@ -16,8 +16,7 @@ MAX_HEIGHT_SLOPE = 100  # in m
 
 
 class BedrockLandslider(Component):
-    """Calculate the location and magnitude of episodic bedrock landsliding.
-
+    """
     Landlab component that calculates the location and magnitude of episodic
     bedrock landsliding following the Cullman criterion.
     See the publication:
@@ -28,32 +27,29 @@ class BedrockLandslider(Component):
     Geosci Model Dev: 13(9):3863–86.
     `https://dx.doi.org/10.5194/esurf-6-1-2018 <https://dx.doi.org/10.5194/esurf-6-1-2018>`_
 
-    Campforts, B., Shobe, C. M., Overeem, I., & Tucker, G. E. (2022).
-    The Art of Landslides: How Stochastic Mass Wasting Shapes Topography and
-    Influences Landscape Dynamics.
-    Journal of Geophysical Research: Earth Surface,
-    127(8), 1–16. https://doi.org/10.1029/2022JF006745
-
 
     Examples
     --------
+    Make a raster model grid and create a plateau
 
     >>> import numpy as np
     >>> from numpy import testing
     >>> from landlab import RasterModelGrid
     >>> from landlab.components import PriorityFloodFlowRouter, BedrockLandslider
 
-    Make a ``RasterModelGrid`` and create a plateau.
-
+    Make a raster model grid and create a plateau
     * 5x5 grid
     * Initial topography is set to plateau value of 10
 
-    >>> mg = RasterModelGrid((5, 5), xy_spacing=1.0)
+    >>> nr = 5
+    >>> nc = 5
+    >>> dx = 1
+    >>> mg = RasterModelGrid((nr, nc), xy_spacing=dx)
     >>> z = mg.add_zeros("topographic__elevation", at="node")
     >>> s = mg.add_zeros("soil__depth", at='node')
     >>> b = mg.add_zeros("bedrock__elevation", at='node')
 
-    Make plateau at 10 m
+    make plateau at 10m
 
     >>> b += 10
 
@@ -62,8 +58,7 @@ class BedrockLandslider(Component):
     >>> b[2] = 0
     >>> z[:] = b + s
 
-    Instantiate the :class:`~.priority_flood_flow_router.PriorityFloodFlowRouter` for flow accumulation
-    and the ``BedrockLandslider``
+    Instantiate flow accumulation and BedrockLandslider
 
     >>> fd = PriorityFloodFlowRouter(
     ...     mg,
@@ -72,17 +67,16 @@ class BedrockLandslider(Component):
     ... )
     >>> hy = BedrockLandslider(mg, landslides_return_time=1)
 
-    Run the flow director and ``BedrockLandslider`` for one timestep
-
+    run flow director and BedrockLandslider for one timestep
     >>> fd.run_one_step()
-    >>> vol_suspended_sediment_yield, volume_leaving = hy.run_one_step(dt=1)
+    >>> vol_suspended_sediment_yield ,volume_leaving = hy.run_one_step(dt=1)
 
-    After one timestep, we can predict exactly where the landslide will occur.
-    The return time is set to 1 year so that probability for sliding is 100%.
-    The angle of internal friction is 1 m/m, the topographical gradient is 10 m/m.
-    At cardinal cells, the sliding plane will be at *(1 + 10) / 2 = 5.5* m/m.
-    With a *dx* of 1, the cardinal cell next to the critical sliding node must
-    be 5.5 m and the diagonal one at *5.5 * sqrt(2) = 7.8* m
+    After one timestep, we can predict eactly where the landslide will occur.
+    The return time is set to 1 year so that probability for sliding is 100%
+    The angle of internal driction is 1m/m, the topographical gradient is 10 m/m
+    At cardinal cells, the sliding plain will be at (1+10)/2 = 5.5 m/m.
+    With a dx of 1, the cardial cell next to the critical sliding node must
+    be 5.5 m and the diagonal one at 5.5 * sqrt(2) = 7.8 m
 
     >>> testing.assert_almost_equal(
     ...     [5.5 * np.sqrt(2), 5.5, 5.5 * np.sqrt(2)], z[6:9], decimal=5
@@ -231,7 +225,6 @@ class BedrockLandslider(Component):
         self,
         grid,
         angle_int_frict=1.0,
-        threshold_slope=None,
         cohesion_eff=1e4,
         landslides_return_time=1e5,
         rho_r=2700,
@@ -243,7 +236,6 @@ class BedrockLandslider(Component):
         verbose_landslides=False,
         landslides_on_boundary_nodes=True,
         critical_sliding_nodes=None,
-        min_deposition_slope=0,
     ):
         """Initialize the BedrockLandslider model.
 
@@ -253,12 +245,9 @@ class BedrockLandslider(Component):
             Landlab ModelGrid object
         angle_int_frict: float, optional
             Materials angle of internal friction in [m/m]
-        threshold_slope: float, optional
-            Threshold slope used in non-linear deposition scheme [m/m]
-            Default value is set to angle_int_frict if not specified
         cohesion_eff : float, optional
             Effective cohesion of material [m L^-1 T^-2].
-        landslides_return_time : float, optional
+        landslides_return_time  : float, optional
             Return time for stochastic landslide events to occur
         rho_r : float, optional
             Bulk density rock [m L^-3].
@@ -304,10 +293,6 @@ class BedrockLandslider(Component):
 
         # Store grid and parameters
         self._angle_int_frict = angle_int_frict
-        if threshold_slope is None:
-            self._threshold_slope = angle_int_frict
-        else:
-            self._threshold_slope = threshold_slope
         self._cohesion_eff = cohesion_eff
         self._rho_r = rho_r
         self._grav = grav
@@ -318,7 +303,6 @@ class BedrockLandslider(Component):
         self._verbose_landslides = verbose_landslides
         self._landslides_on_boundary_nodes = landslides_on_boundary_nodes
         self._critical_sliding_nodes = critical_sliding_nodes
-        self._min_deposition_slope = min_deposition_slope
 
         # Data structures to store properties of simulated landslides.
         self._landslides_size = []
@@ -378,7 +362,7 @@ class BedrockLandslider(Component):
 
         Parameters
         ----------
-        dt: float
+        dt: float (time)
             The imposed timestep.
 
         Returns
@@ -410,9 +394,9 @@ class BedrockLandslider(Component):
         flood_status = self.grid.at_node["flood_status_code"]
         flooded_nodes = np.nonzero(flood_status == _FLOODED)[0]
 
-        # In the following section the location of critical nodes where
-        # landsldies are initatated is calcualted, unless these critical nodes
-        # are provided as critical_sliding_nodes
+        """In the following section the location of critical nodes where
+        landsldies are initatated is calcualted, unless these critical nodes
+        are provided as critical_sliding_nodes"""
         if self._critical_sliding_nodes is None:
             # Calculate gradients
             height_cell = topo - topo[self.grid.at_node["flow__receiver_node"]]
@@ -613,19 +597,19 @@ class BedrockLandslider(Component):
 
     def _landslide_runout(self, dt):
         """
-        Calculate landslide runout using a non-local deposition algorithm based on:
-        * Carretier S., Martinod P., Reich M., Godderis Y. (2016) Modelling
-          sediment clasts transport during landscape evolution.
-          Earth Surf Dyn: 4(1):237–51.
-        * Campforts B., Shobe C.M., Steer P., Vanmaercke M., Lague D., Braun J.
-          (2020) HyLands 1.0: a hybrid landscape evolution model to simulate
-          the impact of landslides and landslide-derived sediment on landscape
-          evolution. Geosci Model Dev: 13(9):3863–86.
+        calculate landslide runout using a non-local deposition algorithm based on:
+            * Carretier S., Martinod P., Reich M., Godderis Y. (2016) Modelling
+              sediment clasts transport during landscape evolution.
+              Earth Surf Dyn: 4(1):237–51.
+            * Campforts B., Shobe C.M., Steer P., Vanmaercke M., Lague D., Braun J.
+              (2020) HyLands 1.0: a hybrid landscape evolution model to simulate
+              the impact of landslides and landslide-derived sediment on landscape
+              evolution. Geosci Model Dev: 13(9):3863–86.
 
         Parameters
         ----------
         dt : float
-            Timestep.
+            timestep.
 
         Returns
         -------
@@ -659,8 +643,8 @@ class BedrockLandslider(Component):
 
         # L following carretier 2016
         transport_length_hill = np.where(
-            slope < self._threshold_slope,
-            self.grid.dx / (1 - (slope / self._threshold_slope) ** 2),
+            slope < self._angle_int_frict,
+            self.grid.dx / (1 - (slope / self._angle_int_frict) ** 2),
             1e6,
         )
 
@@ -668,23 +652,10 @@ class BedrockLandslider(Component):
         dh_hill = np.zeros(topo.shape)
         topo_copy = np.array(topo)
         max_depo = np.zeros(topo.shape)
-        length_adjacent_cells = np.array(
-            [
-                self.grid.dx,
-                self.grid.dx,
-                self.grid.dx,
-                self.grid.dx,
-                self.grid.dx * np.sqrt(2),
-                self.grid.dx * np.sqrt(2),
-                self.grid.dx * np.sqrt(2),
-                self.grid.dx * np.sqrt(2),
-            ]
-        )
 
         _landslide_runout(
             self.grid.dx,
             self._phi,
-            self._min_deposition_slope,
             stack_rev_sel,
             receivers,
             fract_receivers,
@@ -694,7 +665,6 @@ class BedrockLandslider(Component):
             dh_hill,
             topo_copy,
             max_depo,
-            length_adjacent_cells,
         )
         sed_flux[:] = flux_out
 
@@ -717,7 +687,7 @@ class BedrockLandslider(Component):
 
         Parameters
         ----------
-        dt: float
+        dt: float (time)
             The imposed timestep.
 
         Returns
