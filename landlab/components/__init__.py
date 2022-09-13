@@ -80,7 +80,7 @@ from .stream_power import (
 )
 from .taylor_nonlinear_hillslope_flux import TaylorNonLinearDiffuser
 from .tectonics import ListricKinematicExtender
-#from .threshold_eroder import ThresholdEroder
+from .threshold_eroder import ThresholdEroder
 from .tidal_flow import TidalFlowCalculator
 from .transport_length_diffusion import TransportLengthHillslopeDiffuser
 from .uniform_precip import PrecipitationDistribution
@@ -158,7 +158,7 @@ COMPONENTS = [
     TidalFlowCalculator,
     TransportLengthHillslopeDiffuser,
     TrickleDownProfiler,
-    # ThresholdEroder,
+    ThresholdEroder,
     VegCA,
     Vegetation,
 ]

@@ -179,7 +179,8 @@ def example_square_MWRu(example_square_mg):
     release_dict = {'number of pulses':npu, 'iteration delay':nid }
         
     example_MWRu = MassWastingRunout(example_square_mg,release_dict,mw_dict, save = True,
-                                      routing_surface = "energy__elevation", settle_deposit = True)
+                                      routing_surface = "energy__elevation", settle_deposit = True,
+                                      dist_to_full_flux_constraint = 0)
     return(example_MWRu)
 
 

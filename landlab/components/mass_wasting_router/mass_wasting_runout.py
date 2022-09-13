@@ -23,6 +23,7 @@ class MassWastingRunout(Component):
     probably don't need to separate user options into children classes
     use cython or try to restructure SEDU function so that it can be applied with 
     vector operations, the filter all changes to correct cells where computations should not have occurred
+    fix SLOSHING problem
     
     author: Jeff Keck
     '''
@@ -191,15 +192,20 @@ class MassWastingRunout(Component):
         # distance equivalent iteration
         self.d_it = int(self.dist_to_full_flux_constraint/self._grid.dx)
         
-        
+        self.SD_e = self.SD*3
         
         # define initial topographic + mass wasting thickness topography
         self._grid.at_node['energy__elevation'] = self._grid.at_node['topographic__elevation'].copy()
         self._grid.at_node['topographic__initial_elevation'] = self._grid.at_node['topographic__elevation'].copy()
         
+        # define the initial disturbance map
+        # if the user included a disturbance map field then:
+        if self._grid.has_field('disturbance_map'):
+            self._grid.at_node['disturbance_map'] = self._grid.at_node['disturbance_map'].astype(bool)
+        else: # otherwise define everthing as undisturbed
+            self._grid.at_node['disturbance_map'] = np.full(self._grid.number_of_nodes, False)
     
-
-    
+   
     """route an initial mass wasting volume through a watershed, determine Scour, 
     Entrainment and Depostion depths and update the DEM
     
@@ -380,7 +386,10 @@ class MassWastingRunout(Component):
               
             while len(self.arn)>0 and c < self.itL:
                 self.c = c
-                self.SD_v = self.SD*(min(c/self.d_it,1))
+                if self.d_it == 0:
+                    self.SD_v = self.SD
+                else:
+                    self.SD_v = self.SD*(min(c/self.d_it,1))
                 # release the initial landslide volume
                 # if first iteration, receiving cell = initial receiving list
                 # initial volume = volume/nps
@@ -434,9 +443,10 @@ class MassWastingRunout(Component):
                 ### update topographic slope field for deposition to detemine where
                 # settling will occur - move this innto settle_deposit
                 self._update_topographic_slope()                   
-                       
+                
+                self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
                 if self.settle_deposit:
-                    self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
+                    
                     ### settle unrealistically tall mounds in the deposit                    
                     self._settle(arn_u)
 
@@ -452,7 +462,12 @@ class MassWastingRunout(Component):
                     self._update_energy_slope()
                 else:
                     # update slope using routing using topographic slope
-                    self._update_topographic_slope()                                    
+                    self._update_topographic_slope()       
+
+                # self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
+                self._update_disturbance_map()  
+
+                           
 
                 # once all cells in iteration have been evaluated, temporary receiving
                 # node, node volume and node particle diameter arrays become arrays 
@@ -492,7 +507,11 @@ class MassWastingRunout(Component):
                 if c%20 ==0:
                     print(c)  
 
-
+    def _update_disturbance_map(self):
+        """map of boolian values indicating if a node has been disturbed (changed 
+        topographic__elevation) at any point in the model run"""
+        self._grid.at_node['disturbance_map'][self.dif>0] = True 
+        
     def _prep_initial_mass_wasting_material(self, inn, mw_i):
         """from an initial source area (landslide) prepare the initial lists 
         of receiving nodes and incoming volumes and particle diameters per precipiton,
@@ -593,17 +612,26 @@ class MassWastingRunout(Component):
                         
             # incoming particle diameter (weighted average)
             pd_in = self._particle_diameter_in(n,vin) # move
-            # print("pd_in {}".format(pd_in))                            
+                           
             # additional constraint to control debris flow behavoir
-            # if flux is below threshold, or node is a pit (
+            # if flux is below threshold and an undisturbed cell (still has veg), or node is a pit (
             # receiver node is itself), debris is forced to stop
-            if (qsi <=self.SD_v) or ((len(rn) == 1) and ([n] == [rn])) or self.c == self.itL-1:
+            if ((qsi <=self.SD_e) and (self._grid.at_node['disturbance_map'][n] == False)):
+            # if (qsi <=self.SD_v) or ((len(rn) == 1) and ([n] == [rn])) or self.c == self.itL-1:
                 D = qsi # all material that enters cell is deposited 
                 qso = 0 # debris stops, so qso is 0
                 E = 0 # no erosion
                 # determine change in cell height
                 deta = D # (deposition)/cell area
-                # node grain size remains the same                
+                # node grain size remains the same         
+            elif (qsi <=self.SD_v) or ((len(rn) == 1) and ([n] == [rn])) or self.c == self.itL-1:
+                D = qsi # all material that enters cell is deposited 
+                qso = 0 # debris stops, so qso is 0
+                E = 0 # no erosion
+                # determine change in cell height
+                deta = D # (deposition)/cell area
+                # node grain size remains the same   
+                
             else:
 
                 ### deposition
@@ -729,7 +757,7 @@ class MassWastingRunout(Component):
         # energy slope is equal to the topographic elevation potential energy
         self._grid.at_node['energy__elevation'] = self._grid.at_node['topographic__elevation'].copy()
         # plus the pressure potential energy
-        self._grid.at_node['energy__elevation'][n] = self._grid.at_node['energy__elevation'].copy()[n]+qsi+(self.average_velocity**2)/(2*self.g)
+        self._grid.at_node['energy__elevation'][n] = self._grid.at_node['energy__elevation'].copy()[n]+qsi#+(self.average_velocity**2)/(2*self.g)
 
 
     def _update_energy_slope(self):
@@ -969,6 +997,7 @@ class MassWastingRunout(Component):
         
         return(DL)
     
+    
     def _deposit_friction_angle(self, qsi, n):
         
         slp_h = self.slpc*self._grid.dx
@@ -997,6 +1026,7 @@ class MassWastingRunout(Component):
             Dc = qsi 
             
         return(Dc)
+    
     
     def _particle_diameter_in(self,n,vin):
         """determine the weighted average particle diameter of the incoming
@@ -1034,6 +1064,7 @@ class MassWastingRunout(Component):
             # print("n_pd{}, pd_in{}, E{}, D{}, n{}".format(n_pd, pd_in, E, D, n))
             raise ValueError(msg)        
         return n_pd
+
 
     @staticmethod
     def _particle_diameter_out(pd_up,pd_in,qsi,E,D):

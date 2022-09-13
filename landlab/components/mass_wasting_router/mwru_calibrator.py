@@ -100,7 +100,7 @@ class MWRu_calibrator():
         self.initial_soil_depth = self.mg.at_node['soil__thickness'].copy()
         if self.mg.has_field("particle__diameter", at="node"):
             self.initial_particle_diameter = self.mg.at_node["particle__diameter"].copy()
-        self.plot_tf = False
+        self.plot_tf = True
 
     def __call__(self, max_number_of_runs = 50):
         """instantiate the class"""
@@ -129,21 +129,56 @@ class MWRu_calibrator():
             plt.figure('iteration'+str(self.it))
             imshow_grid(self.mg,"dem_dif_m",cmap = 'RdBu_r')
             plt.title("slpc:{}, SD:{}, alpha:{}".format(self.MWRu.slpc, self.MWRu.SD, self.MWRu.cs ))
+            plt.clim(-1,1)
 
 
     def _channel_profile_deposition(self, datatype):
         """determines deposition patterns along the channel profile:
         """
         mg = self.mg
-        dem = mg.at_node['topographic__elevation']
+        
         el_l = self.pcd['el_l']
         el_h = self.pcd['el_h']
         channel_nodes = self.pcd['channel_nodes']
         channel_distance = self.pcd['channel_distance']
         node_slope = mg.at_node['topographic__steepest_slope']
         cL = self.pcd['cL']
+       
+        def cv_mass_change_v2(cn,dem,demd,el_l,el_h,dA,node_slope,channel_distance):
 
+            el = dem[cn]
+            # cumulative downstream deposition and upstream scour
+            # dp: change > 0; Mask dem to get matching array of elevation
+            dp = demd[demd>0]; dem_dp = dem[demd>0]
+            # sc: change < 0; Mask dem to get matching array of elevation
+            sc = demd[demd<0]; dem_sc = dem[demd<0]
+
+            # sum masked dp and and sc
+            # deposition below elevation
+            dpe = np.nansum(dp[(dem_dp<el)&(dem_dp>=el_l)])
+            # scour above elevation
+            sce = np.nansum(sc[(dem_sc>el)&(dem_sc<=el_h)])
+            # multiply by cell area to get volume
+            Vt = dpe*dA
+            dV = sce*dA
+
+            # cumulative volumetric change in the upstream and downstream directions
+            dd = np.nansum(demd[(dem<=el) & (dem>=el_l)])
+            du = np.nansum(demd[(dem>=el) & (dem<=el_h)])
+            # multiply by cell area to get volume
+            Vd = dd*dA
+            Vu = du*dA
+
+            # get channel characteristics
+            # same, nut get node distance
+            cd = channel_distance[channel_nodes == cn]
+            # node slope
+            cns = node_slope[cn]
+            return Vu, Vd, dV, Vt, cns, cn, cd, el
+        
         def cv_mass_change(el,dem,demd,el_l,el_h,dA,channel_nodes,node_slope,channel_distance):
+            """may need this approach, because node order can cause problems, 
+            but most recent profile extraction did not have problem, need to double check"""
 
             # cumulative downstream deposition and upstream scour
             # dp: change > 0; Mask dem to get matching array of elevation
@@ -161,8 +196,8 @@ class MWRu_calibrator():
             dV = sce*dA
 
             # cumulative volumetric change in the upstream and downstream directions
-            dd = np.nansum(demd[(dem<el) & (dem>=el_l)])
-            du = np.nansum(demd[(dem>el) & (dem<=el_h)])
+            dd = np.nansum(demd[(dem<=el) & (dem>=el_l)])
+            du = np.nansum(demd[(dem>=el) & (dem<=el_h)])
             # multiply by cell area to get volume
             Vd = dd*dA
             Vu = du*dA
@@ -175,19 +210,23 @@ class MWRu_calibrator():
             cd = channel_distance[np.abs(cne_d) == min(np.abs(cne_d))].astype(int)
             # node slope
             cns = node_slope[cn]
-            return Vu, Vd, dV, Vt, cns[0], cn[0], cd[0]
+            return Vu, Vd, dV, Vt, cns[0], cn[0], cd[0], el
 
         dem_m = mg.at_node['topographic__elevation']
         if datatype == "modeled":
             demd = mg.at_node['dem_dif_m']
+            dem = mg.at_node['topographic__elevation'] 
         elif datatype == "observed":
             demd = mg.at_node['dem_dif_o']
+            dem = mg.at_node['topographic__initial_elevation']+demd
 
         mbL = []
-        for el in np.linspace(el_l,el_h,100):
-            mbL.append(cv_mass_change(el, dem, demd,el_l,el_h,cL**2,channel_nodes, node_slope, channel_distance))
+        # for el in np.linspace(el_l,el_h,100):
+        #     mbL.append(cv_mass_change(el, dem, demd,el_l,el_h,cL**2,channel_nodes, node_slope, channel_distance))
+        for cn in channel_nodes:
+            mbL.append(cv_mass_change_v2(cn,dem,demd,el_l,el_h,cL**2,node_slope,channel_distance))    
         mbLdf = pd.DataFrame(mbL)
-        mbLdf.columns = ['Vu','Vd','dV','Vt', 'slope', 'node','distance']
+        mbLdf.columns = ['Vu','Vd','dV','Vt', 'slope', 'node','distance','elevation']
         return mbLdf
 
 
@@ -197,6 +236,7 @@ class MWRu_calibrator():
         Heiser et al. (2017)
         """
         n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
+        na = self.mg.dx*self.mg.dy
         if metric == 'runout':
             n_o =  n_a[np.abs(self.mg.at_node['dem_dif_o']) > 0] # get nodes with scour or deposit
             n_m = n_a[np.abs(self.mg.at_node['dem_dif_m']) > 0]
@@ -206,11 +246,12 @@ class MWRu_calibrator():
         elif metric == 'scour':
             n_o =  n_a[self.mg.at_node['dem_dif_o'] < 0] # get nodes with scour or deposit
             n_m = n_a[self.mg.at_node['dem_dif_m'] < 0]
-
+        self.a_o = n_o*na
+        self.a_m = n_m*na
         n_x = np.unique(np.concatenate([n_o,n_m])) # intersection nodes
         n_u = n_o[~np.isin(n_o,n_m)] # underestimate
         n_o = n_m[~np.isin(n_m,n_o)] # overestimate
-        na = self.mg.dx*self.mg.dy
+        
         X = len(n_x)*na
         U = len(n_u)*na
         O = len(n_o)*na
@@ -226,14 +267,14 @@ class MWRu_calibrator():
         RMSE = (((observed-modeled)**2).mean())**0.5
         return RMSE
     
-    def _deposition_thickness_error(self, metric = 'mean'):
+    def _deposition_thickness_error(self, metric = 'max'):
         """computes the deposition thickness error (DTE)"""
         if metric == 'max':
             h_o = self.mg.at_node['dem_dif_o'].max()
             h_m = self.mg.at_node['dem_dif_m'].max()
         if metric == 'mean':
-            h_o = self.mg.at_node['dem_dif_o'][self.mg.at_node['dem_dif_o']>0].mean()
-            h_m = self.mg.at_node['dem_dif_m'][self.mg.at_node['dem_dif_m']>0].mean()            
+            h_o = (self.mg.at_node['dem_dif_o'][self.mg.at_node['dem_dif_o']>0].mean())/self.a_o
+            h_m = (self.mg.at_node['dem_dif_m'][self.mg.at_node['dem_dif_m']>0].mean())/self.a_m            
 
         DTE = 1/(np.exp(np.abs(h_o-h_m)))
         return DTE
@@ -335,24 +376,38 @@ class MWRu_calibrator():
                 omegaT = self._omegaT(metric = "runout")
                 candidate_posterior = prior_t*omegaT
             elif self.method == "RMSE":
-                mbLdf_m = self._channel_profile_deposition("modeled")
+                self.mbLdf_m = self._channel_profile_deposition("modeled")
                 # determine RMSE metric
-                observed = self.mbLdf_o[self.RMSE_metric]; modeled = mbLdf_m[self.RMSE_metric]
-                RMSE = self._RMSE(observed, modeled)
+                observed = self.mbLdf_o[self.RMSE_metric]; modeled = self.mbLdf_m[self.RMSE_metric]
+                RMSE_Vd = self._RMSE(observed, modeled)
+
+                observed = self.mg.at_node['dem_dif_o'][self.mbLdf_o['node']] 
+                modeled = self.mg.at_node['dem_dif_m'][self.mbLdf_m['node']]
+                RMSE_pf = self._RMSE(observed, modeled)
+                
+                observed = self.mg.at_node['dem_dif_o'] 
+                modeled = self.mg.at_node['dem_dif_m']
+                RMSE_map = self._RMSE(observed, modeled)
                 # determine psoterior likilhood: product of RMSE, omegaT and prior liklihood
-                candidate_posterior = prior_t*(1/RMSE)
+                candidate_posterior = prior_t*(1/RMSE_Vd)*(1/RMSE_pf)*(1/RMSE_map)
             elif self.method == "both":
                 # get modeled deposition profile
-                mbLdf_m = self._channel_profile_deposition("modeled")
+                self.mbLdf_m = self._channel_profile_deposition("modeled")
                 # determine RMSE metric
-                observed = self.mbLdf_o[self.RMSE_metric]; modeled = mbLdf_m[self.RMSE_metric]
-                RMSE = self._RMSE(observed, modeled)
+                observed = self.mbLdf_o[self.RMSE_metric]; modeled = self.mbLdf_m[self.RMSE_metric]
+                RMSE_Vd = self._RMSE(observed, modeled)
+                observed = self.mg.at_node['dem_dif_o'][self.mbLdf_o['node']] 
+                modeled = self.mg.at_node['dem_dif_m'][self.mbLdf_m['node']]
+                RMSE_pf = self._RMSE(observed, modeled)
+                observed = self.mg.at_node['dem_dif_o'] 
+                modeled = self.mg.at_node['dem_dif_m']
+                RMSE_map = self._RMSE(observed, modeled)
                 # determine deposition overlap metric, omegaT
                 omegaT = self._omegaT(metric = self.omega_metric)
                 # determine the difference in thickness
                 DTE = self._deposition_thickness_error()
                 # determine psoterior likilhood: product of RMSE, omegaT and prior liklihood
-                candidate_posterior = prior_t*(1/RMSE)*omegaT*DTE
+                candidate_posterior = prior_t*(1/RMSE_Vd)*(1/RMSE_pf)*omegaT*DTE
 
             # decide to jump or not to jump
             if i == 0:
@@ -382,9 +437,9 @@ class MWRu_calibrator():
             if self.method == "omega":
                 LHList.append([i, prior_t,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             elif self.method == "RMSE":
-                LHList.append([i, prior_t,1/RMSE,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                LHList.append([i, prior_t,1/RMSE_Vd,1/RMSE_pf,1/RMSE_map,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             elif self.method == "both":
-                LHList.append([i, prior_t,1/RMSE,DTE,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                LHList.append([i, prior_t,1/RMSE_Vd,1/RMSE_pf,1/RMSE_map,DTE,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
 
             # adjust jump size every N_cycles
             if i%self.N_cycles == 0:
@@ -398,9 +453,9 @@ class MWRu_calibrator():
         if self.method == "omega":
             self.LHvals.columns = ['iteration', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
         elif self.method == "RMSE":
-            self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
         elif self.method == "both":
-            self.LHvals.columns = ['iteration', 'prior', '1/RMSE', 'DTE', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'DTE', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
 
         self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] # {'SD': selected_value_SD, 'cs': selected_value_cs}
 
