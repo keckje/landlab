@@ -51,24 +51,19 @@ import MassWastingRunoutEvaluationFunctions as MWF
 #######
 # use this to get values for manual computations
 ###
-def plot_values(mg,field,xmin,xmax,ymin,ymax, field_back = "topographic__elevation", cmap = 'terrain', name= '_'):
+def plot_values(mg,field,xmin,xmax,ymin,ymax, field_back = "topographic__elevation", cmap = 'terrain'):
     """plot the field values on the node within the specified domain extent"""
     
-    if field:
-        plt.figure(name,figsize = (12,8))
-        imshow_grid(mg, field_back, grid_units=('m','m'),var_name=field_back,plot_name = field,cmap = cmap)
-        values = mg.at_node[field]
-        if values.dtype != int:
-            values = values.round(decimals = 4)
-        values_test_domain = values[(mg.node_x>=xmin) & (mg.node_x<=xmax) & (mg.node_y>=ymin) & (mg.node_y<=ymax)]
-        ntd = mg.at_node['node_id'][(mg.node_x>=xmin) & (mg.node_x<=xmax) & (mg.node_y>=ymin) & (mg.node_y<=ymax)]
-    
-        for i,val in enumerate(values_test_domain):
-            plt.text(mg.node_x[ntd[i]],mg.node_y[ntd[i]],str(val),color = 'red', fontsize = 9)  
-    else:
-        plt.figure(name,figsize = (12,8))
-        imshow_grid(mg, field_back, grid_units=('m','m'),var_name=field_back,plot_name = name,cmap = cmap)
-    plt.xlim([xmin,xmax]); plt.ylim([ymin,ymax]) 
+    plt.figure(field,figsize = (12,8))
+    imshow_grid(mg, field_back, grid_units=('m','m'),var_name=field_back,plot_name = field,cmap = cmap)
+    values = mg.at_node[field]
+    if values.dtype != int:
+        values = values.round(decimals = 4)
+    values_test_domain = values[(mg.node_x>=xmin) & (mg.node_x<=xmax) & (mg.node_y>=ymin) & (mg.node_y<=ymax)]
+    ntd = mg.at_node['node_id'][(mg.node_x>=xmin) & (mg.node_x<=xmax) & (mg.node_y>=ymin) & (mg.node_y<=ymax)]
+    for i,val in enumerate(values_test_domain):
+        plt.text(mg.node_x[ntd[i]],mg.node_y[ntd[i]],str(val),color = 'red', fontsize = 9)
+    plt.xlim([xmin,xmax]); plt.ylim([ymin,ymax])    
         
         
 def flume_maker(rows = 5, columns = 3, slope_above_break =.5, slope_below_break =.05, slope_break = 0.7, ls_width = 1, ls_length = 1, dxdy= 10):
@@ -140,9 +135,11 @@ def flume_maker(rows = 5, columns = 3, slope_above_break =.5, slope_below_break 
     dem = np.array([yeL,]*c).transpose()
 
     # dem[sbr:,cc] = dem[sbr:,cc]
-    wall = np.reshape(dem[:,0],(len(dem[:,0]),1))+10
+    wall = np.reshape(dem[:,0],(len(dem[:,0]),1))+1.5
     dem = np.concatenate((wall,dem,wall),axis =1)
     dem = np.hstack(dem).astype(float)
+    
+    # flume
 
     _ = mg.add_field('topographic__elevation',
                         dem,
@@ -156,7 +153,7 @@ def flume_maker(rows = 5, columns = 3, slope_above_break =.5, slope_below_break 
     # landslide nodes
     lsn = mg.nodes[-(ls_length+1):-1,cc]
 
-    return mg, lsn, pf, cc
+    return mg, lsn, pf, cc, sbr
 
 
 
@@ -167,22 +164,46 @@ pdir = "D:/UW_PhD/PreeventsProject/Paper_2_MWR/Landlab_Development/mass_wasting_
 
 # rows = 27, columns = 15, slope_break = 0.8
 
-dxdy = 10
-rows = 27
-columns = 15
+dxdy = 1
+rows = 95
+columns = 31
 ls_width = 1
-ls_length = 1
+ls_length = 2
 slope_above_break = 0.6
-slope_below_break = 0.01
-slope_break = 0.8
-soil_thickness = 1.5
+slope_below_break = 0.0
+slope_break = 0.3
+soil_thickness = 0.67
 
-mg, lsn, pf, cc = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
-                              , slope_below_break = slope_below_break, slope_break = slope_break, ls_width = ls_width, ls_length = ls_length)
 
-dem = mg.at_node['topographic__elevation']
+flume_width = 2
+cid = np.linspace(0,columns,columns+1).astype(int)
+flume_cx = cid[int((columns-1)/2):int((columns-1)/2+2)]
+
+
+mg, lsn, pf, cc, sbr = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
+                              , slope_below_break = slope_below_break, slope_break = slope_break, ls_width = ls_width, ls_length = ls_length, dxdy = dxdy)
+
+
+for n in np.hstack(mg.nodes):
+    if ((mg.node_x[n]==14) or (mg.node_x[n]==17)) and (mg.node_y[n]>sbr):
+        mg.at_node['topographic__elevation'][n] = mg.at_node['topographic__elevation'][n]+1.5
+    if ((mg.node_x[n]<14) or (mg.node_x[n]>17)) and (mg.node_y[n]>sbr):
+        
+        mg.at_node['topographic__elevation'][n] = -.009999
+
+dem = mg.at_node['topographic__elevation']        
+mg.set_nodata_nodes_to_closed(dem, -.009999)
+
+#%% assign landslide nodes
+
+lsn = np.hstack(mg.nodes)[(((mg.node_x == 15) | (mg.node_x == 16)) & ((mg.node_y>87) & (mg.node_y<94)))]
+
+#%%
+
 # domain for plots
 xmin = mg.node_x.min(); xmax = mg.node_x.max(); ymin = mg.node_y.min(); ymax = mg.node_y.max()
+
+
 
 # set boundary conditions, add flow direction
 mg.set_closed_boundaries_at_grid_edges(True, True, True, True) #close all boundaries
@@ -203,7 +224,9 @@ mg.at_node['hillshade'] = mg.calc_hillshade_at_node(elevs=dem, alt=37., az=210.)
 
 
 # soil thickness
-thickness = np.ones(mg.number_of_nodes)*soil_thickness
+mg.at_node['topographic__elevation'][lsn] = mg.at_node['topographic__elevation'][lsn]+soil_thickness
+thickness = np.zeros(mg.number_of_nodes)
+thickness[lsn] = soil_thickness
 mg.add_field('node', 'soil__thickness',thickness)
 
 
@@ -224,7 +247,8 @@ LLT.surf_plot(mg,title = 'initial dem [m]', zr= 1, color_type = "grey", dv = 100
 
 field = 'node_id'
 field_back= "topographic__elevation"
-plot_values(mg,field,xmin,xmax,ymin,ymax)
+plot_values(mg,field,13,18,80,94)
+# plt.xlim(0,30); plt.ylim(80,100)
 
 
 field = 'topographic__steepest_slope'
@@ -235,8 +259,9 @@ field= "topographic__elevation"
 plot_values(mg,field,xmin,xmax,ymin,ymax,field_back= field_back)
 
 el= mg.at_node['topographic__elevation'][pf]
+pf_x = mg.node_y[pf]
 plt.figure(label= 'initial el')
-plt.plot(pf, el)
+plt.plot(pf_x, el)
 plt.gca().set_aspect('equal')
 
 #%% Add multiflow direction
@@ -249,7 +274,7 @@ mg.delete_field(loc = 'node', name = 'topographic__steepest_slope')
 
 # run flow director, add slope and receiving node fields
 fd = FlowDirectorMFD(mg, diagonals=True,
-                      partition_method = 'square_root_of_slope')
+                      partition_method = 'slope')
 # fd = FlowDirectorDINF(mg)
 # fd = FlowDirectorD8(mg)
 fd.run_one_step()
@@ -260,6 +285,21 @@ receivers = mg.at_node['flow__receiver_node']
 proportions = mg.at_node['flow__receiver_proportions']
 LLT.drainage_plot_jk(mg, proportions = proportions, title='Basic Ramp',surf_cmap="Greys",clim = [dem.min(),dem.max()*1.2])
 
+# zoom in to top of flume
+plt.figure('grid and flow directions_top',figsize=(8, 10))
+receivers = mg.at_node['flow__receiver_node']
+proportions = mg.at_node['flow__receiver_proportions']
+LLT.drainage_plot_jk(mg, proportions = proportions, title='Basic Ramp',surf_cmap="Greys",clim = [dem.min(),dem.max()*1.2])
+plt.plot(mg.node_x[lsn], mg.node_y[lsn], 'r.', markersize = 20)
+plt.xlim(13,18); plt.ylim(80,95)
+
+# zoom in to bottom of flume
+plt.figure('grid and flow directions_bottom',figsize=(8, 10))
+receivers = mg.at_node['flow__receiver_node']
+proportions = mg.at_node['flow__receiver_proportions']
+LLT.drainage_plot_jk(mg, proportions = proportions, title='Basic Ramp',surf_cmap="Greys",clim = [dem.min(),dem.max()*1.2])
+plt.xlim(10,21); plt.ylim(20,40)
+
 #%% set up mass wasting runout
 
 # mass wasting ide
@@ -269,14 +309,9 @@ mg.at_node['mass__wasting_id'][lsn] = 1
 # run parameters
 npu = [1] 
 nid = [1] 
-
-params_o = [0.05, 0.33, 0.1]
-# params_o = [0.05, 0.82, 0.1]
-# params_o = [0.05, 0.78160412935585255, 0.023565070615077743] 
-# params_o = [0.05, 0.87959043570258, 0.023963226618357404]
-slpc = [params_o[0]]   
-SD = params_o[1]
-cs = params_o[2]
+slpc = [0.005]   
+SD = 0.05
+cs = 0.2
 
 
 mw_dict = {'critical slope':slpc, 'minimum flux':SD,
@@ -284,14 +319,15 @@ mw_dict = {'critical slope':slpc, 'minimum flux':SD,
 
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
-example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 200,
+example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,
                                   routing_surface = "topographic__elevation",
                                   settle_deposit = False,
                                   deposition_rule = "critical_slope")
 
 #%% set up calibrator
 
-params_c = {'SD': [0.05, 0.9, 0.6], 'cs': [0.001, 0.5, 0.4]}
+params = {'SD':[0.05,0.3,0.1],
+               'cs':[0.001, 0.02, 0.005]}
 el_l = 0
 el_h = 20
 channel_nodes= pf
@@ -302,7 +338,7 @@ profile_calib_dict = {"el_l":el_l, "el_h": el_h, "channel_nodes": channel_nodes,
 
 
 
-calibrate = MWRu_calibrator(example_MWRu, params_c, profile_calib_dict = profile_calib_dict,
+calibrate = MWRu_calibrator(example_MWRu, params, profile_calib_dict = profile_calib_dict,
                             prior_distribution = "uniform", jump_size = 0.2)
 
 
@@ -370,22 +406,21 @@ if Visualize:
 
             plt.xticks(fontsize= 8 )
             plt.yticks(fontsize= 8 )
-            plt.clim(-2.5,2.5)
+            plt.clim(-0.5,0.5)
             plt.xlim([xmin*.8,xmax*1.2]); plt.ylim([ymin*.3,ymax])
-            plt.show()
             
     x_ = mg.node_y[pf]
     y = mg.at_node['topographic__initial_elevation'][pf]
      
-       
+    ef = 1   
     for i in np.arange(0,len(example_MWRu.mw_ids)):
 
         for c in example_MWRu.df_evo_maps[i].keys():                  
-            topo = example_MWRu.df_evo_maps[i][c]#-mg.at_node['topographic__initial_elevation']
+            topo = example_MWRu.df_evo_maps[i][c]-mg.at_node['topographic__initial_elevation']
             # imshow_grid_at_node(mg,'df_topo',cmap ='RdBu_r')
             if c>100:
                 break                  
-            y_ = topo[pf]
+            y_ = mg.at_node['topographic__initial_elevation'][pf]+topo[pf]*ef
             plt.figure(figsize = (6,3))
             plt.plot(x_,y,'k--', alpha = 0.5, linewidth = 1,label = 'initial profile')
             plt.plot(x_,y_,'r-', alpha = 0.5, linewidth = 1, label = 'post df profile')
@@ -395,16 +430,16 @@ if Visualize:
             plt.grid(alpha = 0.5)  
        
 
-    for i in np.arange(0,len(example_MWRu.mw_ids)):
+    # for i in np.arange(0,len(example_MWRu.mw_ids)):
 
-        for c in example_MWRu.df_evo_maps[i].keys():                  
-            topo = example_MWRu.df_evo_maps[i][c]#-mg.at_node['topographic__initial_elevation']
-            mg.at_node['topographic__elevation'] = topo
-            plt.figure('grid and flow directions'+str(c),figsize=(8, 10))
-            receivers = example_MWRu.frn_r[1][c]
-            proportions = example_MWRu.frp_r[1][c]
-            LLT.drainage_plot_jk(mg, receivers = receivers, proportions = proportions, title='Basic Ramp'+str(c),surf_cmap="Greys",clim = [dem.min(),dem.max()*1.2])
-            plt.show()
+    #     for c in example_MWRu.df_evo_maps[i].keys():                  
+    #         topo = example_MWRu.df_evo_maps[i][c]#-mg.at_node['topographic__initial_elevation']
+    #         mg.at_node['topographic__elevation'] = topo
+    #         plt.figure('grid and flow directions'+str(c),figsize=(8, 10))
+    #         receivers = example_MWRu.frn_r[1][c]
+    #         proportions = example_MWRu.frp_r[1][c]
+    #         LLT.drainage_plot_jk(mg, receivers = receivers, proportions = proportions, title='Basic Ramp'+str(c),surf_cmap="Greys",clim = [dem.min(),dem.max()*1.2])
+
 #%% visually check profile values using calibrator functions
 mbLdf_o = calibrate._channel_profile_deposition("observed")
 
@@ -491,11 +526,10 @@ plt.ylabel("downstream cumulative volumetric change")
 
 
 #%% Check RMSE funciton
-# found error, corrected
 
 # using Vd
 # run a simulartion
-calibrate(max_number_of_runs = 500)
+calibrate(max_number_of_runs = 1)
 
 # get the modeled profile values
 mbLdf_m = calibrate._channel_profile_deposition("modeled")
@@ -552,39 +586,8 @@ RMSE_fun = calibrate.LHvals['1/RMSE m'].iloc[-1]
 print("RMSE manually determined: {}, function determined: {}".format(RMSE_man, RMSE_fun))
 
 #%% check the omega function
-# found error in intersection node computation, corrected
-
-# first view two runout extents
-
-field = "node_id"
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "topographic__elevation", cmap = 'Greys', name = " nodes")
 
 
-field = "node_id"
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r', name = " o")
-plt.clim(-1e-20,1e-20)
-
-
-field = "node_id"
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_m", cmap = 'RdBu_r', name = " m")
-plt.clim(-1e-20,1e-20)
-
-
-na = 100
-n_a = mg.nodes.reshape(mg.shape[0]*mg.shape[1])
-n_o = n_a[np.abs(mg.at_node['dem_dif_o']) > 0]
-n_m = n_a[np.abs(mg.at_node['dem_dif_m']) > 0]
-
-
-n_x = n_o[np.isin(n_o,n_m)]#np.unique(np.concatenate([n_o,n_m])) # intersection nodes
-n_u = n_o[~np.isin(n_o,n_m)] # underestimate
-n_o = n_m[~np.isin(n_m,n_o)] # overestimate
-
-X = len(n_x)*na
-U = len(n_u)*na
-O = len(n_o)*na
-T = X+U+O
-omegaT = X/T-U/T-O/T
 
 
 
@@ -603,196 +606,77 @@ DEMdf = DEMf-DEMi
 # assert DEMdf.sum()*mg.dx*mg.dy == 75, 'not equal'
 print("difference in initial and final dem [m3]")
 print(DEMdf.sum()*mg.dx*mg.dy)
-
-
 #%% are profiles as expected?
-x_m = calibrate.mbLdf_m['distance']
-y_m = calibrate.mbLdf_m['elevation']
 
-x_m_ = channel_distance
-y_m_ = mg.at_node['topographic__elevation'][channel_nodes]
+#%%
 
-plt.figure()
-plt.plot(x_m_, y_m_, 'k-', label = "manual check")
-plt.plot(x_m, y_m, 'r-', alpha = 0.5, label = "function")
-plt.xlabel("distance [m]")
-plt.ylabel("downstream cumulative volumetric change")
-plt.legend()
+# # plot how DEM changes
+# pi= 1
+# for i in np.arange(0,len(example_MWRu.mw_ids)):
 
+#     for c in example_MWRu.df_evo_maps[i].keys():   
+#         if c%pi == 0:             
+#             plt.figure('dif'+str(c)+str(i),figsize=(12, 12))
+#             mg.at_node['df_topo_d'] = example_MWRu.df_evo_maps[i][c]-mg.at_node['topographic__initial_elevation']
+#             LLT.plot_node_field_with_shaded_dem(mg,field = 'df_topo_d', fontsize = 10,cmap = 'RdBu_r', plot_name = 'dem dif{},{}'.format(i,c) )
+#             plt.title(c)
+#             # imshow_grid_at_node(mg,'df_topo',cmap ='RdBu_r')  
+#             plt.xticks(fontsize= 8 )
+#             plt.yticks(fontsize= 8 )
+#             plt.clim(-2,2)
+#             plt.savefig(pdir+'DebrisFlowPlanView_{}.png'.format(c), dpi = 300, bbox_inches='tight')
 
-
-x_o = calibrate.mbLdf_o['distance']
-y_o = calibrate.mbLdf_o['elevation']
-
-x_o_ = channel_distance
-y_o_ = mg.at_node['topographic__initial_elevation'][channel_nodes]+mg.at_node['dem_dif_o'][channel_nodes]
-
-plt.figure()
-plt.plot(x_o_, y_o_, 'k-', label = "manual check")
-plt.plot(x_o, y_o, 'r-', alpha = 0.5, label = "function")
-plt.xlabel("distance [m]")
-plt.ylabel("downstream cumulative volumetric change")
-plt.legend()
-
-
-
-#%% reformat calibrator to use RMSE of depositon, profile and 2d rmse?
-
-# comparison of sensitivity of each metric reveals RMSE profile and DTE are least sensitive. 
-# RMSE map doesnt always line up with best?
-
-observed = mg.at_node['dem_dif_o'] 
-modeled = mg.at_node['dem_dif_m']
-RMSE_map = calibrate._RMSE(observed, modeled)
-
-
-observed = mg.at_node['dem_dif_o'][mbLdf_o['node']] 
-modeled = mg.at_node['dem_dif_m'][mbLdf_m['node']]
-RMSE_pf = calibrate._RMSE(observed, modeled)
-
-
-observed = mbLdf_o['Vd']; modeled = mbLdf_m['Vd']
-RMSE_Vd = calibrate._RMSE(observed, modeled)
-
-# check RMSE values
-itm = calibrate.LHvals['iteration'].max()
-plt.figure()
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE']/calibrate.LHvals['1/RMSE'].max(),'k-', alpha = 0.5, label = 'RMSE V')
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE p']/calibrate.LHvals['1/RMSE p'].max(),'r-', alpha = 0.5, label = 'RMSE p')
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE m']/calibrate.LHvals['1/RMSE m'].max(),'g-', alpha = 0.5, label = 'RMSE m')
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['DTE']/calibrate.LHvals['DTE'].max(),'c-', alpha = 0.5, label = 'DTE')
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['omegaT']/calibrate.LHvals['omegaT'].max(),'m-', alpha = 0.5, label = 'OmegaT')
-plt.xlim(0,calibrate.LHvals['iteration'].max()*1.20)
-# plt.xticks(np.arange(0,itm+1, step=int(1+itm/20)))
-plt.legend(fontsize = 8, loc = "right")
-plt.show()
+        
 
 
 
 
+# # plot of cumulative DEM difference
+# plt.figure()
+# plt.plot(DEMdfDf.index, DEMdfDf['DEMdf_r'], 'k--', linewidth = 2,label = 'before settlement')
+# # plt.plot(DEMdfDf.index, DEMdfDf['DEMdf_rd'], 'k-', linewidth = 2, alpha = 0.5,label = 'after settlement')
+# plt.grid(alpha = 0.5)
+# plt.xlabel("iteration")
+# plt.ylabel('initial - evolved DEM, [m3]')
+# plt.legend()
+# # plt.gca().set_aspect('equal')
+# plt.show()
 
-it_best = calibrate.LHvals['iteration'][calibrate.LHvals['candidate_posterior'] == calibrate.LHvals['candidate_posterior'].max()].values[0]
-
-
-field = "dem_dif_o"
-field = None
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r', name = " o")
-plt.clim(-1,1)
-
-mg.at_node['model_dif_compare'] = calibrate.dem_dif_m_dict[it_best]
-
-field = "model_dif_compare"
-field = None
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "model_dif_compare", cmap = 'RdBu_r', name = " m")
-plt.clim(-1,1)
-
-
-#%%plot results of MCMC
-
-# calibration plots
-results = calibrate.LHvals
-
-x_mn = params_c['SD'][0]
-x_mx = params_c['SD'][1]
-y_mn = params_c['cs'][0]
-y_mx = params_c['cs'][1]
-
-# plot jumps
-plt.figure(figsize = (6,3))
-plt.plot(results['candidate_value_SD'], results['candidate_value_cs'])
-plt.xlim([x_mn,x_mx])
-plt.ylim([y_mn,y_mx])
-plt.xlabel('crtical flow depth, below which everything stops $qs_c$, [m]')
-plt.ylabel(r'scour coef., $\alpha$')
-
-# plot liklihood value of each jump
-# see for format: https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.griddata.html
-import scipy as sc
-grid_x, grid_y = np.mgrid[x_mn:x_mx:20j,y_mn:y_mx:20j]
-
-points = results[['candidate_value_SD','candidate_value_cs']].values
-
-values = results['candidate_posterior'].values
-
-grid_z1 = sc.interpolate.griddata(points, values, (grid_x, grid_y), method='linear')
-
-plt.figure(figsize = (6,3))
-plt.imshow(grid_z1.T, extent=(x_mn,x_mx,y_mn,y_mx), origin='lower')
-plt.xlabel('crtical flow depth, below which everything stops $qs_c$, [m]')
-plt.ylabel(r'scour coef., $\alpha$')
-
-
-X = grid_x[:,0]
-Y = grid_y[:,0]
-plt.figure(figsize = (3,3))
-plt.imshow(grid_z1.T, extent=(x_mn,x_mx,y_mn,y_mx), origin='lower', cmap = 'Greys_r', alpha = 0.5)
-plt.contour(grid_x,grid_y,grid_z1,np.linspace(np.nanmin(grid_z1),np.nanmax(grid_z1),7), colors='k', linewidth = 0.5)
-plt.xlabel('$qs_c$, [m]')
-plt.ylabel(r'$\alpha$')
-
-
-
-plt.figure(figsize = (6,3))
-n = results.shape[0]
-counts, xedge,yedge,image =  plt.hist2d(results['selected_value_SD'], results['selected_value_cs'], bins = 15)#int(n**0.5))
-plt.xlabel('crtical flow depth, below which everything stops $qs_c$, [m]')
-plt.ylabel(r'scour coef., $\alpha$')
-plt.title('histogram')
-plt.colorbar()
+        
+        
+#%% profile change 
+# minimum channel threshold
 
 
 
 
-def parameter_uncertainty(results, parameter):
-    # parameter diagnostic plots
-    # check that tested parameter values display proper variability (see MCMC_notes.pdf Figure 3)
-    col = 'candidate_value_'+parameter
-    plt.figure(figsize = (3,2))
-    plt.plot(results[col], color = 'k', alpha = 0.8, linewidth = 1)
-    plt.ylabel(parameter)
-    plt.xlabel('iteration')
-    
-    # get count in each parameter value bin
-    # "The distributions of counts in each bin gives the probabilility distribution of the parameter as a function of the given the rules" 
-    # (Jessica class note, Markov_models_lecture2017, pg 63). 95% confidence intervals are referred to as credibility intervals, rather than 
-    # confidence interval.
-    plt.figure(figsize = (3,2))
-    n = results[col].shape[0]
-    counts, edges, plot = plt.hist(results[col],bins = int(n**0.5),color = 'k',alpha = 0.8)
-    plt.grid(alpha = 0.5)
-    plt.xlabel(parameter)
-    plt.ylabel('count')
-    
-    
-    # sum the histogram bins to get the cdf, using the bin center
-    bin_cntr = ((edges[1:]-edges[0:-1])).cumsum() 
-    bin_cnt = counts.cumsum() 
-    
-    plt.figure(figsize = (3,2))
-    cp = bin_cnt/counts.sum()
-    plt.plot(bin_cntr, cp, color = 'k', alpha = 0.8, linewidth = 1)
-    plt.grid(alpha = 0.5)
-    plt.xlabel(parameter)
-    plt.ylabel('P(x)')
-    
-    def intp(x,y,x1,message = None): 
-        f = sc.interpolate.interp1d(x,y)   
-        y1 = f(x1)
-        return y1
-    
-    lb = intp([0]+list(cp),[0]+list(bin_cntr),0.0501010)
-    up = intp([0]+list(cp),[0]+list(bin_cntr),0.9510101)
-    
-    
-    
-    plt.figure(figsize = (3,2))
-    plt.plot(results[col], results['candidate_posterior'], 'k.', markersize = 5, alpha = 0.6, linewidth = 1)
-    plt.grid(alpha = 0.5)
-    plt.ylabel("likelihood")
-    plt.xlabel(parameter)
-    
-    return lb, up
+# x_ = mg.node_y[pf]
+# y = mg.at_node['topographic__initial_elevation'][pf]
 
-parameter_uncertainty(results, 'cs')
+# for i, topo in enumerate(example_MWRu.te_r[1]):
+#     if i%pi == 0:
+#         # x_,y_ = profiler_xy(profiler, topo)    
+#         y_ = topo[pf]
+#         plt.figure(figsize = (6,3))
+#         plt.plot(x_,y,'k--', alpha = 0.5, linewidth = 1,label = 'initial profile')
+#         plt.plot(x_,y_,'r-', alpha = 0.5, linewidth = 1, label = 'post df profile')
+#         plt.ylim([-3,max(y)]); plt.ylabel(' elevation ')
+#         plt.xlim([0, max(x_)])
+#         plt.legend()
+#         plt.grid(alpha = 0.5)
+#         # plt.savefig(pdir+'DebrisFlowProfile_{}.png'.format(i), dpi = 300, bbox_inches='tight')
+#         # plt.gca().set_aspect('equal')
 
-parameter_uncertainty(results, 'SD')
+
+# xs1 = np.array([83,84,85,86,87])
+# xs2 = np.array([56,57,58,59,60])
+
+# xsx = mg.node_x[xs1]; x1y = mg.node_y[xs1]
+# x2x = mg.node_x[xs2]; x2y = mg.node_y[xs2]
+# b1z = DEMi[xs1]
+
+# for i, topo in enumerate(example_MWRu.te_r[1]):
+#     plt.figure(figsize = (6,2))
+#     plt.plot(xsx,b1z,'k--', alpha = 0.5, linewidth = 1,label = 'initial profile')
+#     plt.plot(xsx,topo[xs1],'r-', alpha = 0.5, linewidth = 1, label = 'xs1')
+#     plt.plot(xsx,topo[xs2],'r-', alpha = 0.5, linewidth = 1, label = 'xs2')

@@ -7,6 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from landlab import RasterModelGrid
+from landlab.components import SinkFillerBarnes, FlowAccumulator, FlowDirectorMFD
 from landlab.components.mass_wasting_router import MassWastingRunout
 from landlab import imshow_grid
 
@@ -101,6 +102,7 @@ class MWRu_calibrator():
         if self.mg.has_field("particle__diameter", at="node"):
             self.initial_particle_diameter = self.mg.at_node["particle__diameter"].copy()
         self.plot_tf = True
+        self.dem_dif_m_dict ={} # for dedegging
 
     def __call__(self, max_number_of_runs = 50):
         """instantiate the class"""
@@ -114,10 +116,13 @@ class MWRu_calibrator():
         channel centerline"""
         # reset the dem to the initial dem and soil to initial soil depth
         self.MWRu.grid.at_node['topographic__elevation'] = self.MWRu.grid.at_node['topographic__initial_elevation'].copy()
+        self._update_topographic_slope()
         self.MWRu.grid.at_node['energy__elevation'] = self.MWRu.grid.at_node['topographic__elevation'].copy()
         self.MWRu.grid.at_node['soil__thickness'] = self.initial_soil_depth.copy()
+        self.mg.at_node['disturbance_map'] = np.full(self.mg.number_of_nodes, False)
         if self.mg.has_field("particle__diameter", at="node"):
             self.mg.at_node["particle__diameter"] = self.initial_particle_diameter.copy()
+        
             
         # run the model
         self.MWRu.run_one_step(dt = 0)
@@ -128,9 +133,18 @@ class MWRu_calibrator():
         if self.plot_tf == True:
             plt.figure('iteration'+str(self.it))
             imshow_grid(self.mg,"dem_dif_m",cmap = 'RdBu_r')
-            plt.title("slpc:{}, SD:{}, alpha:{}".format(self.MWRu.slpc, self.MWRu.SD, self.MWRu.cs ))
+            plt.title("it:{}, slpc:{}, SD:{}, alpha:{}".format(self.it, self.MWRu.slpc, self.MWRu.SD, self.MWRu.cs ))
             plt.clim(-1,1)
+            plt.show()
+            # self.dem_dif_m_dict[self.it] = self.mg.at_node['dem_dif_m']
+            
 
+    def _update_topographic_slope(self):
+        """updates the topographic__slope and flow directions fields using the 
+        topographic__elevation field"""
+        fd = FlowDirectorMFD(self.mg, surface="topographic__elevation", diagonals=True,
+                partition_method = self.MWRu.routing_partition_method)
+        fd.run_one_step()
 
     def _channel_profile_deposition(self, datatype):
         """determines deposition patterns along the channel profile:
@@ -248,7 +262,7 @@ class MWRu_calibrator():
             n_m = n_a[self.mg.at_node['dem_dif_m'] < 0]
         self.a_o = n_o*na
         self.a_m = n_m*na
-        n_x = np.unique(np.concatenate([n_o,n_m])) # intersection nodes
+        n_x =  n_o[np.isin(n_o,n_m)]#np.unique(np.concatenate([n_o,n_m])) # intersection nodes
         n_u = n_o[~np.isin(n_o,n_m)] # underestimate
         n_o = n_m[~np.isin(n_m,n_o)] # overestimate
         
@@ -373,7 +387,7 @@ class MWRu_calibrator():
             self.it = i
             self._simulation()
             if self.method == "omega":
-                omegaT = self._omegaT(metric = "runout")
+                omegaT = 1+self._omegaT(metric = "runout")
                 candidate_posterior = prior_t*omegaT
             elif self.method == "RMSE":
                 self.mbLdf_m = self._channel_profile_deposition("modeled")
@@ -403,12 +417,12 @@ class MWRu_calibrator():
                 modeled = self.mg.at_node['dem_dif_m']
                 RMSE_map = self._RMSE(observed, modeled)
                 # determine deposition overlap metric, omegaT
-                omegaT = self._omegaT(metric = self.omega_metric)
+                omegaT = 1+self._omegaT(metric = self.omega_metric)
                 # determine the difference in thickness
                 DTE = self._deposition_thickness_error()
                 # determine psoterior likilhood: product of RMSE, omegaT and prior liklihood
-                candidate_posterior = prior_t*(1/RMSE_Vd)*(1/RMSE_pf)*omegaT*DTE
-
+                candidate_posterior = prior_t*omegaT*(1/RMSE_Vd)#*(1/RMSE_pf)*(1/RMSE_map)#*omegaT#*DTE
+                # candidate_posterior = (1/RMSE_map)
             # decide to jump or not to jump
             if i == 0:
                 acceptance_ratio = 1 # always accept the first candidate vlue

@@ -121,7 +121,7 @@ class MassWastingRunout(Component):
     routing_surface = "energy__elevation",
     settle_deposit = False,
     deposition_rule = "both",
-    veg_factor = 3,
+    average_velocity = 0,
     dist_to_full_flux_constraint = 50):
         
         super().__init__(grid)
@@ -131,12 +131,12 @@ class MassWastingRunout(Component):
         self.save = save
         self.run_id = run_id
         self.itL = itL
-        self.routing_partition_method = 'square_root_of_slope'  #'slope'
+        self.routing_partition_method = 'square_root_of_slope' 
         self.routing_surface = routing_surface
         self.settle_deposit = settle_deposit
         self.VaryDp = self._grid.has_field('node', 'particle__diameter')
         self.deposition_rule = deposition_rule
-        self.veg_factor = veg_factor
+        self.average_velocity = average_velocity
         self.dist_to_full_flux_constraint = dist_to_full_flux_constraint
         
         if self.VaryDp:
@@ -422,32 +422,29 @@ class MassWastingRunout(Component):
                 # determine the incoming volume and depth to each node in arn_u
                 self.vqdat = self._vin_qsi(arn_u) ##
                        
+                if self.routing_surface == "energy__elevation":
+                    # update slope fields using the dem surface for scour,
+                    # erosion and qso computations
+                    self._update_topographic_slope()
+
                 # determine scour, entrain, deposition and outflow depths and
                 # the outflowing particle diameter, arranged in array nudat
                 self.nudat = self._scour_entrain_deposit_updatePD()
                 
-                self._update_E_dem() ##  
-                if self.routing_surface == "energy__elevation":                              
-                    # update slope for routing using energy slope
-                    self._update_energy_slope()                
-                
-                # run energy elevation slope if using energy elevation
-                self._determine_rnp_attributes()                               
-                
                 # update grid field: topographic__elevation with the values in 
                 # nudat
                 self._update_dem()
-               
-                ### update topographic slope field for deposition to detemine where
-                # settling will occur - move this innto settle_deposit
-                               
-                self._update_topographic_slope()                   
-                
+
                 ### update grid field: particle__diameter with the values in 
                 # nudat
                 if self.VaryDp:
                     self._update_channel_particle_diameter()
-               
+                
+                ### update topographic slope field for deposition to detemine where
+                # settling will occur - move this innto settle_deposit
+                self._update_topographic_slope()                   
+                
+                # self._determine_rnp_attributes()
                 
                 self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
                 if self.settle_deposit:
@@ -460,14 +457,14 @@ class MassWastingRunout(Component):
                 # topographic__elevation to route so that the thickness of the
                 # debris flow is tracked for plotting
                 
- 
+                self._update_E_dem() ##   
                     
-                # if self.routing_surface == "energy__elevation":                              
-                #     # update slope for routing using energy slope
-                #     self._update_energy_slope()
-                # else:
-                #     # update slope using routing using topographic slope
-                self._update_topographic_slope()       
+                if self.routing_surface == "energy__elevation":                              
+                    # update slope for routing using energy slope
+                    self._update_energy_slope()
+                else:
+                    # update slope using routing using topographic slope
+                    self._update_topographic_slope()       
 
                 # self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
                 self._update_disturbance_map()  
@@ -586,7 +583,158 @@ class MassWastingRunout(Component):
         self.arv = rvi
         self.arpd = rpdi
         
+    
     def _scour_entrain_deposit_updatePD(self):
+        """ mass conservation at a grid cell: determines the erosion, deposition
+        change in topographic elevation and flow out of a cell as a function of
+        debris flow friction angle, particle diameter and the underlying DEM
+        slope"""
+        
+        # list of deposition depths, used in settlement algorithm
+        self.D_L = []
+        def SEDU(vq_r):
+            """function for iteratively determing scour, entrainment and
+            deposition depths using node id to look up incoming flux and
+            downslope nodes and slopes"""            
+
+            n = vq_r[0]; vin = vq_r[1]; qsi = vq_r[2]
+            # print('n {}'.format(n))
+            # print('vin {}'.format(vin))
+            # print('qsi {}'.format(qsi))
+            # get receiving nodes of node n
+            rn = self._grid.at_node.dataset['flow__receiver_node'].values[n]
+            rn = rn[np.where(rn != -1)]            
+               
+            # maximum slope at node n
+            slpn = self._grid.at_node['topographic__steepest_slope'][n].max()
+            # print("slopn {}".format(slpn))
+            # look up critical slope at node n
+            if len(self.mw_dict['critical slope'])>1: # if option 1, critical slope is not constant but depends on location
+                self.slpc = self.a*self._grid.at_node['drainage_area'][n]**self.b
+                        
+            # incoming particle diameter (weighted average)
+            pd_in = self._particle_diameter_in(n,vin) # move
+                           
+            # additional constraint to control debris flow behavoir
+            # if flux is below threshold and an undisturbed cell (still has veg), or node is a pit (
+            # receiver node is itself), debris is forced to stop
+            # if ((qsi <=self.SD_e) and (self._grid.at_node['disturbance_map'][n] == False)):
+            # # if (qsi <=self.SD_v) or ((len(rn) == 1) and ([n] == [rn])) or self.c == self.itL-1:
+            #     D = qsi # all material that enters cell is deposited 
+            #     qso = 0 # debris stops, so qso is 0
+            #     E = 0 # no erosion
+            #     # determine change in cell height
+            #     deta = D # (deposition)/cell area
+            #     # node grain size remains the same         
+            if (qsi <=self.SD_v) or ((len(rn) == 1) and ([n] == [rn])) or self.c == self.itL-1:
+                D = qsi # all material that enters cell is deposited 
+                qso = 0 # debris stops, so qso is 0
+                E = 0 # no erosion
+                # determine change in cell height
+                deta = D # (deposition)/cell area
+                # node grain size remains the same   
+                
+            else:
+
+                ### deposition
+                # note: included entrained material
+                D = self._deposit(qsi, slpn, n)
+                ###
+                
+                ### scour (and entrainment) only occur in D is less than qsi
+                ### i.e. material must continue moving past the cell to scour
+                if D < qsi:                
+ 
+                    if self.VaryDp:   
+                        opt = 2
+                    else:
+                        opt = 1
+                        
+                    E, pd_up = self._scour(n, qsi, slpn, opt = opt, pd_in = pd_in)                
+                    ###
+                else: 
+                    E = 0
+                    pd_up = 0
+                
+                # entrainment is mass conservation at cell
+                ## flow out
+                qso = qsi-D+E
+                
+                # small qso are considered zero
+                qso  = np.round(qso,decimals = 8)
+                
+                # if n == 522:
+                #     print("qso-----{}".format(qsi))                              
+                ## change in node elevation
+                deta = D-E 
+                            
+                # material stops at node if flux / cell width is 0 OR node is a 
+                # boundary node
+                
+
+                
+                if qso>0 and n not in self._grid.boundary_nodes: 
+                    # move this out of funciton, need to determine rn and rp after material is in cell, not before
+                    
+                    # receiving proportion of qso from cell n to each downslope cell
+                    rp = self._grid.at_node.dataset['flow__receiver_proportions'].values[n]
+                    rp = rp[np.where(rp > 0)] # only downslope cells considered
+                    
+                    # receiving volume
+                    vo = qso*self._grid.dx*self._grid.dy # convert qso to volume
+                    rv = rp*vo
+                    # print("rn {}".format(rn))
+                    # print("rv {}".format(rv))
+               
+                    # particle diameter out (weighted average)
+                    pd_out = self._particle_diameter_out(pd_up,pd_in,qsi,E,D)    
+                    rpd = np.ones(len(rv))*pd_out
+                    # print("pd_out {}".format(pd_out))
+                    # store receiving nodes and volumes in temporary arrays
+                    self.arn_ns = np.concatenate((self.arn_ns,rn), axis = 0) # next step receiving node list
+                    self.arv_ns = np.concatenate((self.arv_ns,rv), axis = 0) # next step receiving node incoming volume list
+                    self.arpd_ns = np.concatenate((self.arpd_ns,rpd), axis = 0) # next step receiving node incoming particle diameter list
+
+
+                    self.arnL.append(rn)
+                    self.arvL.append(rv)
+                    self.arpdL.append(rpd)
+
+
+                
+                # model behavior tracking
+                self.enL.append(E)
+                
+                self.dfdL.append(qsi)
+
+
+            # updated node particle diameter (weighted average)
+            n_pd = self._particle_diameter_node(n,pd_in,E,D)
+
+            
+            # list of deposition depths at cells in iteration 
+            self.D_L.append(D)            
+                
+            
+            # print("D {}".format(D))
+            # print("E {}".format(E))
+            # print("qso {}".format(qso))
+            # print("deta {}".format(deta))  
+            # print("n_pd {}".format(n_pd))            
+            
+            return deta, qso, rn, n_pd
+    
+        
+        # apply SEDU function to all unique nodes in arn (arn_u)
+        # create nudat, an np.array of data for updating fields at each node
+        # that can be applied using vector operations
+        ll=np.array([SEDU(r) for r in self.vqdat],dtype=object)     
+        arn_ur = np.reshape(self.vqdat[:,0],(-1,1))
+        nudat = np.concatenate((arn_ur,ll),axis=1)
+        # print(nudat)
+        return nudat # qso, rn not used
+
+    def _scour_entrain_deposit_updatePD_v2(self):
         """ mass conservation at a grid cell: determines the erosion, deposition
         change in topographic elevation and flow out of a cell as a function of
         debris flow friction angle, particle diameter and the underlying DEM
@@ -608,16 +756,13 @@ class MassWastingRunout(Component):
             # incoming particle diameter (weighted average)
             pd_in = self._particle_diameter_in(n,vin) # move
 
-            rn = self._grid.at_node.dataset['flow__receiver_node'].values[n]
-            rn = rn[np.where(rn != -1)] 
-
-            if ((qsi <=(self.SD_v*self.veg_factor)) and (self._grid.at_node['disturbance_map'][n] == False)):
+            if ((qsi <=self.SD_e) and (self._grid.at_node['disturbance_map'][n] == False)):
                 D = qsi 
                 qso = 0 
                 E = 0 
                 deta = D 
                 pd_up = 0
-            elif (qsi <=self.SD_v) or ((len(rn) == 1) and ([n] == [rn])) or self.c == self.itL-1:
+            elif (qsi <=self.SD_v) or self.c == self.itL-1:
                 D = qsi
                 qso = 0
                 E = 0
@@ -735,7 +880,7 @@ class MassWastingRunout(Component):
         # energy slope is equal to the topographic elevation potential energy
         self._grid.at_node['energy__elevation'] = self._grid.at_node['topographic__elevation'].copy()
         # plus the pressure potential energy
-        self._grid.at_node['energy__elevation'][n] = self._grid.at_node['energy__elevation'].copy()[n]+qsi
+        self._grid.at_node['energy__elevation'][n] = self._grid.at_node['energy__elevation'].copy()[n]+qsi#+(self.average_velocity**2)/(2*self.g)
 
 
     def _update_energy_slope(self):
