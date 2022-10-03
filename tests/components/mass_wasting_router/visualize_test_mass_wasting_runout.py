@@ -247,7 +247,7 @@ release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
 
 example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,
-                                 routing_surface = "topographic__elevation", settle_deposit = True)
+                                 routing_surface = "energy__elevation", settle_deposit = True)
 
 example_MWRu.itL = 12
 

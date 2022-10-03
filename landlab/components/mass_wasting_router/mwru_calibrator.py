@@ -29,7 +29,8 @@ class MWRu_calibrator():
                  omega_metric = "runout",
                  RMSE_metric = "Vd",
                  jump_size = 0.2,
-                 N_cycles = 10):
+                 N_cycles = 10,
+                 plot_tf = True):
         """
         Parameters
         ----------
@@ -101,7 +102,7 @@ class MWRu_calibrator():
         self.initial_soil_depth = self.mg.at_node['soil__thickness'].copy()
         if self.mg.has_field("particle__diameter", at="node"):
             self.initial_particle_diameter = self.mg.at_node["particle__diameter"].copy()
-        self.plot_tf = True
+        self.plot_tf = plot_tf
         self.dem_dif_m_dict ={} # for dedegging
 
     def __call__(self, max_number_of_runs = 50):
@@ -136,7 +137,7 @@ class MWRu_calibrator():
             plt.title("it:{}, slpc:{}, SD:{}, alpha:{}".format(self.it, self.MWRu.slpc, self.MWRu.SD, self.MWRu.cs ))
             plt.clim(-1,1)
             plt.show()
-            # self.dem_dif_m_dict[self.it] = self.mg.at_node['dem_dif_m']
+            self.dem_dif_m_dict[self.it] = self.mg.at_node['dem_dif_m']
             
 
     def _update_topographic_slope(self):
@@ -421,7 +422,7 @@ class MWRu_calibrator():
                 # determine the difference in thickness
                 DTE = self._deposition_thickness_error()
                 # determine psoterior likilhood: product of RMSE, omegaT and prior liklihood
-                candidate_posterior = prior_t*omegaT*(1/RMSE_Vd)#*(1/RMSE_pf)*(1/RMSE_map)#*omegaT#*DTE
+                candidate_posterior = prior_t*(1/RMSE_Vd)*(1/RMSE_pf)*(1/RMSE_map)*omegaT#*DTE
                 # candidate_posterior = (1/RMSE_map)
             # decide to jump or not to jump
             if i == 0:

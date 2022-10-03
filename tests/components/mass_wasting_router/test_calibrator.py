@@ -170,12 +170,12 @@ pdir = "D:/UW_PhD/PreeventsProject/Paper_2_MWR/Landlab_Development/mass_wasting_
 dxdy = 10
 rows = 27
 columns = 15
-ls_width = 1
-ls_length = 1
+ls_width = 3
+ls_length = 3
 slope_above_break = 0.6
 slope_below_break = 0.01
 slope_break = 0.8
-soil_thickness = 1.5
+soil_thickness = 2.5
 
 mg, lsn, pf, cc = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
                               , slope_below_break = slope_below_break, slope_break = slope_break, ls_width = ls_width, ls_length = ls_length)
@@ -270,7 +270,7 @@ mg.at_node['mass__wasting_id'][lsn] = 1
 npu = [1] 
 nid = [1] 
 
-params_o = [0.05, 0.33, 0.1]
+params_o = [0.02, 0.03, 0.05]
 # params_o = [0.05, 0.82, 0.1]
 # params_o = [0.05, 0.78160412935585255, 0.023565070615077743] 
 # params_o = [0.05, 0.87959043570258, 0.023963226618357404]
@@ -285,13 +285,14 @@ mw_dict = {'critical slope':slpc, 'minimum flux':SD,
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
 example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 200,
+                                  # dist_to_full_flux_constraint = 10,
                                   routing_surface = "topographic__elevation",
                                   settle_deposit = False,
                                   deposition_rule = "critical_slope")
 
 #%% set up calibrator
 
-params_c = {'SD': [0.05, 0.9, 0.6], 'cs': [0.001, 0.5, 0.4]}
+params_c = {'SD': [0.01, 0.5, 0.2], 'slpc': [0.005, 0.15, 0.03]}
 el_l = 0
 el_h = 20
 channel_nodes= pf
@@ -303,7 +304,7 @@ profile_calib_dict = {"el_l":el_l, "el_h": el_h, "channel_nodes": channel_nodes,
 
 
 calibrate = MWRu_calibrator(example_MWRu, params_c, profile_calib_dict = profile_calib_dict,
-                            prior_distribution = "uniform", jump_size = 0.2)
+                            prior_distribution = "uniform", jump_size = 0.2, plot_tf = False)
 
 
 #%% run MWRu with known parameter values to create a dem_diff that can be set as the observed
@@ -370,7 +371,7 @@ if Visualize:
 
             plt.xticks(fontsize= 8 )
             plt.yticks(fontsize= 8 )
-            plt.clim(-2.5,2.5)
+            plt.clim(-1,1)
             plt.xlim([xmin*.8,xmax*1.2]); plt.ylim([ymin*.3,ymax])
             plt.show()
             
@@ -495,7 +496,7 @@ plt.ylabel("downstream cumulative volumetric change")
 
 # using Vd
 # run a simulartion
-calibrate(max_number_of_runs = 500)
+calibrate(max_number_of_runs = 5000)
 
 # get the modeled profile values
 mbLdf_m = calibrate._channel_profile_deposition("modeled")
@@ -665,6 +666,7 @@ plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['omegaT']/calibrate.LHv
 plt.xlim(0,calibrate.LHvals['iteration'].max()*1.20)
 # plt.xticks(np.arange(0,itm+1, step=int(1+itm/20)))
 plt.legend(fontsize = 8, loc = "right")
+plt.xlim(900,950)
 plt.show()
 
 
@@ -694,12 +696,12 @@ results = calibrate.LHvals
 
 x_mn = params_c['SD'][0]
 x_mx = params_c['SD'][1]
-y_mn = params_c['cs'][0]
-y_mx = params_c['cs'][1]
+y_mn = params_c['slpc'][0]
+y_mx = params_c['slpc'][1]
 
 # plot jumps
 plt.figure(figsize = (6,3))
-plt.plot(results['candidate_value_SD'], results['candidate_value_cs'])
+plt.plot(results['candidate_value_SD'], results['candidate_value_slpc'])
 plt.xlim([x_mn,x_mx])
 plt.ylim([y_mn,y_mx])
 plt.xlabel('crtical flow depth, below which everything stops $qs_c$, [m]')
@@ -710,7 +712,7 @@ plt.ylabel(r'scour coef., $\alpha$')
 import scipy as sc
 grid_x, grid_y = np.mgrid[x_mn:x_mx:20j,y_mn:y_mx:20j]
 
-points = results[['candidate_value_SD','candidate_value_cs']].values
+points = results[['candidate_value_SD','candidate_value_slpc']].values
 
 values = results['candidate_posterior'].values
 
@@ -734,7 +736,7 @@ plt.ylabel(r'$\alpha$')
 
 plt.figure(figsize = (6,3))
 n = results.shape[0]
-counts, xedge,yedge,image =  plt.hist2d(results['selected_value_SD'], results['selected_value_cs'], bins = 15)#int(n**0.5))
+counts, xedge,yedge,image =  plt.hist2d(results['selected_value_SD'], results['selected_value_slpc'], bins = 15)#int(n**0.5))
 plt.xlabel('crtical flow depth, below which everything stops $qs_c$, [m]')
 plt.ylabel(r'scour coef., $\alpha$')
 plt.title('histogram')
@@ -793,6 +795,6 @@ def parameter_uncertainty(results, parameter):
     
     return lb, up
 
-parameter_uncertainty(results, 'cs')
+parameter_uncertainty(results, 'slpc')
 
 parameter_uncertainty(results, 'SD')

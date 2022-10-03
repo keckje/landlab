@@ -26,7 +26,7 @@ def both_para_results(results, params):
     y_mx = params['cs'][1]
         
     plt.figure(figsize = (6,3))
-    plt.plot(results['selected_value_SD'], results['selected_value_cs'])
+    plt.plot(results['candidate_value_SD'], results['candidate_value_cs'])
     plt.xlim([x_mn,x_mx])
     plt.ylim([y_mn,y_mx])
     plt.xlabel('crtical flow depth, below which everything stops $qs_c$, [m]')
@@ -34,9 +34,9 @@ def both_para_results(results, params):
     
     grid_x, grid_y = np.mgrid[x_mn:x_mx:20j,y_mn:y_mx:20j]
     
-    points = results[['selected_value_SD','selected_value_cs']].values
+    points = results[['candidate_value_SD','candidate_value_cs']].values
     
-    values = results['selected_posterior'].values
+    values = results['candidate_posterior'].values
     
     grid_z1 = interpolate.griddata(points, values, (grid_x, grid_y), method='linear')
     
@@ -166,7 +166,7 @@ def parameter_uncertainty(results, parameter):
 
 #%%
 
-params = {'SD': [0.001, 1.5, 0.6], 'cs': [0.001, 1.5, 0.15]}
+params = {'SD': [0.001, 1, 0.3], 'cs': [0.001, 0.175, 0.02]}
 mdir = 'D:/UW_PhD/PreeventsProject/Paper_2_MWR/RunoutValidation/S1000/output/MCMC_v1/'
 
 
@@ -178,15 +178,19 @@ y_mx = params['cs'][1]
 
 
 
+# 09 failure
+# csvnm = 's1000_09_200_crit_slope_no_settle__750_mcmc.csv'
 
 
 
-
+# 22 failure
 # all
 # csvnm = 's1000_22_1000_all_metricsmcmc.csv'
-csvnm = 's1000_22_1000_all_300itlmcmc.csv'
+# csvnm = 's1000_22_1000_all_300itlmcmc.csv'
 # no DTE
 # csvnm = 's1000_22_1000_noDTEmcmc.csv'
+# csvnm = 's1000_22_200_RealScourDepthsmcmc.csv'
+csvnm = 's1000_22_500_RealScourDepthsmcmc.csv'
 # no DTE, no Omega
 # csvnm = 's1000_22_1000_noDTEnoOmegamcmc.csv' 
 # Omega, RMSE only
@@ -222,24 +226,43 @@ parameter_uncertainty(results, "SD")
 parameter_uncertainty(results, "cs")
 
 
-# 
-it_best_all =results['iteration'][results['candidate_posterior'] == results['candidate_posterior'].max()].values[0]
+# %%
+it_best =results['iteration'][results['candidate_posterior'] == results['candidate_posterior'].max()].values[0]
 it_best_r =results['iteration'][results['1/RMSE'] == results['1/RMSE'].max()].values[0]
 it_best_r_p =results['iteration'][results['1/RMSE p'] == results['1/RMSE p'].max()].values[0]
 it_best_r_m =results['iteration'][results['1/RMSE m'] == results['1/RMSE m'].max()].values[0]
+
+
 
 results.iloc[it_best]
 
 
 # calibration is best at SD 0.7+/-0.1
 # find all SD 0.7 +/-0.1 values with a high likihood (0.8 quantile)
-best = results[((results['candidate_value_SD']>0.55) & (results['candidate_value_SD']<0.75) 
+best = results[((results['candidate_value_SD']>0.0) & (results['candidate_value_SD']<0.75) 
  & results['candidate_posterior']>results['candidate_posterior'].quantile(0.95))]
+
+
+plt.figure()
+plt.plot(best['candidate_value_SD'],best['candidate_value_cs'],'k.')
+plt.xlabel('SD'); plt.ylabel('cs')
+plt.ylim(0,2)
+
 
 plt.figure()
 plt.boxplot(best['candidate_value_cs'])
+plt.xlabel('cs')
 best['candidate_value_cs'].quantile(0.5)
 
 plt.figure()
 plt.boxplot(best['candidate_value_SD'])
+plt.xlabel('SD')
 best['candidate_value_SD'].quantile(0.5)
+
+
+
+best = results[results['candidate_posterior']>results['candidate_posterior'].quantile(0.95)]
+    
+plt.figure()
+plt.plot(best['candidate_value_SD'],best['candidate_value_cs'],'k.')
+plt.ylim(0,2)
