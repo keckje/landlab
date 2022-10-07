@@ -130,14 +130,14 @@ class MWRu_calibrator():
         # create the modeldiff_m field
         diff = self.mg.at_node['topographic__elevation'] - self.mg.at_node['topographic__initial_elevation']
         self.mg.at_node['dem_dif_m'] = diff
-
+        self.dem_dif_m_dict[self.it] = self.mg.at_node['dem_dif_m']
         if self.plot_tf == True:
             plt.figure('iteration'+str(self.it))
             imshow_grid(self.mg,"dem_dif_m",cmap = 'RdBu_r')
             plt.title("it:{}, slpc:{}, SD:{}, alpha:{}".format(self.it, self.MWRu.slpc, self.MWRu.SD, self.MWRu.cs ))
             plt.clim(-1,1)
             plt.show()
-            self.dem_dif_m_dict[self.it] = self.mg.at_node['dem_dif_m']
+            
             
 
     def _update_topographic_slope(self):
@@ -275,6 +275,51 @@ class MWRu_calibrator():
         return omegaT
 
 
+
+    def _RMSEomegaT(self, metric = 'runout'):
+        """ determines intersection, over estimated area and underestimated area of
+        modeled debris flow deposition and the the calibration metric OmegaT following
+        Heiser et al. (2017)
+        """
+        n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
+        na = self.mg.dx*self.mg.dy
+        if metric == 'runout':
+            n_o =  n_a[np.abs(self.mg.at_node['dem_dif_o']) > 0] # get nodes with scour or deposit
+            n_m = n_a[np.abs(self.mg.at_node['dem_dif_m']) > 0]
+        elif metric == 'deposition':
+            n_o =  n_a[self.mg.at_node['dem_dif_o'] > 0] # get nodes with scour or deposit
+            n_m = n_a[self.mg.at_node['dem_dif_m'] > 0]
+        elif metric == 'scour':
+            n_o =  n_a[self.mg.at_node['dem_dif_o'] < 0] # get nodes with scour or deposit
+            n_m = n_a[self.mg.at_node['dem_dif_m'] < 0]
+        self.a_o = n_o*na
+        self.a_m = n_m*na
+        n_x =  n_o[np.isin(n_o,n_m)]#np.unique(np.concatenate([n_o,n_m])) # intersection nodes
+        n_u = n_o[~np.isin(n_o,n_m)] # underestimate
+        n_o = n_m[~np.isin(n_m,n_o)] # overestimate
+        
+        
+        observed_ = self.mg.at_node['dem_dif_o']
+        mask =  np.abs(observed_)>0 
+        modeled_ = self.mg.at_node['dem_dif_m']       
+        # mask_m =  np.abs(modeled_)<=0 
+        # modeled_[mask_m] = np.abs(modeled_).max()
+        
+        modeled = modeled_[mask]
+        observed = observed_[mask]
+        X = 1/self._RMSE(observed, modeled)
+        modeled = modeled_[n_u]
+        observed = observed_[n_u]
+        U = 1/self._RMSE(observed, modeled)
+        modeled = modeled_[n_o]
+        observed = observed_[n_o]        
+        O = 1/self._RMSE(observed, modeled)
+        T = X+U+O
+        RMSEomegaT = X/T-U/T-O/T+1
+        return RMSEomegaT
+
+
+
     def _RMSE(self, observed, modeled):
         """computes the root mean square error (RMSE)
         Parameters
@@ -350,7 +395,7 @@ class MWRu_calibrator():
         Landslide average thickness (t_avg) adjusted at landslide with id = 1.
         If other landslide ids, thickness at those landslides will not be adjusted.
         """
-        LHList = []
+        self.LHList = []
         ar = [] # list for tracking acceptance ratio
         # dictionaries to store trial values
         selected_value = {}
@@ -420,9 +465,10 @@ class MWRu_calibrator():
                 # determine deposition overlap metric, omegaT
                 omegaT = 1+self._omegaT(metric = self.omega_metric)
                 # determine the difference in thickness
+                RMSEomegaT = self._RMSEomegaT(metric = self.omega_metric)
                 DTE = self._deposition_thickness_error()
                 # determine psoterior likilhood: product of RMSE, omegaT and prior liklihood
-                candidate_posterior = prior_t*(1/RMSE_Vd)*(1/RMSE_pf)*(1/RMSE_map)*omegaT#*DTE
+                candidate_posterior = prior_t*(1/RMSE_Vd)*RMSEomegaT*omegaT#*(1/RMSE_pf)*(1/RMSE_map)#*DTE
                 # candidate_posterior = (1/RMSE_map)
             # decide to jump or not to jump
             if i == 0:
@@ -450,11 +496,11 @@ class MWRu_calibrator():
                 p_table = p_table+[jump_size[key], candidate_value[key],selected_value[key]]
                 p_nms = p_nms+['jump_size_'+key, 'candidate_value_'+key, 'selected_value_'+key]
             if self.method == "omega":
-                LHList.append([i, prior_t,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                self.LHList.append([i, prior_t,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             elif self.method == "RMSE":
-                LHList.append([i, prior_t,1/RMSE_Vd,1/RMSE_pf,1/RMSE_map,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                self.LHList.append([i, prior_t,1/RMSE_Vd,1/RMSE_pf,1/RMSE_map,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             elif self.method == "both":
-                LHList.append([i, prior_t,1/RMSE_Vd,1/RMSE_pf,1/RMSE_map,DTE,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                self.LHList.append([i, prior_t,1/RMSE_Vd,1/RMSE_pf,1/RMSE_map,DTE,RMSEomegaT,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
 
             # adjust jump size every N_cycles
             if i%self.N_cycles == 0:
@@ -462,15 +508,19 @@ class MWRu_calibrator():
                 self._adjust_jump_size(mean_acceptance_ratio)
                 ar = [] # reset acceptance ratio tracking list
 
-            print('MCMC iteration '+str(i))
+            print('MCMC iteration: {}, likelihood:{}, acceptance ratio:{}, random value:{},{}'.format(
+                              i, np.round(candidate_posterior, decimals = 5),
+                              np.round(acceptance_ratio, decimals = 3),
+                              np.round(rv, decimals = 3), 
+                              msg))
 
-        self.LHvals = pd.DataFrame(LHList)
+        self.LHvals = pd.DataFrame(self.LHList)
         if self.method == "omega":
             self.LHvals.columns = ['iteration', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
         elif self.method == "RMSE":
             self.LHvals.columns = ['iteration', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
         elif self.method == "both":
-            self.LHvals.columns = ['iteration', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'DTE', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'DTE', 'RMSEomegaT', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
 
         self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] # {'SD': selected_value_SD, 'cs': selected_value_cs}
 
