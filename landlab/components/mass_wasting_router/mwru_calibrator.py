@@ -30,7 +30,8 @@ class MWRu_calibrator():
                  RMSE_metric = "Vd",
                  jump_size = 0.2,
                  N_cycles = 10,
-                 plot_tf = True):
+                 plot_tf = True,
+                 seed = None):
         """
         Parameters
         ----------
@@ -104,12 +105,21 @@ class MWRu_calibrator():
             self.initial_particle_diameter = self.mg.at_node["particle__diameter"].copy()
         self.plot_tf = plot_tf
         self.dem_dif_m_dict ={} # for dedegging
+        self._maker(seed)
+        
+
 
     def __call__(self, max_number_of_runs = 50):
         """instantiate the class"""
         if (self.method == "both") or (self.method == "RMSE"):
             self.mbLdf_o = self._channel_profile_deposition("observed")
         self._MCMC_sampler(max_number_of_runs)
+
+    
+    def _maker(self,seed):
+        """prepares the np random generator"""
+        
+        self.maker = np.random.RandomState(seed=seed)
 
 
     def _simulation(self):
@@ -250,6 +260,7 @@ class MWRu_calibrator():
         modeled debris flow deposition and the the calibration metric OmegaT following
         Heiser et al. (2017)
         """
+        c = 1
         n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
         na = self.mg.dx*self.mg.dy
         if metric == 'runout':
@@ -268,8 +279,8 @@ class MWRu_calibrator():
         n_o = n_m[~np.isin(n_m,n_o)] # overestimate
         
         X = len(n_x)*na
-        U = len(n_u)*na
-        O = len(n_o)*na
+        U = len(n_u)*na*c
+        O = len(n_o)*na*c
         T = X+U+O
         omegaT = X/T-U/T-O/T
         return omegaT
@@ -281,6 +292,7 @@ class MWRu_calibrator():
         modeled debris flow deposition and the the calibration metric OmegaT following
         Heiser et al. (2017)
         """
+        c = 10
         n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
         na = self.mg.dx*self.mg.dy
         if metric == 'runout':
@@ -297,7 +309,9 @@ class MWRu_calibrator():
         n_x =  n_o[np.isin(n_o,n_m)]#np.unique(np.concatenate([n_o,n_m])) # intersection nodes
         n_u = n_o[~np.isin(n_o,n_m)] # underestimate
         n_o = n_m[~np.isin(n_m,n_o)] # overestimate
-        
+        A_x = len(n_x)*self.mg.dx*self.mg.dy
+        A_u = len(n_u)*self.mg.dx*self.mg.dy
+        A_o = len(n_o)*self.mg.dx*self.mg.dy
         
         observed_ = self.mg.at_node['dem_dif_o']
         mask =  np.abs(observed_)>0 
@@ -307,25 +321,86 @@ class MWRu_calibrator():
         
         modeled = modeled_[mask]
         observed = observed_[mask]
-        X = 1/self._RMSE(observed, modeled)
+        X = A_x*self._RMSE(observed, modeled)
+        # if X != 0:
+        #     X = 1/X
         modeled = modeled_[n_u]
         observed = observed_[n_u]
-        U = 1/self._RMSE(observed, modeled)
+        U = A_u*self._RMSE(observed, modeled)
+        # if U != 0:
+        #     U = 1/(U*c)
         modeled = modeled_[n_o]
         observed = observed_[n_o]        
-        O = 1/self._RMSE(observed, modeled)
-        T = X+U+O
-        RMSEomegaT = X/T-U/T-O/T+1
+        O = A_o*self._RMSE(observed, modeled)
+        # if O != 0:
+        #     O = 1/(O*c)
+        T = X+U*c+O*c
+        # T = X/T+(U*c)/T+(O*c)/T
+        RMSEomegaT =1/T# X/T-U/T-O/T+1 ##
         return RMSEomegaT
 
 
+    def _RMSEomegaTv2(self, metric = 'runout'):
+         """ determines intersection, over estimated area and underestimated area of
+         modeled debris flow deposition and the the calibration metric OmegaT following
+         Heiser et al. (2017)
+         """
+         c = 1
+         n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
+         na = self.mg.dx*self.mg.dy
+         n_o =  n_a[np.abs(self.mg.at_node['dem_dif_o']) > 0] # get nodes with scour or deposit
+         n_m = n_a[np.abs(self.mg.at_node['dem_dif_m']) > 0]
+  
+         self.a_o = n_o*na
+         self.a_m = n_m*na
+         n_x =  n_o[np.isin(n_o,n_m)]#np.unique(np.concatenate([n_o,n_m])) # intersection nodes
+         n_u = n_o[~np.isin(n_o,n_m)] # underestimate
+         n_o = n_m[~np.isin(n_m,n_o)] # overestimate
+         A_x = len(n_x)*self.mg.dx*self.mg.dy
+         A_u = len(n_u)*self.mg.dx*self.mg.dy
+         A_o = len(n_o)*self.mg.dx*self.mg.dy
+         
+         observed_ = self.mg.at_node['dem_dif_o']
+         mask =  np.abs(observed_)>0 
+         modeled_ = self.mg.at_node['dem_dif_m']       
+         # mask_m =  np.abs(modeled_)<=0 
+         # modeled_[mask_m] = np.abs(modeled_).max()
+         
+         modeled = modeled_[mask]
+         observed = observed_[mask]
+         X = A_x*self._RMSE(observed, modeled)
+  
+         U = A_u*self._RMxSE(observed, modeled)
+     
+         O = A_o*self._RMxSE(observed, modeled)
+  
+         T = X+U*c+O*c
+         # T = X/T+(U*c)/T+(O*c)/T
+         RMSEomegaT =1/T# X/T-U/T-O/T+1 ##
+         return RMSEomegaT
+
 
     def _RMSE(self, observed, modeled):
-        """computes the root mean square error (RMSE)
-        Parameters
+        """computes the root mean square error (RMSE) between two difference 
+        datasets
         """
+        if modeled.size == 0:
+            modeled = np.array([0])
+            observed = np.array([0])
         RMSE = (((observed-modeled)**2).mean())**0.5
         return RMSE
+    
+
+    def _RMxSE(self, observed, modeled):
+        """computes the root mean square error (RMSE) between two difference 
+        datasets
+        """
+        if modeled.size == 0:
+            modeled = np.array([0])
+            observed = np.array([0])
+        RSEmax = (((observed-modeled)**2).max())**0.5
+        return RSEmax
+
     
     def _deposition_thickness_error(self, metric = 'max'):
         """computes the deposition thickness error (DTE)"""
@@ -364,7 +439,7 @@ class MWRu_calibrator():
         pass_ = False
         # candidate value cant be outside of the max and min values
         while pass_ is False:
-            candidate_value = np.random.normal(selected_value, jump_size)
+            candidate_value = self.maker.normal(selected_value, jump_size)
             if (candidate_value < min_val) or (candidate_value > max_val):
                 pass_ = False
             else:
@@ -465,10 +540,10 @@ class MWRu_calibrator():
                 # determine deposition overlap metric, omegaT
                 omegaT = 1+self._omegaT(metric = self.omega_metric)
                 # determine the difference in thickness
-                RMSEomegaT = self._RMSEomegaT(metric = self.omega_metric)
+                RMSEomegaT = self._RMSEomegaTv2(metric = self.omega_metric)
                 DTE = self._deposition_thickness_error()
                 # determine psoterior likilhood: product of RMSE, omegaT and prior liklihood
-                candidate_posterior = prior_t*(1/RMSE_Vd)*RMSEomegaT*omegaT#*(1/RMSE_pf)*(1/RMSE_map)#*DTE
+                candidate_posterior = prior_t*(1/RMSE_Vd)*omegaT*RMSEomegaT#*(1/RMSE_pf)*(1/RMSE_map)#*DTE
                 # candidate_posterior = (1/RMSE_map)
             # decide to jump or not to jump
             if i == 0:
@@ -480,7 +555,7 @@ class MWRu_calibrator():
            # if larger than ratio go with old parameter value
            # for first jump, probability willl always be less than or equal to
            # acceptance ratio (1)
-            rv = np.random.uniform(0,1,1)
+            rv = self.maker.uniform(0,1,1)
             if rv < acceptance_ratio:
                 selected_posterior = candidate_posterior
                 for key in self.params:
