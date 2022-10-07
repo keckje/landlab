@@ -287,63 +287,63 @@ class MWRu_calibrator():
 
 
 
-    def _RMSEomegaT(self, metric = 'runout'):
-        """ determines intersection, over estimated area and underestimated area of
-        modeled debris flow deposition and the the calibration metric OmegaT following
-        Heiser et al. (2017)
-        """
-        c = 10
-        n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
-        na = self.mg.dx*self.mg.dy
-        if metric == 'runout':
-            n_o =  n_a[np.abs(self.mg.at_node['dem_dif_o']) > 0] # get nodes with scour or deposit
-            n_m = n_a[np.abs(self.mg.at_node['dem_dif_m']) > 0]
-        elif metric == 'deposition':
-            n_o =  n_a[self.mg.at_node['dem_dif_o'] > 0] # get nodes with scour or deposit
-            n_m = n_a[self.mg.at_node['dem_dif_m'] > 0]
-        elif metric == 'scour':
-            n_o =  n_a[self.mg.at_node['dem_dif_o'] < 0] # get nodes with scour or deposit
-            n_m = n_a[self.mg.at_node['dem_dif_m'] < 0]
-        self.a_o = n_o*na
-        self.a_m = n_m*na
-        n_x =  n_o[np.isin(n_o,n_m)]#np.unique(np.concatenate([n_o,n_m])) # intersection nodes
-        n_u = n_o[~np.isin(n_o,n_m)] # underestimate
-        n_o = n_m[~np.isin(n_m,n_o)] # overestimate
-        A_x = len(n_x)*self.mg.dx*self.mg.dy
-        A_u = len(n_u)*self.mg.dx*self.mg.dy
-        A_o = len(n_o)*self.mg.dx*self.mg.dy
+    # def _RMSEomegaT(self, metric = 'runout'):
+    #     """ determines intersection, over estimated area and underestimated area of
+    #     modeled debris flow deposition and the the calibration metric OmegaT following
+    #     Heiser et al. (2017)
+    #     """
+    #     c = 10
+    #     n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
+    #     na = self.mg.dx*self.mg.dy
+    #     if metric == 'runout':
+    #         n_o =  n_a[np.abs(self.mg.at_node['dem_dif_o']) > 0] # get nodes with scour or deposit
+    #         n_m = n_a[np.abs(self.mg.at_node['dem_dif_m']) > 0]
+    #     elif metric == 'deposition':
+    #         n_o =  n_a[self.mg.at_node['dem_dif_o'] > 0] # get nodes with scour or deposit
+    #         n_m = n_a[self.mg.at_node['dem_dif_m'] > 0]
+    #     elif metric == 'scour':
+    #         n_o =  n_a[self.mg.at_node['dem_dif_o'] < 0] # get nodes with scour or deposit
+    #         n_m = n_a[self.mg.at_node['dem_dif_m'] < 0]
+    #     self.a_o = n_o*na
+    #     self.a_m = n_m*na
+    #     n_x =  n_o[np.isin(n_o,n_m)]#np.unique(np.concatenate([n_o,n_m])) # intersection nodes
+    #     n_u = n_o[~np.isin(n_o,n_m)] # underestimate
+    #     n_o = n_m[~np.isin(n_m,n_o)] # overestimate
+    #     A_x = len(n_x)*self.mg.dx*self.mg.dy
+    #     A_u = len(n_u)*self.mg.dx*self.mg.dy
+    #     A_o = len(n_o)*self.mg.dx*self.mg.dy
         
-        observed_ = self.mg.at_node['dem_dif_o']
-        mask =  np.abs(observed_)>0 
-        modeled_ = self.mg.at_node['dem_dif_m']       
-        # mask_m =  np.abs(modeled_)<=0 
-        # modeled_[mask_m] = np.abs(modeled_).max()
+    #     observed_ = self.mg.at_node['dem_dif_o']
+    #     mask =  np.abs(observed_)>0 
+    #     modeled_ = self.mg.at_node['dem_dif_m']       
+    #     # mask_m =  np.abs(modeled_)<=0 
+    #     # modeled_[mask_m] = np.abs(modeled_).max()
         
-        modeled = modeled_[mask]
-        observed = observed_[mask]
-        X = A_x*self._RMSE(observed, modeled)
-        # if X != 0:
-        #     X = 1/X
-        modeled = modeled_[n_u]
-        observed = observed_[n_u]
-        U = A_u*self._RMSE(observed, modeled)
-        # if U != 0:
-        #     U = 1/(U*c)
-        modeled = modeled_[n_o]
-        observed = observed_[n_o]        
-        O = A_o*self._RMSE(observed, modeled)
-        # if O != 0:
-        #     O = 1/(O*c)
-        T = X+U*c+O*c
-        # T = X/T+(U*c)/T+(O*c)/T
-        RMSEomegaT =1/T# X/T-U/T-O/T+1 ##
-        return RMSEomegaT
+    #     modeled = modeled_[mask]
+    #     observed = observed_[mask]
+    #     X = A_x*self._RMSE(observed, modeled)
+    #     # if X != 0:
+    #     #     X = 1/X
+    #     modeled = modeled_[n_u]
+    #     observed = observed_[n_u]
+    #     U = A_u*self._RMSE(observed, modeled)
+    #     # if U != 0:
+    #     #     U = 1/(U*c)
+    #     modeled = modeled_[n_o]
+    #     observed = observed_[n_o]        
+    #     O = A_o*self._RMSE(observed, modeled)
+    #     # if O != 0:
+    #     #     O = 1/(O*c)
+    #     T = X+U*c+O*c
+    #     # T = X/T+(U*c)/T+(O*c)/T
+    #     RMSEomegaT =1/T# X/T-U/T-O/T+1 ##
+    #     return RMSEomegaT
 
 
     def _RMSEomegaTv2(self, metric = 'runout'):
-         """ determines intersection, over estimated area and underestimated area of
-         modeled debris flow deposition and the the calibration metric OmegaT following
-         Heiser et al. (2017)
+         """ Computes the mean and max RSE over the intersection area. Metric is equal to 
+         the mean RSE * the intersection area + the max RSE * the over and under prediction
+         areas
          """
          c = 1
          n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
