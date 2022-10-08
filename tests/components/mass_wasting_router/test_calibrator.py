@@ -163,8 +163,8 @@ def flume_maker(rows = 5, columns = 3, slope_above_break =.5, slope_below_break 
 #%% create the flume
 pi = 1 # plot index
 
-pdir = "D:/UW_PhD/PreeventsProject/Paper_2_MWR/Landlab_Development/mass_wasting_runout/development_plots/tests_version2/"
-
+mdir = "D:/UW_PhD/PreeventsProject/Paper_2_MWR/Landlab_Development/mass_wasting_runout/development_plots/tests_version2/"
+svnm = 'calib_tests_'
 # rows = 27, columns = 15, slope_break = 0.8
 
 dxdy = 10
@@ -270,7 +270,7 @@ mg.at_node['mass__wasting_id'][lsn] = 1
 npu = [1] 
 nid = [1] 
 
-params_o = [0.02, 0.03, 0.05]
+params_o = [0.015, 0.02, 0.05]
 # params_o = [0.05, 0.82, 0.1]
 # params_o = [0.05, 0.78160412935585255, 0.023565070615077743] 
 # params_o = [0.05, 0.87959043570258, 0.023963226618357404]
@@ -304,7 +304,7 @@ profile_calib_dict = {"el_l":el_l, "el_h": el_h, "channel_nodes": channel_nodes,
 
 
 calibrate = MWRu_calibrator(example_MWRu, params_c, profile_calib_dict = profile_calib_dict,
-                            prior_distribution = "uniform", jump_size = 0.2, plot_tf = False)
+                            prior_distribution = "uniform", jump_size = 0.2, plot_tf = False, seed = 7)
 
 
 #%% run MWRu with known parameter values to create a dem_diff that can be set as the observed
@@ -356,7 +356,7 @@ plt.plot(pf, el_p, 'r-', alpha= 0.5, label = 'post failure dem')
 # plt.gca().set_aspect('equal')
 plt.legend()
 
-Visualize = True
+Visualize = False
 if Visualize:
     # plot how DEM changes
     for i in np.arange(0,len(example_MWRu.mw_ids)):
@@ -496,7 +496,7 @@ plt.ylabel("downstream cumulative volumetric change")
 
 # using Vd
 # run a simulartion
-calibrate(max_number_of_runs = 5000)
+calibrate(max_number_of_runs = 100)
 
 # get the modeled profile values
 mbLdf_m = calibrate._channel_profile_deposition("modeled")
@@ -655,25 +655,27 @@ RMSE_pf = calibrate._RMSE(observed, modeled)
 observed = mbLdf_o['Vd']; modeled = mbLdf_m['Vd']
 RMSE_Vd = calibrate._RMSE(observed, modeled)
 
-# check RMSE values
-itm = calibrate.LHvals['iteration'].max()
-plt.figure()
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE']/calibrate.LHvals['1/RMSE'].max(),'k-', alpha = 0.5, label = 'RMSE V')
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE p']/calibrate.LHvals['1/RMSE p'].max(),'r-', alpha = 0.5, label = 'RMSE p')
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE m']/calibrate.LHvals['1/RMSE m'].max(),'g-', alpha = 0.5, label = 'RMSE m')
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['DTE']/calibrate.LHvals['DTE'].max(),'c-', alpha = 0.5, label = 'DTE')
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['omegaT']/calibrate.LHvals['omegaT'].max(),'m-', alpha = 0.5, label = 'OmegaT')
-plt.xlim(0,calibrate.LHvals['iteration'].max()*1.20)
-# plt.xticks(np.arange(0,itm+1, step=int(1+itm/20)))
-plt.legend(fontsize = 8, loc = "right")
-plt.xlim(900,950)
-plt.show()
 
 
+#%%plot results of MCMC
 
 
+RMSE_map = []
+mask =  np.abs(mg.at_node['dem_dif_o'])>0           
+
+for key in calibrate.dem_dif_m_dict:
+        observed = mg.at_node['dem_dif_o'][mask]
+        modeled = calibrate.dem_dif_m_dict[key]       
+        mask_m =  np.abs(modeled)<=0 
+        modeled[mask_m] = np.abs(modeled).max()
+        modeled = modeled[mask]
+        RMSE_map.append(calibrate._RMSE(observed, modeled))
+calibrate.LHvals['1/RMSE m2'] = 1/np.array(RMSE_map)
 
 it_best = calibrate.LHvals['iteration'][calibrate.LHvals['candidate_posterior'] == calibrate.LHvals['candidate_posterior'].max()].values[0]
+
+
+
 
 
 field = "dem_dif_o"
@@ -689,9 +691,47 @@ plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "model_dif_compare", cmap 
 plt.clim(-1,1)
 
 
-#%%plot results of MCMC
+
+# check RMSE values
+itm = calibrate.LHvals['iteration'].max()
+plt.figure(figsize = (15,5))
+plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE']/calibrate.LHvals['1/RMSE'].max(),'k-', alpha = 0.5, label = 'RMSE V')
+# plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE p']/calibrate.LHvals['1/RMSE p'].max(),'r-', alpha = 0.5, label = 'RMSE p')
+# plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE m']/calibrate.LHvals['1/RMSE m'].max(),'g-', alpha = 0.5, label = 'RMSE m')
+# plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE m2']/calibrate.LHvals['1/RMSE m2'].max(),'o-', alpha = 0.5, label = 'RMSE m2')
+plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['RMSEomegaT']/calibrate.LHvals['RMSEomegaT'].max(),'o-', alpha = 0.5, label = 'RMSEOmegaT')
+plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['candidate_posterior']/calibrate.LHvals['candidate_posterior'].max(),'c-', alpha = 0.5, label = 'likelihood')
+plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['omegaT']/calibrate.LHvals['omegaT'].max(),'m-', alpha = 0.5, label = 'OmegaT')
+plt.xlim(0,calibrate.LHvals['iteration'].max()*1.05)
+plt.xticks(np.arange(0,itm+1, step=int(1+itm/20)))
+plt.legend(fontsize = 8, loc = "right")
+# plt.xlim(it_best-50,it_best+50)
+plt.savefig(mdir+svnm+"_likelihood_metrics.png", dpi = 300, bbox_inches='tight')
+plt.show()
+
+
+
+# check RMSE values
+itm = calibrate.LHvals['iteration'].max()
+plt.figure(figsize = (15,5))
+plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE']/calibrate.LHvals['1/RMSE'].max(),'k-', alpha = 0.5, label = 'RMSE V')
+plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE p']/calibrate.LHvals['1/RMSE p'].max(),'r-', alpha = 0.5, label = 'RMSE p')
+plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE m']/calibrate.LHvals['1/RMSE m'].max(),'g-', alpha = 0.5, label = 'RMSE m')
+plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['DTE']/calibrate.LHvals['DTE'].max(),'c-', alpha = 0.5, label = 'DTE')
+plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['omegaT']/calibrate.LHvals['omegaT'].max(),'m-', alpha = 0.5, label = 'OmegaT')
+plt.xlim(0,calibrate.LHvals['iteration'].max()*1.05)
+plt.xticks(np.arange(0,itm+1, step=int(1+itm/20)))
+plt.legend(fontsize = 8, loc = "right")
+plt.savefig(mdir+svnm+"_likelihood_metrics_best.png", dpi = 300, bbox_inches='tight')
+# plt.xlim(it_best-50,it_best+50)
+plt.show()
+
+
+
+
 
 # calibration plots
+# params_c = params
 results = calibrate.LHvals
 
 x_mn = params_c['SD'][0]
@@ -706,6 +746,7 @@ plt.xlim([x_mn,x_mx])
 plt.ylim([y_mn,y_mx])
 plt.xlabel('crtical flow depth, below which everything stops $qs_c$, [m]')
 plt.ylabel(r'scour coef., $\alpha$')
+plt.savefig(mdir+svnm+"_jumps.png", dpi = 300, bbox_inches='tight')
 
 # plot liklihood value of each jump
 # see for format: https://docs.scipy.org/doc/scipy/reference/generated/scipy.interpolate.griddata.html
@@ -722,49 +763,55 @@ plt.figure(figsize = (6,3))
 plt.imshow(grid_z1.T, extent=(x_mn,x_mx,y_mn,y_mx), origin='lower')
 plt.xlabel('crtical flow depth, below which everything stops $qs_c$, [m]')
 plt.ylabel(r'scour coef., $\alpha$')
+plt.savefig(mdir+svnm+"_likelihood.png", dpi = 300, bbox_inches='tight')
 
 
-X = grid_x[:,0]
-Y = grid_y[:,0]
-plt.figure(figsize = (3,3))
-plt.imshow(grid_z1.T, extent=(x_mn,x_mx,y_mn,y_mx), origin='lower', cmap = 'Greys_r', alpha = 0.5)
-plt.contour(grid_x,grid_y,grid_z1,np.linspace(np.nanmin(grid_z1),np.nanmax(grid_z1),7), colors='k', linewidth = 0.5)
-plt.xlabel('$qs_c$, [m]')
-plt.ylabel(r'$\alpha$')
-
-
-
-plt.figure(figsize = (6,3))
-n = results.shape[0]
-counts, xedge,yedge,image =  plt.hist2d(results['selected_value_SD'], results['selected_value_slpc'], bins = 15)#int(n**0.5))
-plt.xlabel('crtical flow depth, below which everything stops $qs_c$, [m]')
-plt.ylabel(r'scour coef., $\alpha$')
-plt.title('histogram')
-plt.colorbar()
+# X = grid_x[:,0]
+# Y = grid_y[:,0]
+# plt.figure(figsize = (3,3))
+# plt.imshow(grid_z1.T, extent=(x_mn,x_mx,y_mn,y_mx), origin='lower', cmap = 'Greys_r', alpha = 0.5)
+# plt.contour(grid_x,grid_y,grid_z1,np.linspace(np.nanmin(grid_z1),np.nanmax(grid_z1),7), colors='k', linewidth = 0.5)
+# plt.xlabel('$qs_c$, [m]')
+# plt.ylabel(r'$\alpha$')
 
 
 
+# plt.figure(figsize = (6,3))
+# n = results.shape[0]
+# counts, xedge,yedge,image =  plt.hist2d(results['selected_value_SD'], results['selected_value_slpc'], bins = 15)#int(n**0.5))
+# plt.xlabel('crtical flow depth, below which everything stops $qs_c$, [m]')
+# plt.ylabel(r'scour coef., $\alpha$')
+# plt.title('histogram')
+# plt.colorbar()
 
-def parameter_uncertainty(results, parameter):
+
+
+
+def parameter_uncertainty(results, parameter, parameter2):
     # parameter diagnostic plots
     # check that tested parameter values display proper variability (see MCMC_notes.pdf Figure 3)
-    col = 'candidate_value_'+parameter
+    col = 'selected_value_'+parameter
     plt.figure(figsize = (3,2))
     plt.plot(results[col], color = 'k', alpha = 0.8, linewidth = 1)
     plt.ylabel(parameter)
     plt.xlabel('iteration')
+    plt.savefig(mdir+svnm+col+"_iterations.png", dpi = 300, bbox_inches='tight')
+
     
+
+
     # get count in each parameter value bin
     # "The distributions of counts in each bin gives the probabilility distribution of the parameter as a function of the given the rules" 
     # (Jessica class note, Markov_models_lecture2017, pg 63). 95% confidence intervals are referred to as credibility intervals, rather than 
     # confidence interval.
+    col = 'selected_value_'+parameter
     plt.figure(figsize = (3,2))
     n = results[col].shape[0]
     counts, edges, plot = plt.hist(results[col],bins = int(n**0.5),color = 'k',alpha = 0.8)
     plt.grid(alpha = 0.5)
     plt.xlabel(parameter)
     plt.ylabel('count')
-    
+    plt.savefig(mdir+svnm+col+"_histogram.png", dpi = 300, bbox_inches='tight')
     
     # sum the histogram bins to get the cdf, using the bin center
     bin_cntr = ((edges[1:]-edges[0:-1])).cumsum() 
@@ -775,7 +822,8 @@ def parameter_uncertainty(results, parameter):
     plt.plot(bin_cntr, cp, color = 'k', alpha = 0.8, linewidth = 1)
     plt.grid(alpha = 0.5)
     plt.xlabel(parameter)
-    plt.ylabel('P(x)')
+    plt.ylabel(r'P( X$\leq$x )')
+    plt.savefig(mdir+svnm+col+"_cdf.png", dpi = 300, bbox_inches='tight')
     
     def intp(x,y,x1,message = None): 
         f = sc.interpolate.interp1d(x,y)   
@@ -786,15 +834,30 @@ def parameter_uncertainty(results, parameter):
     up = intp([0]+list(cp),[0]+list(bin_cntr),0.9510101)
     
     
-    
+    # col = 'candidate_value_'+parameter
+    # plt.figure(figsize = (3,2))
+    # plt.plot(results[col], results['candidate_posterior'], 'k.', markersize = 5, alpha = 0.6, linewidth = 1)
+    # plt.grid(alpha = 0.5)
+    # plt.ylabel("likelihood")
+    # plt.xlabel(parameter)
+
+    col = 'candidate_value_'+parameter
     plt.figure(figsize = (3,2))
-    plt.plot(results[col], results['candidate_posterior'], 'k.', markersize = 5, alpha = 0.6, linewidth = 1)
-    plt.grid(alpha = 0.5)
-    plt.ylabel("likelihood")
-    plt.xlabel(parameter)
+    plt.scatter(results[col], results['candidate_posterior'], s=2, c=results['candidate_value_'+ parameter2], cmap='viridis')
+    plt.ylabel('likelihood', fontsize = 12)
+    plt.colorbar(label =  parameter2)
+    plt.xlabel(col)
+    plt.savefig(mdir+svnm+col+'_'+parameter2+"_likelihood.png", dpi = 300, bbox_inches='tight')
+
     
     return lb, up
-
-parameter_uncertainty(results, 'slpc')
-
-parameter_uncertainty(results, 'SD')
+try:
+    parameter_uncertainty(results, 'slpc', 'SD')
+    parameter_uncertainty(results, 'slpc', 'cs')   
+    parameter_uncertainty(results, 'SD', 'slpc')   
+    parameter_uncertainty(results, 'SD', 'cs')
+    parameter_uncertainty(results, 'cs', 'SD')
+    parameter_uncertainty(results, 'cs', 'slpc')
+except:
+    parameter_uncertainty(results, 'slpc', 'SD')
+    parameter_uncertainty(results, 'SD', 'slpc')

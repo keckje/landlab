@@ -164,9 +164,9 @@ pdir = "D:/UW_PhD/PreeventsProject/Paper_2_MWR/Landlab_Development/mass_wasting_
 
 dxdy = 10
 rows = 27
-columns = 1
-ls_width = 1
-ls_length = 1
+columns = 15
+ls_width = 3
+ls_length = 3
 slope_above_break = 0.6
 slope_below_break = 0.02
 slope_break = 0.8
@@ -276,7 +276,7 @@ mg.at_node['mass__wasting_id'][lsn] = 1
 npu = [1] 
 nid = [1] 
 
-params_o = [0.03, 0.03, 0.1]
+params_o = [0.03, 0.01, 0.07]
 slpc = [params_o[0]]   
 SD = params_o[1]
 cs = params_o[2]
@@ -340,7 +340,7 @@ if Visualize:
             # plot_values(mg,field,xmin,xmax,ymin,ymax,field_back= field_back, background = False)
             plt.xticks(fontsize= 8 )
             plt.yticks(fontsize= 8 )
-            plt.clim(-2,2)
+            plt.clim(-1,1)
             plt.xlim([xmin*.8,xmax*1.2]); plt.ylim([ymin*.3,ymax])
             
         # for c in MWRu.df_evo_maps[i].keys():   

@@ -1026,23 +1026,6 @@ class MassWastingRunout(Component):
             DL = self._deposit_L_metric(qsi, slpn)
             Dc = self._deposit_friction_angle(qsi, n) 
             D = min(DL,Dc)
-        # if self.routing_surface == "energy__elevation": # not needed, energy surface tracked regardless of routing method
-
-            # # elevation at node i
-            # zi = self._grid.at_node['topographic__elevation'][n]
-            
-            # zo = self._determine_zo(n, zi, qsi )
-
-            # if zo:
-
-                # Dc = self._deposit_friction_angle(qsi, zi, zo)
-            # else: # a pit in the energy elevation surface
-            #     Dc = qsi 
-          
-            # D = min(DL,Dc)
-                
-        # else:
-        #     D = DL
         return(D)
 
 
@@ -1068,31 +1051,6 @@ class MassWastingRunout(Component):
             zo = None
             
         return zo
-
-    def _determine_zo_v2(self, n, zi, qsi):
-        """determine the elevation of the lowest adjacent node
-        relative to the elevation of the node+the flow thickness
-        if all adjacent nodes are higher, no elevation is returned"""
-        
-        # get adjacent nodes
-        adj_n = np.hstack((self._grid.adjacent_nodes_at_node[n],
-        self._grid.diagonal_adjacent_nodes_at_node[n]))
-                        
-        # incoming energy at node i
-        ei = qsi+zi
-        
-        # nodes below incoming energy surface
-        rn_e = adj_n[self._grid.at_node['topographic__elevation'][adj_n]<ei]
-                  
-        if len(rn_e) > 0: 
-                       
-            zo = self._grid.at_node['topographic__elevation'][rn_e].min()
-            
-        else:  # a pit in the energy elevation surface
-            zo = ei
-            
-        return zo
-
 
     def _deposit_L_metric(self, qsi, slpn):
         """
@@ -1152,7 +1110,7 @@ class MassWastingRunout(Component):
             # elevation at node i
         zi = self._grid.at_node['topographic__elevation'][n]
         
-        zo = self._determine_zo_v2(n, zi, qsi )
+        zo = self._determine_zo(n, zi, qsi )
         
         if zo >= zi+qsi: # if closest node at energy elevation or higher, all deposited
             Dc = qsi
@@ -1218,31 +1176,3 @@ class MassWastingRunout(Component):
             raise ValueError(msg)
         
         return pd_out
-
-# # momentum tracking functions
-#     def _momentum_in(self,n,vin):
-#         """determine the weighted average momentum (averge h*slope when material
-#         entered of the in incoming material"""       
-#         if (vin == 0):
-#             m_in = 0
-#         elif (np.isnan(vin)) or (np.isinf(vin)):
-#             msg = "in-flowing volume is nan or inf"
-#             raise ValueError(msg)
-#         else:           
-#             m_in = np.sum((self.arpd[self.arn == n])*(self.arv[self.arn == n])/vin)        
-#         return pd_in
-
-
-    # @staticmethod
-    # def _momentum_out(m_up,m_in,qsi,E,D):
-    #     """determine the weighted average momentum (slope) of the outgoing
-    #     flow"""
-        
-    #     m_out = np.sum((m_up*E+m_in*(qsi-D))/(qsi-D+E))
-                
-    #     if (m_out <=0) or (np.isnan(m_out)) or (np.isinf(m_out)):
-    #         msg = "out-flowing momentum is zero, negative, nan or inf"
-    #         print("pd_up{}, pd_in{}, qsi{}, E{}, D{}".format(pd_up, pd_in, qsi, E, D))
-    #         raise ValueError(msg)
-        
-    #     return pd_out
