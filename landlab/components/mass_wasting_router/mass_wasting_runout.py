@@ -23,15 +23,7 @@ class MassWastingRunout(Component):
     probably don't need to separate user options into children classes
     use cython or try to restructure SEDU function so that it can be applied with 
     vector operations, the filter all changes to correct cells where computations should not have occurred
-    
-    
-    
     fix SLOSHING problem
-    confirm particle shear stress is working correctly
-    decide on a tentative final model configuration
-    test on real landscapes
-    run calibration scripts
-    
     
     author: Jeff Keck
     '''
@@ -130,8 +122,7 @@ class MassWastingRunout(Component):
     settle_deposit = False,
     deposition_rule = "both",
     veg_factor = 3,
-    dist_to_full_flux_constraint = 0,
-    deposit_style = 'downslope_deposit'):
+    dist_to_full_flux_constraint = 50):
         
         super().__init__(grid)
 
@@ -140,14 +131,13 @@ class MassWastingRunout(Component):
         self.save = save
         self.run_id = run_id
         self.itL = itL
-        self.routing_partition_method = 'slope'#'square_root_of_slope'  #
+        self.routing_partition_method = 'square_root_of_slope'  #'slope'
         self.routing_surface = routing_surface
         self.settle_deposit = settle_deposit
         self.VaryDp = self._grid.has_field('node', 'particle__diameter')
         self.deposition_rule = deposition_rule
-        self.veg_factor = veg_factor # increase SD by this factor for all undisturbed nodes
-        self.dist_to_full_flux_constraint = dist_to_full_flux_constraint # make his larger than zero if material is stuck
-        self._deposit_style = deposit_style # assume deposition below cell or not
+        self.veg_factor = veg_factor
+        self.dist_to_full_flux_constraint = dist_to_full_flux_constraint
         
         if self.VaryDp:
             print(' running with spatially variable Dp ')
@@ -316,6 +306,7 @@ class MassWastingRunout(Component):
         self.mw_ids = np.unique(self._grid.at_node['mass__wasting_id'][mask])
         
         # innL is list of lists of nodes in each landslide
+        
         innL = []
         for mw_id in self.mw_ids:
             ls_mask = self._grid.at_node['mass__wasting_id'] == mw_id
@@ -337,11 +328,8 @@ class MassWastingRunout(Component):
         self.df_evo_maps = {} # copy of dem after each routing iteration
         self.topo_evo_maps = {}
         self.enL = [] # entrainment depth / regolith depth
-        self.DpL = [] # deposition depth
         self.dfdL = [] # incoming debris flow thickness (qsi)
-        self.TdfL = [] # basal shear stress 
-        self.slopeL = [] # slope
-        self.velocityL = [] # velocity (if any)
+        self.TdfL = [] # basal shear stress       
         
         # data containers for tests
         self.pd_r = {}
@@ -352,7 +340,6 @@ class MassWastingRunout(Component):
         self.arv_r = {}
         self.arn_r = {}
         self.arpd_r = {}
-        self.arndn_r = {}
         
         # For each mass wasting event in list:
         for mw_i,inn in enumerate(innL):
@@ -373,16 +360,13 @@ class MassWastingRunout(Component):
             self.frp_r[mw_id] = []            
             self.arv_r[mw_id] = []
             self.arn_r[mw_id] = []
-            self.arpd_r[mw_id] = []   
-            self.arndn_r[mw_id] = []
+            self.arpd_r[mw_id] = []     
+
             
             # prepare initial mass wasting material (precipitons) for release 
             self._prep_initial_mass_wasting_material(inn, mw_i)
 
             # save first set of data
-            self.df_evo_maps[mw_i][0] = self._grid.at_node['energy__elevation'].copy()
-            self.topo_evo_maps[mw_i][0] = self._grid.at_node['topographic__elevation'].copy()
-            self.DEMdfD[0] = {'DEMdf_r':0}            
             if self.VaryDp:
                 self.pd_r[mw_id].append(self._grid.at_node['particle__diameter'].copy())
             self.st_r[mw_id].append(self._grid.at_node['soil__thickness'].copy())
@@ -391,12 +375,12 @@ class MassWastingRunout(Component):
             self.frp_r[mw_id].append(self._grid.at_node['flow__receiver_proportions'].copy())
             self.arv_r[mw_id].append(self.arv)
             self.arn_r[mw_id].append(self.arn)
-            self.arpd_r[mw_id].append(self.arpd)
-            self.arndn_r[mw_id].append(self.arndn)
+            self.arpd_r[mw_id].append(self.arpd)  
         
             # now loop through each receiving node in list rni, 
             # determine next set of recieving nodes
-            # repeat until no more receiving nodes (material deposits)                
+            # repeat until no more receiving nodes (material deposits)
+                                        
             c = 0 # model iteration counter
             c_dr = 0 # mass wasting event delayed-release counter
               
@@ -424,7 +408,6 @@ class MassWastingRunout(Component):
                 
                 # receiving node, volume and particle diameter temporary arrays
                 # that become the arrays for the next model step (iteration)
-                self.arndn_ns = np.array([])
                 self.arn_ns = np.array([])
                 self.arv_ns = np.array([])
                 self.arpd_ns = np.array([])
@@ -432,74 +415,68 @@ class MassWastingRunout(Component):
                 self.arnL = []
                 self.arvL = []
                 self.arpdL = []
-                self.arndnL = []
                 
                 # for each unique cell in receiving node list self.arn
                 arn_u = np.unique(self.arn).astype(int)  # unique arn list
                 
                 # determine the incoming volume and depth to each node in arn_u
                 self.vqdat = self._vin_qsi(arn_u) ##
-                
-                # update energy elevation as node elevation plus incoming flow thickness
-                # this happens even if using topographic__elevation to route so that 
-                # the thickness of the debris flow is tracked for plotting
-                self._update_E_dem()
-                
-                if self.routing_surface == "energy__elevation":                              
-                    # if considering the energy surface in flow routing, 
-                    # update the receiving nodes (self.rn) to represent the 
-                    # the flow surface
-                    self._update_energy_slope()   
-                    self.rp = self._grid.at_node['flow__receiver_proportions'].copy() # not using self.rp, only need rn for constraint
-                    self.rn = self._grid.at_node['flow__receiver_node'].copy()
-                    # scour function uses the underlying topography. Grid fields need to
-                    # be updated for before deposition or scour caused by material 
-                    # after it enters node n
-                    self._update_topographic_slope()
-
+                       
                 # determine scour, entrain, deposition and outflow depths and
                 # the outflowing particle diameter, arranged in array nudat
-                self.nudat = self._scour_entrain_deposit_updatePD()                
-
-                # determine the receiving nodes, volumes and grain size
+                self.nudat = self._scour_entrain_deposit_updatePD()
+                
+                self._update_E_dem() ##  
+                if self.routing_surface == "energy__elevation":                              
+                    # update slope for routing using energy slope
+                    self._update_energy_slope()                
+                
+                # run energy elevation slope if using energy elevation
                 self._determine_rnp_attributes()                               
                 
                 # update grid field: topographic__elevation with the values in 
-                # nudat. Do this after directing flow, because assume deposition 
-                # does not impact flow direction
+                # nudat
                 self._update_dem()
                
                 ### update topographic slope field for deposition to detemine where
                 # settling will occur - move this innto settle_deposit
                                
-                self._update_topographic_slope()  
-                # set receiving nodes (self.rn) and proportions (self.rp) based on underlying topography                 
-                self.rp = self._grid.at_node['flow__receiver_proportions'].copy()
-                self.rn = self._grid.at_node['flow__receiver_node'].copy()
+                self._update_topographic_slope()                   
                 
                 ### update grid field: particle__diameter with the values in 
                 # nudat
                 if self.VaryDp:
                     self._update_channel_particle_diameter()
-                              
-                self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
+               
                 
-                # not sure if settle_deposit is useful or needed
+                self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
                 if self.settle_deposit:
                     
                     ### settle unrealistically tall mounds in the deposit                    
                     self._settle(arn_u)
-                    self._update_topographic_slope()
-                    self.rp = self._grid.at_node['flow__receiver_proportions'].copy()
-                    self.rn = self._grid.at_node['flow__receiver_node'].copy()
+
+
+                # update the energy surface dem: this happens even if using
+                # topographic__elevation to route so that the thickness of the
+                # debris flow is tracked for plotting
+                
+ 
+                    
+                # if self.routing_surface == "energy__elevation":                              
+                #     # update slope for routing using energy slope
+                #     self._update_energy_slope()
+                # else:
+                #     # update slope using routing using topographic slope
+                self._update_topographic_slope()       
 
                 # self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
                 self._update_disturbance_map()  
 
+                           
+
                 # once all cells in iteration have been evaluated, temporary receiving
                 # node, node volume and node particle diameter arrays become arrays 
                 # for next iteration
-                self.arndn = self.arndn_ns.astype(int)
                 self.arn = self.arn_ns.astype(int)
                 self.arv = self.arv_ns #   
                 self.arpd = self.arpd_ns
@@ -512,11 +489,11 @@ class MassWastingRunout(Component):
                     
                     DEMdf_r = DEMf-self._grid.at_node['topographic__initial_elevation']
             
-                    self.DEMdfD[c+1] = {'DEMdf_r':DEMdf_r.sum()*self._grid.dx*self._grid.dy}     
+                    self.DEMdfD[c] = {'DEMdf_r':DEMdf_r.sum()*self._grid.dx*self._grid.dy}     
                     
                     ### save maps for video
-                    self.df_evo_maps[mw_i][c+1] = self._grid.at_node['energy__elevation'].copy()
-                    self.topo_evo_maps[mw_i][c+1] = self._grid.at_node['topographic__elevation'].copy()
+                    self.df_evo_maps[mw_i][c] = self._grid.at_node['energy__elevation'].copy()
+                    self.topo_evo_maps[mw_i][c] = self._grid.at_node['topographic__elevation'].copy()
                     # data for tests
                     if self.VaryDp:
                         self.pd_r[mw_id].append(self._grid.at_node['particle__diameter'].copy())
@@ -527,7 +504,6 @@ class MassWastingRunout(Component):
                     self.arv_r[mw_id].append(self.arvL)
                     self.arn_r[mw_id].append(self.arnL)
                     self.arpd_r[mw_id].append(self.arpdL)     
-                    self.arndn_r[mw_id].append(self.arndnL)
 
 
                 # update iteration counter
@@ -539,7 +515,7 @@ class MassWastingRunout(Component):
     def _update_disturbance_map(self):
         """map of boolian values indicating if a node has been disturbed (changed 
         topographic__elevation) at any point in the model run"""
-        self._grid.at_node['disturbance_map'][np.abs(self.dif>0)] = True 
+        self._grid.at_node['disturbance_map'][self.dif>0] = True 
         
     def _prep_initial_mass_wasting_material(self, inn, mw_i):
         """from an initial source area (landslide) prepare the initial lists 
@@ -590,26 +566,22 @@ class MassWastingRunout(Component):
             rvi = np.concatenate((rvi,rv), axis = 0) 
             rpdi = np.concatenate((rpdi,rpd), axis = 0) 
             
-            # remove entire soil depth from node (regardless of release parameters)
+            # revome entire soil depth from node (regardless of release parameters)
             self._grid.at_node.dataset['topographic__elevation'][ni] =  (                   
             self._grid.at_node.dataset['topographic__elevation'][ni] - s_t)
             
             self._grid.at_node['soil__thickness'][ni] = (
                 self._grid.at_node['soil__thickness'][ni]-s_t)
             
+            
             # update slope to reflect node material removed from dem
             self._update_topographic_slope()
-        
-        # set receiving nodes (self.rn) and proportions (self.rp) based on underlying topography                 
-        self.rp = self._grid.at_node['flow__receiver_proportions'].copy()
-        self.rn = self._grid.at_node['flow__receiver_node'].copy()
 
         # landslide release nodes, volumes and diameters - saved for incremental release
         self.rni = rni
         self.rvi = rvi
         self.rpdi = rpdi
         
-        self.arndn = np.ones([len(rni)])*np.nan
         self.arn = rni
         self.arv = rvi
         self.arpd = rpdi
@@ -618,13 +590,7 @@ class MassWastingRunout(Component):
         """ mass conservation at a grid cell: determines the erosion, deposition
         change in topographic elevation and flow out of a cell as a function of
         debris flow friction angle, particle diameter and the underlying DEM
-        slope
-        
-        
-        slpn needs to be topographic__elevation determined
-        rn can be either topographic__elevation or energy__elevation
-        rp can be either topographic__elevation or energy__elevation
-        """
+        slope"""
         
         # list of deposition depths, used in settlement algorithm
         self.D_L = []
@@ -634,78 +600,43 @@ class MassWastingRunout(Component):
             downslope nodes and slopes"""            
 
             n = vq_r[0]; vin = vq_r[1]; qsi = vq_r[2]
-            
-            dn = self.arndn[self.arn == n]
-
-            # get adjacent nodes
-            adj_n = np.hstack((self._grid.adjacent_nodes_at_node[n],
-            self._grid.diagonal_adjacent_nodes_at_node[n]))
-            
             # maximum slope at node n
             slpn = self._grid.at_node['topographic__steepest_slope'][n].max()
-            
-            # slpn = self._grid.at_node['topographic__steepest_slope'][adj_n].mean()
-
-            
             # look up critical slope at node n
             if len(self.mw_dict['critical slope'])>1: # if option 1, critical slope is not constant but depends on location
                 self.slpc = self.a*self._grid.at_node['drainage_area'][n]**self.b                      
             # incoming particle diameter (weighted average)
             pd_in = self._particle_diameter_in(n,vin) # move
 
-            # can flow continue? need rn node to avoid direction flow towards self.
-            # 
-            
-            # rn: receiver nodes based on either the pre-flow underlying topographic 
-            # slope at node n or slope of the flow at node n once it is over node n
-            # rn = self._grid.at_node.dataset['flow__receiver_node'].values[n] ## receiving node needs to be based on energy el
-            rn = self.rn[n]
+            rn = self._grid.at_node.dataset['flow__receiver_node'].values[n]
             rn = rn[np.where(rn != -1)] 
-            rn = rn[~np.isin(rn,dn)]  # material can not be sent back to the delivery nodes
-            
-            # rn_g: receiver nodes based on the pre-flow underlying topographic slope at node n
-            rn_g = self._grid.at_node.dataset['flow__receiver_node'].values[n]
-            rn_g = rn_g[np.where(rn_g != -1)]
-            # rn_g = rn_g[~np.isin(rn_g,dn)]
-            # if qsi less than the vegetation SD in an undisturbed cell
+
             if ((qsi <=(self.SD_v*self.veg_factor)) and (self._grid.at_node['disturbance_map'][n] == False)):
                 D = qsi 
                 qso = 0 
                 E = 0 
                 deta = D 
                 pd_up = 0
-                Tbs = 0
-                u = 0
-            # if qsi is less than SD in a disturbed cell or the iteration limit has been reached or their are no receiving cells
-            # if no receiving cells, then deposition is at node n
-            elif (qsi <=self.SD_v) or self.c == self.itL-1 or (len(rn) < 1) or ((len(rn) == 1) and ([n] == [rn])):# 
+            elif (qsi <=self.SD_v) or ((len(rn) == 1) and ([n] == [rn])) or self.c == self.itL-1:
                 D = qsi
                 qso = 0
                 E = 0
                 deta = D
                 pd_up = 0
-                Tbs = 0
-                u = 0
 
             else:
-                D = self._deposit(qsi, slpn, n) # function of qsi and topographic elevation before settle/scour by qsi                
-                
-                # scour a function of steepes topographic slope at node, determined before settle/scour by qsi
-               
-                if self.VaryDp:   
-                    opt = 2
-                else:
-                    opt = 1                        
-                E, pd_up, Tbs, u = self._scour(n, qsi, slpn, opt = opt, pd_in = pd_in)   
-                
-                # contstrain that E
-                # Sn = self._grid.at_node['topographic__slope']
-                # if (Sn <= self.slpc) and ((Sn+E/self._grid.dx)>self.slpc):
-                #     E = self.slpc*self.dx-Sn*self.dx
-                if D > 0:#0.33*qsi: 
+                D = self._deposit(qsi, slpn, n)               
+                # scour (and entrainment) only occur in D is less than qsi
+                if D < qsi:                
+                    if self.VaryDp:   
+                        opt = 2
+                    else:
+                        opt = 1                        
+                    E, pd_up = self._scour(n, qsi, slpn, opt = opt, pd_in = pd_in)   
+                    ###
+                else: 
                     E = 0
                     pd_up = 0
-
                 ## flow out
                 qso = qsi-D+E                
                 # small qso are considered zero
@@ -713,18 +644,11 @@ class MassWastingRunout(Component):
                 # chage elevation
                 deta = D-E 
                 
-            # model behavior tracking
-            self.enL.append(E)
-            self.DpL.append(D)
-            self.dfdL.append(qsi)
-            # model behavior tracking
-            self.TdfL.append(Tbs)
-            self.slopeL.append(slpn) # slope
-            self.velocityL.append(u) # velocity (if any)
+                # model behavior tracking
+                self.enL.append(E)
+                
+                self.dfdL.append(qsi)
 
-            # if n in np.array([  8,  25,  42,  59,  76,  93, 110, 127, 144, 161, 178, 195, 212,
-            #        229, 246, 263, 280, 297, 314, 331, 348, 365, 382, 399, 416, 433, 450]):
-            # print('it:{}, node:{}, rn:{}, slope:{}, depostion:{}, entrainment:{}, outflow:{}'.format(self.c, n, rn, slpn, D, E, qso))
 
             # updated node particle diameter (weighted average)
             n_pd = self._particle_diameter_node(n,pd_in,E,D)
@@ -746,73 +670,41 @@ class MassWastingRunout(Component):
 
 
     def _determine_rnp_attributes(self):
-        """ after mass conservation at the cell determined use pre-deposition/scour
-        slope (before results of mass conservation applied to dem) to determine
-        how outgoing volume is partioned to downslope cells and attributes of each
+        """ after mass conservation at the cell determined and slope updated for
+        scour and deposition depths (updated DEM), use updated slope to determine how
+        outgoing volume is partioned to downslope cells and attributes of each
         paritioned volume"""
         
         def rn_rp(nudat_r):
             n = nudat_r[0]; qso = nudat_r[2]; pd_up = nudat_r[4]; pd_in = nudat_r[5]
             qsi = nudat_r[6]; E = nudat_r[7]; D = nudat_r[8]
-            
-            # nodes that sent material to node n
-            dn = self.arndn[self.arn == n]
-            
-            # nodes that receive material from node n
-            # rn = self.rn[n]
-            rn = self._grid.at_node.dataset['flow__receiver_node'].values[n] #   #  defining rn from the energy elevation causes flow to slosh
-            rn_ = rn.copy()
-            rn_ = rn_[np.where(rn_ != -1)]  
-            rn_ = rn_[~np.isin(rn_,dn)] 
-
-           
+            rn = self._grid.at_node.dataset['flow__receiver_node'].values[n]
+            rn = rn[np.where(rn != -1)]   
             
             if qso>0 and n not in self._grid.boundary_nodes: 
                 # move this out of funciton, need to determine rn and rp after material is in cell, not before
                 
                 # receiving proportion of qso from cell n to each downslope cell
-                if len(rn_)<1:
-                    rp = np.array([1])
-                    rn = np.array([n])
-                # if (len(rn[np.where(rn != -1)]) == 1) and ([n] == rn[np.where(rn != -1)]):# or [dn] == rn[np.where(rn != -1)]):
-
-                else:
-                    # rp_ = self.rp[n][np.where(rn != -1)]
-                    rp_ = self._grid.at_node.dataset['flow__receiver_proportions'].values[n][np.where(rn != -1)]
-                    rn = rn[np.where(rn != -1)] 
-                    rp = rp_[~np.isin(rn,dn)]
-                    rn = rn[~np.isin(rn,dn)]
-                    rp = rp[np.where(rp > 0)] # only downslope cells considered
-                    rp = rp/rp.sum() # if some propotion
-
+                rp = self._grid.at_node.dataset['flow__receiver_proportions'].values[n]
+                rp = rp[np.where(rp > 0)] # only downslope cells considered
+                
                 # receiving volume
                 vo = qso*self._grid.dx*self._grid.dy # convert qso to volume
                 rv = rp*vo
-
-                rndn = (np.ones(len(rn))*n).astype(int) # receiving node delivery node (list of node n, length eqaul to number of proportions of qso sent to receiving cells)
 
                 # particle diameter out (weighted average)
                 pd_out = self._particle_diameter_out(pd_up,pd_in,qsi,E,D)    
                 rpd = np.ones(len(rv))*pd_out
 
                 # store receiving nodes and volumes in temporary arrays
-                self.arndn_ns = np.concatenate((self.arndn_ns, rndn), axis = 0) # next step delivery nodes
                 self.arn_ns = np.concatenate((self.arn_ns, rn), axis = 0) # next step receiving node list
                 self.arv_ns = np.concatenate((self.arv_ns, rv), axis = 0) # next step receiving node incoming volume list
                 self.arpd_ns = np.concatenate((self.arpd_ns, rpd), axis = 0) # next step receiving node incoming particle diameter list
 
-   
                 self.arnL.append(rn)
                 self.arvL.append(rv)
                 self.arpdL.append(rpd)
-                self.arndnL.append(rndn)
-                # print('n = {}, rn = {}, rp ={}, rv ={}, qsi ={} '.format(n, rn, rp, rv, qsi))
-                # if n in np.array([  8,  25,  42,  59,  76,  93, 110, 127, 144, 161, 178, 195, 212,
-                #         229, 246, 263, 280, 297, 314, 331, 348, 365, 382, 399, 416, 433, 450]):
-                #     print('dn:{}, n:{}, outflow:{}, rn_:{}, rn:{}, rp:{}'.format(dn, n, qso, rn_, rn,rp)) 
         
-            # else:
-                # print("no receiving nodes, qso:{}, boudary node:{}".format(qso,n in self._grid.boundary_nodes))
         ll = np.array([rn_rp(r) for r in self.nudat],dtype=object)
 
 
@@ -823,7 +715,6 @@ class MassWastingRunout(Component):
 
         def VQ(n):           
             # total incoming volume
-            # print('arv:{}, arn:{}'.format(self.arv,self.arn))
             vin = np.sum(self.arv[self.arn == n])
             # convert to flux/cell width
             qsi = vin/(self._grid.dx*self._grid.dx)
@@ -930,7 +821,7 @@ class MassWastingRunout(Component):
                     
                     # determine the total flux / unit width sent to S > Sc downslope cells
                     # mean downslope cell elevation
-                    zo = self._grid.at_node['topographic__elevation'][rn].min()
+                    zo = self._grid.at_node['topographic__elevation'][rn].mean()
                     
                     # node n elevation
                     zi = self._grid.at_node['topographic__elevation'][n]
@@ -977,16 +868,16 @@ class MassWastingRunout(Component):
             # function of total stress under uniform flow conditions
             
             # erosion depth,:
-            Tbs = self.rodf*self.g*depth*(np.sin(theta))
+            Tbs = self.rodf*self.g*depth*np.sin(theta)
             Ec = self.cs*(Tbs)**self.eta
-            u = 5
+        
         if opt == 2:
             # shear stress apprixmated as a power functino of inertial shear stress
             phi = np.arctan(self.slpc) # approximate phi [radians] from criticle slope [L/L]
             
             # inertial stresses
             us = (self.g*depth*slope)**0.5
-            u = us*5.75*np.log10(depth/Dp)
+            u = us*5.5*np.log10(depth/Dp)
             
             dudz = u/depth
             Tcn = np.cos(theta)*self.vs*self.ros*(Dp**2)*(dudz**2)
@@ -1005,11 +896,9 @@ class MassWastingRunout(Component):
         E = min(dmx, Ec) # convert Tb to kPa
 
         # model behavior tracking
-        # self.TdfL.append(Tbs)
-        # self.slopeL.append(slope) # slope
-        # self.velocityL.append(u) # velocity (if any)
+        self.TdfL.append(Tbs)
         
-        return(E, pd_up, Tbs, u)
+        return(E,pd_up)
 
                 
     def _deposit(self,qsi,slpn,n):
@@ -1043,6 +932,7 @@ class MassWastingRunout(Component):
                 
         # else:
         #     D = DL
+                
         return(D)
 
 
@@ -1062,34 +952,10 @@ class MassWastingRunout(Component):
                   
         if len(rn_e) > 0: 
                        
-            zo = self._grid.at_node['topographic__elevation'][rn_e].min()
+            zo = self._grid.at_node['topographic__elevation'][rn_e].mean()
             
         else:  # a pit in the energy elevation surface
             zo = None
-            
-        return zo
-
-    def _determine_zo_v2(self, n, zi, qsi):
-        """determine the elevation of the lowest adjacent node
-        relative to the elevation of the node+the flow thickness
-        if all adjacent nodes are higher, no elevation is returned"""
-        
-        # get adjacent nodes
-        adj_n = np.hstack((self._grid.adjacent_nodes_at_node[n],
-        self._grid.diagonal_adjacent_nodes_at_node[n]))
-                        
-        # incoming energy at node i
-        ei = qsi+zi
-        
-        # nodes below incoming energy surface
-        rn_e = adj_n[self._grid.at_node['topographic__elevation'][adj_n]<ei]
-                  
-        if len(rn_e) > 0: 
-                       
-            zo = self._grid.at_node['topographic__elevation'][rn_e].min()
-            
-        else:  # a pit in the energy elevation surface
-            zo = ei
             
         return zo
 
@@ -1119,18 +985,13 @@ class MassWastingRunout(Component):
         
         zo = self._determine_zo(n, zi, qsi )
         
-        if self._deposit_style == 'downslope_deposit':
-            rule = ((zi-zo)<=(qsi+slp_h))
-        elif self._deposit_style == 'no_downslope_deposit':
-            rule = ((zi-zo)<=(slp_h))
-        
         if zo:
         
             if zo>zi:            
     
                 Dc = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)
             
-            elif (zo<=zi) and rule:#((zi-zo)<=(slp_h)):#######: #
+            elif (zo<=zi) and ((zi-zo)<=(qsi+slp_h)):
                 
                 Dc = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)
             else:
@@ -1142,30 +1003,8 @@ class MassWastingRunout(Component):
         else: # a pit in the energy elevation surface
             Dc = qsi 
             
-        # print('slp_h = {}, zi = {}, qsi ={}, zo ={}, D ={} '.format(slp_h, zi, qsi, zo, Dc))
         return(Dc)
     
-    def _deposit_friction_angle_v2(self, qsi, n):
-        
-        slp_h = self.slpc*self._grid.dx
-        
-            # elevation at node i
-        zi = self._grid.at_node['topographic__elevation'][n]
-        
-        zo = self._determine_zo_v2(n, zi, qsi )
-        
-        if zo >= zi+qsi: # if closest node at energy elevation or higher, all deposited
-            Dc = qsi
-        elif (zi-zo) > (qsi+slp_h):#slp_h: # if step down is higher than critical slope, no deposit
-            Dc = 0
-        else:
-            Dc = 0.5*qsi+(zo-zi+slp_h)/2#zo-zi+slp_h# qsi+zo-zi-slp_h#
-
-        # if n in np.array([  8,  25,  42,  59,  76,  93, 110, 127, 144, 161, 178, 195, 212,
-        #        229, 246, 263, 280, 297, 314, 331, 348, 365, 382, 399, 416, 433, 450]):            
-        # print('slp_h = {}, zi = {}, qsi ={}, zo ={}, D ={} '.format(slp_h, zi, qsi, zo, Dc))
-        return(Dc)
-
     
     def _particle_diameter_in(self,n,vin):
         """determine the weighted average particle diameter of the incoming
@@ -1218,31 +1057,3 @@ class MassWastingRunout(Component):
             raise ValueError(msg)
         
         return pd_out
-
-# # momentum tracking functions
-#     def _momentum_in(self,n,vin):
-#         """determine the weighted average momentum (averge h*slope when material
-#         entered of the in incoming material"""       
-#         if (vin == 0):
-#             m_in = 0
-#         elif (np.isnan(vin)) or (np.isinf(vin)):
-#             msg = "in-flowing volume is nan or inf"
-#             raise ValueError(msg)
-#         else:           
-#             m_in = np.sum((self.arpd[self.arn == n])*(self.arv[self.arn == n])/vin)        
-#         return pd_in
-
-
-    # @staticmethod
-    # def _momentum_out(m_up,m_in,qsi,E,D):
-    #     """determine the weighted average momentum (slope) of the outgoing
-    #     flow"""
-        
-    #     m_out = np.sum((m_up*E+m_in*(qsi-D))/(qsi-D+E))
-                
-    #     if (m_out <=0) or (np.isnan(m_out)) or (np.isinf(m_out)):
-    #         msg = "out-flowing momentum is zero, negative, nan or inf"
-    #         print("pd_up{}, pd_in{}, qsi{}, E{}, D{}".format(pd_up, pd_in, qsi, E, D))
-    #         raise ValueError(msg)
-        
-    #     return pd_out
