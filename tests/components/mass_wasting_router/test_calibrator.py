@@ -676,17 +676,33 @@ RMSE_Vd = calibrate._RMSE(observed, modeled)
 #%%plot results of MCMC
 
 
-RMSE_map = []
-mask =  np.abs(mg.at_node['dem_dif_o'])>0           
+# RMSE_map = []
+# mask =  np.abs(mg.at_node['dem_dif_o'])>0           
 
-for key in calibrate.dem_dif_m_dict:
-        observed = mg.at_node['dem_dif_o'][mask]
-        modeled = calibrate.dem_dif_m_dict[key]       
-        mask_m =  np.abs(modeled)<=0 
-        modeled[mask_m] = np.abs(modeled).max()
-        modeled = modeled[mask]
-        RMSE_map.append(calibrate._RMSE(observed, modeled))
-calibrate.LHvals['1/RMSE m2'] = 1/np.array(RMSE_map)
+# for key in calibrate.dem_dif_m_dict:
+#         observed = mg.at_node['dem_dif_o'][mask]
+#         modeled = calibrate.dem_dif_m_dict[key]       
+#         mask_m =  np.abs(modeled)<=0 
+#         modeled[mask_m] = np.abs(modeled).max()
+#         modeled = modeled[mask]
+#         RMSE_map.append(calibrate._RMSE(observed, modeled))
+# calibrate.LHvals['1/RMSE m2'] = 1/np.array(RMSE_map)
+
+
+
+# RMSE_oT = []
+ 
+
+# for key in calibrate.dem_dif_m_dict:
+        
+#         calibrate.mg.at_node['dem_dif_m'] =calibrate.dem_dif_m_dict[key]       
+#         RMSE_oT.append(_RMSEomegaT())
+# calibrate.LHvals['1/RMSE m2'] = np.array(RMSE_oT)
+
+
+
+
+
 
 it_best = calibrate.LHvals['iteration'][calibrate.LHvals['candidate_posterior'] == calibrate.LHvals['candidate_posterior'].max()].values[0]
 
@@ -731,16 +747,16 @@ plt.savefig(mdir+svnm+"_likelihood_metrics_best.png", dpi = 300, bbox_inches='ti
 # plt.xlim(it_best-50,it_best+50)
 plt.show()
 
-plt.figure(figsize = (15,5))
-plt.plot(calibrate.jstracking,'k-', alpha = 0.5, linewidth = 2)
-plt.ylabel('jump-size distribution $\sigma$', fontsize = 16)
-plt.xlabel('n*10 iteration', fontsize = 16)
+# plt.figure(figsize = (15,5))
+# plt.plot(calibrate.jstracking,'k-', alpha = 0.5, linewidth = 2)
+# plt.ylabel('jump-size distribution $\sigma$', fontsize = 16)
+# plt.xlabel('n*10 iteration', fontsize = 16)
 
 
 
 
 # calibration plots
-# params_c = params
+params_c = params
 results = calibrate.LHvals
 
 x_mn = params_c['SD'][0]

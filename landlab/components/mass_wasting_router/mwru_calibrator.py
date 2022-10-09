@@ -148,6 +148,7 @@ class MWRu_calibrator():
         # create the modeldiff_m field
         diff = self.mg.at_node['topographic__elevation'] - self.mg.at_node['topographic__initial_elevation']
         self.mg.at_node['dem_dif_m'] = diff
+        
         self.dem_dif_m_dict[self.it] = self.mg.at_node['dem_dif_m']
         if self.plot_tf == True:
             plt.figure('iteration'+str(self.it))
@@ -342,7 +343,7 @@ class MWRu_calibrator():
         O = A_o*self._RMSE(observed, modeled)
         # if O != 0:
         #     O = 1/(O*c)
-        T = X+U*c+O*c
+        T = X+U*10+O*2
         # T = X/T+(U*c)/T+(O*c)/T
         RMSEomegaT =1/T# X/T-U/T-O/T+1 ##
         return RMSEomegaT
@@ -387,6 +388,19 @@ class MWRu_calibrator():
          RMSEomegaT =1/T# X/T-U/T-O/T+1 ##
          return RMSEomegaT
 
+    def _RMSE_Vd(self):
+        observed = self.mbLdf_o[self.RMSE_metric]; 
+        modeled = self.mbLdf_m[self.RMSE_metric]
+        # modeled[modeled == 0] = -1*np.abs((observed-modeled).mean()*10) 
+        RMSE_Vd = self._RMSE(observed, modeled)
+        
+        plt.figure()
+        plt.plot(self.mbLdf_o['distance'], observed, label = 'observed')
+        plt.plot(self.mbLdf_m['distance'], modeled, label = 'modeled')
+        plt.legend()
+        plt.show()
+        
+        return RMSE_Vd
 
     def _RMSE(self, observed, modeled):
         """computes the root mean square error (RMSE) between two difference 
@@ -395,7 +409,7 @@ class MWRu_calibrator():
         if modeled.size == 0:
             modeled = np.array([0])
             observed = np.array([0])
-        RMSE = (((observed-modeled)**2).mean())**0.5
+        RMSE = (((observed-modeled)**2).mean())
         return RMSE
     
 
@@ -535,8 +549,11 @@ class MWRu_calibrator():
                 # get modeled deposition profile
                 self.mbLdf_m = self._channel_profile_deposition("modeled")
                 # determine RMSE metric
-                observed = self.mbLdf_o[self.RMSE_metric]; modeled = self.mbLdf_m[self.RMSE_metric]
-                RMSE_Vd = self._RMSE(observed, modeled)
+                # observed = self.mbLdf_o[self.RMSE_metric]; modeled = self.mbLdf_m[self.RMSE_metric]
+                # RMSE_Vd = self._RMSE(observed, modeled)
+                RMSE_Vd = self._RMSE_Vd()
+
+                
                 observed = self.mg.at_node['dem_dif_o'][self.mbLdf_o['node']] 
                 modeled = self.mg.at_node['dem_dif_m'][self.mbLdf_m['node']]
                 RMSE_pf = self._RMSE(observed, modeled)
@@ -546,7 +563,7 @@ class MWRu_calibrator():
                 # determine deposition overlap metric, omegaT
                 omegaT = 1+self._omegaT(metric = self.omega_metric)
                 # determine the difference in thickness
-                RMSEomegaT = self._RMSEomegaTv2(metric = self.omega_metric)
+                RMSEomegaT = self._RMSEomegaT(metric = self.omega_metric)
                 DTE = self._deposition_thickness_error()
                 # determine psoterior likilhood: product of RMSE, omegaT and prior liklihood
                 candidate_posterior = prior_t*(1/RMSE_Vd)*omegaT*RMSEomegaT#*(1/RMSE_pf)*(1/RMSE_map)#*DTE
