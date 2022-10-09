@@ -301,10 +301,13 @@ channel_distance = profile_distance(mg, channel_nodes)
 profile_calib_dict = {"el_l":el_l, "el_h": el_h, "channel_nodes": channel_nodes,
                       "channel_distance":channel_distance, "cL":cL}
 
+jump_size = 0.09
+alpha_max = 0.8
+alpha_min = 0.6#alpha_max-0.4
+N_cycles = 100
 
-
-calibrate = MWRu_calibrator(example_MWRu, params_c, profile_calib_dict = profile_calib_dict,
-                            prior_distribution = "uniform", jump_size = 0.2, plot_tf = False, seed = 7)
+calibrate = MWRu_calibrator(example_MWRu, params_c, profile_calib_dict = profile_calib_dict, N_cycles = N_cycles,
+                            prior_distribution = "uniform", jump_size = jump_size, alpha_max = alpha_max, alpha_min=alpha_min, plot_tf = False, seed = 7)
 
 
 #%% run MWRu with known parameter values to create a dem_diff that can be set as the observed
@@ -496,7 +499,7 @@ plt.ylabel("downstream cumulative volumetric change")
 
 # using Vd
 # run a simulartion
-calibrate(max_number_of_runs = 100)
+calibrate(max_number_of_runs = 2000)
 
 # get the modeled profile values
 mbLdf_m = calibrate._channel_profile_deposition("modeled")
@@ -657,6 +660,19 @@ RMSE_Vd = calibrate._RMSE(observed, modeled)
 
 
 
+# field = "dem_dif_o"
+# field = None
+# plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r', name = " o")
+# plt.clim(-1,1)
+
+# mg.at_node['model_dif_compare'] = calibrate.dem_dif_m_dict[it_best]
+
+# field = "model_dif_compare"
+# field = None
+# plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "model_dif_compare", cmap = 'RdBu_r', name = " m")
+# plt.clim(-1,1)
+
+
 #%%plot results of MCMC
 
 
@@ -678,17 +694,23 @@ it_best = calibrate.LHvals['iteration'][calibrate.LHvals['candidate_posterior'] 
 
 
 
-field = "dem_dif_o"
-field = None
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r', name = " o")
-plt.clim(-1,1)
 
-mg.at_node['model_dif_compare'] = calibrate.dem_dif_m_dict[it_best]
-
-field = "model_dif_compare"
-field = None
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "model_dif_compare", cmap = 'RdBu_r', name = " m")
-plt.clim(-1,1)
+# check RMSE values
+itm = calibrate.LHvals['iteration'].max()
+plt.figure(figsize = (15,5))
+plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE']/calibrate.LHvals['1/RMSE'].max(),'k-', alpha = 0.5, label = 'RMSE V')
+# plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE p']/calibrate.LHvals['1/RMSE p'].max(),'r-', alpha = 0.5, label = 'RMSE p')
+# plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE m']/calibrate.LHvals['1/RMSE m'].max(),'g-', alpha = 0.5, label = 'RMSE m')
+# plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE m2']/calibrate.LHvals['1/RMSE m2'].max(),'o-', alpha = 0.5, label = 'RMSE m2')
+plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['RMSEomegaT']/calibrate.LHvals['RMSEomegaT'].max(),'o-', alpha = 0.5, label = 'RMSEOmegaT')
+plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['candidate_posterior']/calibrate.LHvals['candidate_posterior'].max(),'c-', alpha = 0.5, label = 'likelihood')
+plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['omegaT']/calibrate.LHvals['omegaT'].max(),'m-', alpha = 0.5, label = 'OmegaT')
+plt.xlim(0,calibrate.LHvals['iteration'].max()*1.05)
+plt.xticks(np.arange(0,itm+1, step=int(1+itm/20)))
+plt.legend(fontsize = 8, loc = "right")
+plt.xlim(it_best-50,it_best+50)
+plt.savefig(mdir+svnm+"_likelihood_metrics.png", dpi = 300, bbox_inches='tight')
+plt.show()
 
 
 
@@ -705,27 +727,14 @@ plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['omegaT']/calibrate.LHv
 plt.xlim(0,calibrate.LHvals['iteration'].max()*1.05)
 plt.xticks(np.arange(0,itm+1, step=int(1+itm/20)))
 plt.legend(fontsize = 8, loc = "right")
-# plt.xlim(it_best-50,it_best+50)
-plt.savefig(mdir+svnm+"_likelihood_metrics.png", dpi = 300, bbox_inches='tight')
-plt.show()
-
-
-
-# check RMSE values
-itm = calibrate.LHvals['iteration'].max()
-plt.figure(figsize = (15,5))
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE']/calibrate.LHvals['1/RMSE'].max(),'k-', alpha = 0.5, label = 'RMSE V')
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE p']/calibrate.LHvals['1/RMSE p'].max(),'r-', alpha = 0.5, label = 'RMSE p')
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['1/RMSE m']/calibrate.LHvals['1/RMSE m'].max(),'g-', alpha = 0.5, label = 'RMSE m')
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['DTE']/calibrate.LHvals['DTE'].max(),'c-', alpha = 0.5, label = 'DTE')
-plt.plot(calibrate.LHvals['iteration'], calibrate.LHvals['omegaT']/calibrate.LHvals['omegaT'].max(),'m-', alpha = 0.5, label = 'OmegaT')
-plt.xlim(0,calibrate.LHvals['iteration'].max()*1.05)
-plt.xticks(np.arange(0,itm+1, step=int(1+itm/20)))
-plt.legend(fontsize = 8, loc = "right")
 plt.savefig(mdir+svnm+"_likelihood_metrics_best.png", dpi = 300, bbox_inches='tight')
 # plt.xlim(it_best-50,it_best+50)
 plt.show()
 
+plt.figure(figsize = (15,5))
+plt.plot(calibrate.jstracking,'k-', alpha = 0.5, linewidth = 2)
+plt.ylabel('jump-size distribution $\sigma$', fontsize = 16)
+plt.xlabel('n*10 iteration', fontsize = 16)
 
 
 
