@@ -301,7 +301,7 @@ class MWRu_calibrator():
         modeled debris flow deposition and the the calibration metric OmegaT following
         Heiser et al. (2017)
         """
-        c = 10
+        c1 = 10; c2 = 2
         n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
         na = self.mg.dx*self.mg.dy
         if metric == 'runout':
@@ -343,7 +343,7 @@ class MWRu_calibrator():
         O = A_o*self._RMSE(observed, modeled)
         # if O != 0:
         #     O = 1/(O*c)
-        T = X+U*10+O*2
+        T = X+U*c1+O*c2
         # T = X/T+(U*c)/T+(O*c)/T
         RMSEomegaT =1/T# X/T-U/T-O/T+1 ##
         return RMSEomegaT
@@ -389,9 +389,10 @@ class MWRu_calibrator():
          return RMSEomegaT
 
     def _RMSE_Vd(self):
+        c = 2
         observed = self.mbLdf_o[self.RMSE_metric]; 
         modeled = self.mbLdf_m[self.RMSE_metric]
-        # modeled[modeled == 0] = -1*np.abs((observed-modeled).mean()*10) 
+        modeled[modeled == 0] = -1*np.abs((observed-modeled).mean()*c) 
         RMSE_Vd = self._RMSE(observed, modeled)
         
         plt.figure()
