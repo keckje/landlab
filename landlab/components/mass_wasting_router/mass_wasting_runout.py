@@ -131,7 +131,8 @@ class MassWastingRunout(Component):
     deposition_rule = "both",
     veg_factor = 3,
     dist_to_full_flux_constraint = 0,
-    deposit_style = 'downslope_deposit'):
+    deposit_style = 'downslope_deposit',
+    anti_sloshing = False):
         
         super().__init__(grid)
 
@@ -148,7 +149,8 @@ class MassWastingRunout(Component):
         self.veg_factor = veg_factor # increase SD by this factor for all undisturbed nodes
         self.dist_to_full_flux_constraint = dist_to_full_flux_constraint # make his larger than zero if material is stuck
         self._deposit_style = deposit_style # assume deposition below cell or not
-        self.slosh_limit = 5
+        self.slosh_limit = 3
+        self._anti_sloshing = anti_sloshing
         if self.VaryDp:
             print(' running with spatially variable Dp ')
 
@@ -358,6 +360,7 @@ class MassWastingRunout(Component):
         for mw_i,inn in enumerate(innL):
                          
             mw_id = self.mw_ids[mw_i]
+            self._lsvol = self._grid.at_node['soil__thickness'][inn].sum()*self._grid.dx*self._grid.dy # set volume
 
             # prep data containers
             cL[mw_i] = []
@@ -528,21 +531,42 @@ class MassWastingRunout(Component):
                     self.arv_r[mw_id].append(self.arvL)
                     self.arn_r[mw_id].append(self.arnL)
                     self.arpd_r[mw_id].append(self.arpdL)     
-                    self.arndn_r[mw_id].append(self.arndnL)
+                    self.arndn_r[mw_id].append(self.arndn)
 
                 
-                self._sloshing_count(mw_id)
+                
                 # update iteration counter
                 c+=1
                 
                 if c%20 ==0:
                     print(c)  
+                    
+                    if self._anti_sloshing:
+                        self._sloshing_count(mw_id,mw_i)
 
-    def _sloshing_count(self,mw_id):
+    def _sloshing_count(self,mw_id,mw_i):
   
-         if self.c>30 and [list(x) for x in self.arndn_r[mw_id][-1]] == [list(x) for x in self.arndn_r[mw_id][-2]]:
-             self.sloshed = self.sloshed+1
-             
+          # if self.c>5 and [list(x) for x in self.arndn_r[mw_id][-1]] == [list(x) for x in self.arndn_r[mw_id][-2]]:
+        # a1 = self.arndn_r[mw_id][-1]; a2 = self.arndn_r[mw_id][-2]
+        # l_m = (len(a1)+len(a2))/2
+        # slosh = len(np.intersect1d(a1,a2))/l_m
+        
+        if self.c>20:
+            sumdif = []
+            irR = max(self.df_evo_maps[mw_i].keys()); irL = irR-20
+            for w in np.linspace(irL,irR,21):                  
+                dif = self.df_evo_maps[mw_i][w]-self._grid.at_node['topographic__initial_elevation']
+                sumdif.append(dif[dif>0].sum())
+            sumdif = np.array(sumdif)    
+            difs = sumdif[:-1]-sumdif[1:]
+        
+            self.difsmn = np.abs((difs.mean()*self._grid.dx*self._grid.dy)/self._lsvol)
+            print('difsmn:{}'.format(self.difsmn))
+            
+            if self.difsmn < 0.001:
+                 self.sloshed = self.sloshed+1
+                 print('##############################################   SLOSHEDDDDDDDDDDDDDD')
+                 
              
     def _update_disturbance_map(self):
         """map of boolian values indicating if a node has been disturbed (changed 
@@ -684,7 +708,7 @@ class MassWastingRunout(Component):
                 pd_up = 0
                 Tbs = 0
                 u = 0
-                print('less than SD veg, it:{}, node:{}, qsi:{}, D:{}, qso:{}'.format(self.c,n,qsi,D,qso))
+                # print('less than SD veg, it:{}, node:{}, qsi:{}, D:{}, qso:{}'.format(self.c,n,qsi,D,qso))
             # if qsi is less than SD in a disturbed cell or the iteration limit has been reached or their are no receiving cells
             # if no receiving cells, then deposition is at node n
             elif (qsi <=self.SD_v) or self.c == self.itL-1 or (len(rn) < 1) or ((len(rn) == 1) and ([n] == [rn])):# 
@@ -695,8 +719,8 @@ class MassWastingRunout(Component):
                 pd_up = 0
                 Tbs = 0
                 u = 0
-                print('qsi less than SD or rn <1 or sent to self, it:{}, node:{}, qsi:{}, D:{}, qso:{}'.format(self.c,n,qsi,D,qso))
-                print('SDv:{}, rn:{}'.format(self.SD_v, rn))
+                # print('qsi less than SD or rn <1 or sent to self, it:{}, node:{}, qsi:{}, D:{}, qso:{}'.format(self.c,n,qsi,D,qso))
+                # print('SDv:{}, rn:{}'.format(self.SD_v, rn))
             else:
                 D = self._deposit(qsi, slpn, n) # function of qsi and topographic elevation before settle/scour by qsi                
                 
@@ -720,7 +744,7 @@ class MassWastingRunout(Component):
                 qso = qsi-D+E                
                 # small qso are considered zero
                 qso  = np.round(qso,decimals = 8)
-                print('qso:'+str(qso))
+                # print('qso:'+str(qso))
                 # chage elevation
                 deta = D-E 
                 
@@ -1139,7 +1163,7 @@ class MassWastingRunout(Component):
                 D = min(zo-zi+slp_h,qsi)
                 return np.round(D,decimals = 5)
             
-        print('it:{}, node:{}, zi:{}, zo:{}, rule value:{}'.format(self.c,n, zi, zo,rule))
+        # print('it:{}, node:{}, zi:{}, zo:{}, rule value:{}'.format(self.c,n, zi, zo,rule))
         
         if zo is None:# a pit in the energy elevation surface
             Dc = qsi 
@@ -1147,18 +1171,18 @@ class MassWastingRunout(Component):
             if zo>zi:            
 
                 Dc = eq(qsi,zo,zi, slp_h)
-                print('zo>zi, qsi:{}, D:{}'.format(qsi, Dc))
+                # print('zo>zi, qsi:{}, D:{}'.format(qsi, Dc))
             
             elif (zo<=zi) and rule:#((zi-zo)<=(slp_h)):#######: #
                 
                 Dc = eq(qsi,zo,zi, slp_h)
-                print('zo<=zi, qsi:{}, D:{}'.format(qsi, Dc))
+                # print('zo<=zi, qsi:{}, D:{}'.format(qsi, Dc))
             else:
                 Dc = 0
-                print('slope exceeds slp_h or slp_h+qsi, qsi:{}, D:{}'.format(qsi, Dc))
+                # print('slope exceeds slp_h or slp_h+qsi, qsi:{}, D:{}'.format(qsi, Dc))
             if Dc <0:
                 Dc = 0
-                print('D less than zero, qsi:{}, D:{}'.format(qsi, Dc))
+                # print('D less than zero, qsi:{}, D:{}'.format(qsi, Dc))
                 # print("negative deposition!! n {}, qsi{}, ei {}, DL {}, Dc {}".format(n,qsi,ei,DL,Dc))
                 # raise(ValueError)
             

@@ -276,7 +276,7 @@ mg.at_node['mass__wasting_id'][lsn] = 1
 npu = [1] 
 nid = [1] 
 
-params_o = [0.01, 0.05, 0.05]
+params_o = [0.01, 0.01, 0.05]
 slpc = [params_o[0]]   
 SD = params_o[1]
 cs = params_o[2]
@@ -371,8 +371,8 @@ if Visualize:
             etopo = MWRu.df_evo_maps[i][c]#-mg.at_node['topographic__initial_elevation']
             topo = MWRu.topo_evo_maps[i][c]
             # imshow_grid_at_node(mg,'df_topo',cmap ='RdBu_r')
-            if c>100:
-                break                  
+            # if c>100:
+            #     break                  
             y_ = topo[pf]
             _y_ = etopo[pf]
             plt.figure(figsize = (6,3))
@@ -383,6 +383,7 @@ if Visualize:
             plt.xlim([0, max(x_)])
             plt.legend()
             plt.grid(alpha = 0.5)  
+            plt.title('iteration '+str(c))
 
 
     # for i in np.arange(0,len(MWRu.mw_ids)):
@@ -437,3 +438,45 @@ plt.xlabel('slope'); plt.ylabel('scour depth [m]]')
 plt.figure()
 plt.plot(MWRu.slopeL, MWRu.DpL,'k.', alpha = 0.5)
 plt.xlabel('slope'); plt.ylabel('deposition depth [m]]')
+
+
+#%% scripts for checking metrics with dr_dq array
+# dr_dq = pd.DataFrame(zip(DebrisFlows.arndn_r[1],DebrisFlows.arn_r[1]), columns = ['deliverying nodes','receiving nodes'])
+met = []
+for i in range(dr_dq.shape[0]-5):
+    
+    a1 =dr_dq['deliverying nodes'].iloc[i+5]
+    a2 =dr_dq['deliverying nodes'].iloc[i]
+
+
+    l_m = (len(a1)+len(a2))/2
+    slosh = len(np.intersect1d(a1,a2))/l_m # number of shared delivering nodes / average number of delivering nodes
+    
+    met.append(slosh)
+    
+met = np.array(met)
+plt.figure()
+plt.plot(met)
+plt.title('number of shared delivering nodes / average number of delivering nodes')
+
+dm = met[1:]-met[:-1]
+plt.figure()
+plt.plot(dm)
+
+av = pd.DataFrame(dm).rolling(window = 5).mean()/np.abs(dm.max())
+plt.figure()
+plt.plot(av)
+
+#%%
+MWRu = DebrisFlows
+sumdif = []
+for c in MWRu.df_evo_maps[0].keys():                  
+    dif = MWRu.df_evo_maps[0][c]-mg.at_node['topographic__initial_elevation']
+    dif[dif<0].sum()
+    sumdif.append(dif[dif>0].sum())
+sumdif = np.array(sumdif)    
+difs = (sumdif[:-1]-sumdif[1:])*mg.dx*mg.dy    
+difspd = pd.DataFrame(difs)    
+av = pd.DataFrame(difspd).rolling(window = 20).mean()/MWRu._lsvol#np.nanmax(np.abs(difspd))
+plt.figure()
+plt.plot(av)
