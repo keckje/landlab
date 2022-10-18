@@ -164,21 +164,21 @@ pdir = "D:/UW_PhD/PreeventsProject/Paper_2_MWR/Landlab_Development/mass_wasting_
 
 dxdy = 10
 rows = 27
-columns = 15
-ls_width = 3
-ls_length = 3
-slope_above_break = 0.6
-slope_below_break = 0.02
+columns = 1
+ls_width = 1
+ls_length = 1
+slope_above_break = 0.0
+slope_below_break = 0.0
 slope_break = 0.8
 soil_thickness = 5
 
 mg, lsn, pf, cc = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
                               , slope_below_break = slope_below_break, slope_break = slope_break, ls_width = ls_width, ls_length = ls_length)
-
+lsn = 76
 dem = mg.at_node['topographic__elevation']
 
-mg.at_node['topographic__elevation'][55] = mg.at_node['topographic__elevation'][55]+0.5
-
+mg.at_node['topographic__elevation'][76] = mg.at_node['topographic__elevation'][76]+5
+mg.at_node['topographic__elevation'][79] = mg.at_node['topographic__elevation'][79]+7
 # domain for plots
 xmin = mg.node_x.min(); xmax = mg.node_x.max(); ymin = mg.node_y.min(); ymax = mg.node_y.max()
 
@@ -203,7 +203,7 @@ mg.at_node['hillshade'] = mg.calc_hillshade_at_node(elevs=dem, alt=37., az=210.)
 # soil thickness
 thickness = np.ones(mg.number_of_nodes)*soil_thickness
 mg.add_field('node', 'soil__thickness',thickness)
-
+mg.at_node['soil__thickness'][76] = 5#mg.at_node['topographic__elevation'][70]+5
 
 # # no soil thickness
 # thickness = np.zeros(mg.number_of_nodes)*soil_thickness
@@ -276,26 +276,26 @@ mg.at_node['mass__wasting_id'][lsn] = 1
 npu = [1] 
 nid = [1] 
 
-params_o = [0.01, 0.05, 0.05]
+params_o = [0.01, 0.01, 0.05]
 slpc = [params_o[0]]   
 SD = params_o[1]
 cs = params_o[2]
 
 
 
-mg.at_node['particle__diameter'] = np.ones(len(mg.node_x))*0.15
+# mg.at_node['particle__diameter'] = np.ones(len(mg.node_x))*0.15
 
 mw_dict = {'critical slope':slpc, 'minimum flux':SD,
             'scour coefficient':cs}
 
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
-MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 500,
+MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 150,
                                   dist_to_full_flux_constraint = 0,
                                   routing_surface = "energy__elevation",
                                   settle_deposit = False,
                                   deposition_rule = "critical_slope",
-                                  deposit_style = 'downslope_deposit')
+                                  deposit_style = 'no_downslope_deposit')
 
 
 #%% run
@@ -308,7 +308,7 @@ mg.at_node['dem_dif_o'] = mg.at_node['topographic__elevation']-mg.at_node['topog
 
 #%% view obseved runout
 LLT.plot_node_field_with_shaded_dem(mg,field = 'dem_dif_o', fontsize = 10,cmap = 'RdBu_r', plot_name = 'hillshade')
-plt.clim(-0.5,0.5)
+plt.clim(-1,1)
 
 field = "dem_dif_o"
 plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r')
@@ -383,6 +383,7 @@ if Visualize:
             plt.xlim([0, max(x_)])
             plt.legend()
             plt.grid(alpha = 0.5)  
+            plt.title('iteration:'+str(c-1))
 
 
     # for i in np.arange(0,len(MWRu.mw_ids)):

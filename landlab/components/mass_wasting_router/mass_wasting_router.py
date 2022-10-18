@@ -26,7 +26,7 @@ class MassWastingRouter(Component):
     or network scale sediment transport model may be coupled with the mass wasting
     router so lang as the inputs and outputs are formatted correctly.
     
-    componenmt overview:
+    component overview:
         
     Hillslope scale landslides are interpreted from the a raster model grid 
     "Landslide__Probability" or "Factor__of_safety" field.
@@ -138,7 +138,7 @@ class MassWastingRouter(Component):
             Ct = 5000,
             BCt = 100000, 
             MW_to_channel_threshold = 50, # landslide mapping
-            TerraceWidth = 1,
+            terrace_width = 1,
             mass_wasting_threshold = 0.75, 
             min_mw_cells = 1,
             release_dict = {'number of pulses':[1], # mass wasting runout
@@ -146,7 +146,7 @@ class MassWastingRouter(Component):
             df_dict = {'critical slope':[0.1], 
                        'minimum flux':0.03,
                        'scour coefficient':0.02},
-            FluvialErosionRate = [[0.03,-0.43], [0.01,-0.43]], # mass wasting eroder
+            fluvial_erosion_rate = [[0.03,-0.43], [0.01,-0.43]], # mass wasting eroder
 
             parcel_volume = 0.2, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
             **kwds):
@@ -172,7 +172,7 @@ class MassWastingRouter(Component):
             Landslides within this distance of the channel area assumed to extend
             to the channel (rather than fail and runout over the downslope regolith)
             [m]
-        TerraceWidth: int
+        terrace_width: int
             Width of terrace that boarders the fullvial channel network [cells]
         mass_wasting_threshold: float
             Threshold value of mass_wasting metric above which, the cell is assumed
@@ -219,7 +219,7 @@ class MassWastingRouter(Component):
                     
         MASS WASTING ERODER
         
-        FluvialErosionRate: list of lists
+        fluvial_erosion_rate: list of lists
             Each list is the coeficient and exponent of a negative power function
             that predicts fluvial erosion rate [m/storm] as a fuction of time
             since the cell was distrubed by a debris flow or extreme flow. 
@@ -316,13 +316,6 @@ class MassWastingRouter(Component):
         
         
         ### class instance of MassWastingRunout
-        # none
-        # self.DebrisFlows = MWRu(self._grid,
-        #                         release_dict,
-        #                         df_dict, save_mw_dem = True,
-        #                         opt1 = False, opt2 = True, 
-        #                         opt3 = True, opt4 = True)
-        
         self.DebrisFlows = MWRu(self._grid,
                                 release_dict,
                                 df_dict, 
@@ -338,8 +331,8 @@ class MassWastingRouter(Component):
                     self._nmgrid,
                     Ct = Ct,
                     BCt = BCt,
-                    TerraceWidth = TerraceWidth,#self._nmgrid,
-                    FluvialErosionRate = FluvialErosionRate, # Fluvial erosion rate parameters
+                    terrace_width = terrace_width,#self._nmgrid,
+                    fluvial_erosion_rate = fluvial_erosion_rate, # Fluvial erosion rate parameters
                     parcel_volume = parcel_volume, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
                     )
 
@@ -453,12 +446,7 @@ class MassWastingRouter(Component):
             ## update NMG node elevation
             self._transfer_rmg_node_field_to_nmg_node_field()
             # print('updated NMG node elevation')
-            
-            
-            # # update slope
-            # nmg_fd = FlowDirectorSteepest(self._nmgrid, "topographic__elevation") # instantiate every time fields updated?
-            # nmg_fd.run_one_step()
-    
+               
             ## reset landslide probability field
             self._grid.at_node['MW__probability'] = np.zeros(self._grid.at_node['topographic__elevation'].shape[0])
 

@@ -288,7 +288,8 @@ example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 200
                                   # dist_to_full_flux_constraint = 10,
                                   routing_surface = "topographic__elevation",
                                   settle_deposit = False,
-                                  deposition_rule = "critical_slope")
+                                  deposition_rule = "critical_slope",
+                                  deposit_style = 'downslope_deposit')
 
 #%% set up calibrator
 
@@ -747,10 +748,10 @@ plt.savefig(mdir+svnm+"_likelihood_metrics_best.png", dpi = 300, bbox_inches='ti
 # plt.xlim(it_best-50,it_best+50)
 plt.show()
 
-# plt.figure(figsize = (15,5))
-# plt.plot(calibrate.jstracking,'k-', alpha = 0.5, linewidth = 2)
-# plt.ylabel('jump-size distribution $\sigma$', fontsize = 16)
-# plt.xlabel('n*10 iteration', fontsize = 16)
+plt.figure(figsize = (15,5))
+plt.plot(calibrate.jstracking,'k-', alpha = 0.5, linewidth = 2)
+plt.ylabel('jump-size distribution $\sigma$', fontsize = 16)
+plt.xlabel('n*10 iteration', fontsize = 16)
 
 
 
@@ -769,8 +770,8 @@ plt.figure(figsize = (6,3))
 plt.plot(results['candidate_value_SD'], results['candidate_value_slpc'])
 plt.xlim([x_mn,x_mx])
 plt.ylim([y_mn,y_mx])
-plt.xlabel('crtical flow depth, below which everything stops $qs_c$, [m]')
-plt.ylabel(r'scour coef., $\alpha$')
+plt.xlabel('crtical volumetric flux, below which everything stops $qs_c$, [m]')
+plt.ylabel('critical slope $slp_c$')
 plt.savefig(mdir+svnm+"_jumps.png", dpi = 300, bbox_inches='tight')
 
 # plot liklihood value of each jump
