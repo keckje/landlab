@@ -132,7 +132,8 @@ class MassWastingRunout(Component):
     veg_factor = 3,
     dist_to_full_flux_constraint = 0,
     deposit_style = 'downslope_deposit',
-    anti_sloshing = False):
+    anti_sloshing = False,
+    sloshing_check_frequency = 20):
         
         super().__init__(grid)
 
@@ -149,8 +150,9 @@ class MassWastingRunout(Component):
         self.veg_factor = veg_factor # increase SD by this factor for all undisturbed nodes
         self.dist_to_full_flux_constraint = dist_to_full_flux_constraint # make his larger than zero if material is stuck
         self._deposit_style = deposit_style # assume deposition below cell or not
-        self.slosh_limit = 3
+        self.slosh_limit = 1
         self._anti_sloshing = anti_sloshing
+        self._check_frequency = sloshing_check_frequency
         if self.VaryDp:
             print(' running with spatially variable Dp ')
 
@@ -517,7 +519,7 @@ class MassWastingRunout(Component):
                     DEMdf_r = DEMf-self._grid.at_node['topographic__initial_elevation']
             
                     self.DEMdfD[c+1] = {'DEMdf_r':DEMdf_r.sum()*self._grid.dx*self._grid.dy}     
-                    
+                    self.df_evo_maps[mw_i][c+1] = self._grid.at_node['energy__elevation'].copy()
                     ### save maps for video
                     self.df_evo_maps[mw_i][c+1] = self._grid.at_node['energy__elevation'].copy()
                     self.topo_evo_maps[mw_i][c+1] = self._grid.at_node['topographic__elevation'].copy()
@@ -535,10 +537,11 @@ class MassWastingRunout(Component):
 
                 
                 
+                
                 # update iteration counter
                 c+=1
                 
-                if c%20 ==0:
+                if c%self._check_frequency ==0:
                     print(c)  
                     
                     if self._anti_sloshing:
@@ -547,23 +550,28 @@ class MassWastingRunout(Component):
     def _sloshing_count(self,mw_id,mw_i):
   
           # if self.c>5 and [list(x) for x in self.arndn_r[mw_id][-1]] == [list(x) for x in self.arndn_r[mw_id][-2]]:
-        # a1 = self.arndn_r[mw_id][-1]; a2 = self.arndn_r[mw_id][-2]
-        # l_m = (len(a1)+len(a2))/2
-        # slosh = len(np.intersect1d(a1,a2))/l_m
+
         
-        if self.c>20:
+        if self.c>self._check_frequency:
+            # check for small change in deposition
             sumdif = []
-            irR = max(self.df_evo_maps[mw_i].keys()); irL = irR-20
-            for w in np.linspace(irL,irR,21):                  
+            irR = max(self.df_evo_maps[mw_i].keys()); irL = irR-self._check_frequency
+            for w in np.linspace(irL,irR,self._check_frequency+1):                  
                 dif = self.df_evo_maps[mw_i][w]-self._grid.at_node['topographic__initial_elevation']
                 sumdif.append(dif[dif>0].sum())
             sumdif = np.array(sumdif)    
             difs = sumdif[:-1]-sumdif[1:]
         
-            self.difsmn = np.abs((difs.mean()*self._grid.dx*self._grid.dy)/self._lsvol)
+            self.difsmn = np.abs((np.nanmean(difs)*self._grid.dx*self._grid.dy)/self._lsvol)
             print('difsmn:{}'.format(self.difsmn))
             
-            if self.difsmn < 0.001:
+            # check for repeat delivery nodes
+            a1 = self.arndn_r[mw_id][-1]; a2 = self.arndn_r[mw_id][-5]
+            l_m = (len(a1)+len(a2))/2
+            rnr = len(np.intersect1d(a1,a2))/l_m
+            # print('repeat node ratio{},a1:{}, a2:{}'.format(rnr, a1, a2))
+            
+            if self.difsmn < 0.001 or rnr > 0.3:
                  self.sloshed = self.sloshed+1
                  print('##############################################   SLOSHEDDDDDDDDDDDDDD')
                  
@@ -645,6 +653,87 @@ class MassWastingRunout(Component):
         self.arn = rni
         self.arv = rvi
         self.arpd = rpdi
+
+
+        
+    def _prep_initial_mass_wasting_material_v2(self, inn, mw_i):
+        """from an initial source area (landslide) prepare the initial lists 
+        of receiving nodes and incoming volumes and particle diameters per precipiton,
+        remove the source material from the topographic elevation dem"""
+        
+        # lists of initial recieving node, volume and particle diameter
+        rni = np.array([])
+        rvi = np.array([])
+        rpdi = np.array([])
+        
+        # order lowest to highest
+        node_z = self._grid.at_node.dataset['topographic__elevation'][inn]
+        zdf = pd.DataFrame({'nodes':inn,'z':node_z})
+        zdf = zdf.sort_values('z')            
+        
+        for ci, ni in enumerate(zdf['nodes'].values):
+            
+            # soil thickness at node
+            s_t = self._grid.at_node.dataset['soil__thickness'].values[ni]
+            
+            if ci>0: # use slope based on surface for first node to start landslide, but topography of failure surface after
+                # remove entire soil depth from node (regardless of release parameters)
+                self._grid.at_node.dataset['topographic__elevation'][ni] =  (                   
+                self._grid.at_node.dataset['topographic__elevation'][ni] - s_t)
+                
+                self._grid.at_node['soil__thickness'][ni] = (
+                    self._grid.at_node['soil__thickness'][ni]-s_t)
+                
+                # update slope to reflect node material removed from dem
+                self._update_topographic_slope()
+             
+            # get receiving nodes of node ni in mw index mw_i
+            rn = self._grid.at_node.dataset['flow__receiver_node'].values[ni]
+            rn = rn[np.where(rn != -1)]
+            
+
+            # receiving proportion of qso from cell n to each downslope cell
+            rp = self._grid.at_node.dataset['flow__receiver_proportions'].values[ni]
+            rp = rp[np.where(rp > 0)] # only downslope cells considered
+            
+
+            
+            # initial mass wasting thickness, (total thickness/number of pulses)  
+            imw_t =s_t/self.nps[mw_i]
+            # get volume (out) of node ni   
+            vo = imw_t*self._grid.dx*self._grid.dy# initial volume 
+            # divide into proportion going to each receiving node
+            rv = rp*vo
+            
+            if self.VaryDp:
+                # get initial mass wasting particle diameter (out) of node ni
+                pd_out = self._grid.at_node.dataset['particle__diameter'].values[ni]
+            else:
+                pd_out = self.Dp
+            # particle diameter to each recieving node
+            rpd = np.ones(len(rv))*pd_out
+       
+            # append receiving node ids, volumes and particle diameters to initial lists
+            rni = np.concatenate((rni,rn), axis = 0) 
+            rvi = np.concatenate((rvi,rv), axis = 0) 
+            rpdi = np.concatenate((rpdi,rpd), axis = 0) 
+            
+
+        
+        # set receiving nodes (self.rn) and proportions (self.rp) based on underlying topography                 
+        self.rp = self._grid.at_node['flow__receiver_proportions'].copy()
+        self.rn = self._grid.at_node['flow__receiver_node'].copy()
+
+        # landslide release nodes, volumes and diameters - saved for incremental release
+        self.rni = rni
+        self.rvi = rvi
+        self.rpdi = rpdi
+        
+        self.arndn = np.ones([len(rni)])*np.nan
+        self.arn = rni
+        self.arv = rvi
+        self.arpd = rpdi
+
         
     def _scour_entrain_deposit_updatePD(self):
         """ mass conservation at a grid cell: determines the erosion, deposition
@@ -1052,7 +1141,7 @@ class MassWastingRunout(Component):
         an angle of repose determined depth. Where L is computed following
         Campforts, et al., 2020 but is flux per unit contour width (rather than flux), 
         and L is (1-(slpn/slpc)**2) rather than dx/(1-(slpn/slpc)**2)"""
-        if self.sloshed <= self.slosh_limit:
+        if self.sloshed < self.slosh_limit:
             if self.deposition_rule == "L_metric":
                 D = self._deposit_L_metric(qsi, slpn)
             elif self.deposition_rule == "critical_slope":
@@ -1152,7 +1241,7 @@ class MassWastingRunout(Component):
         zo = self._determine_zo(n, zi, qsi )
         
         if self._deposit_style == 'downslope_deposit':
-            rule = ((zi-zo)<=(qsi+slp_h))
+            rule = ((zi-zo)<=(qsi+slp_h))#rule = ((zi-zo)<=(slp_h))#
             def eq(qsi, zo, zi, slp_h):
                 D = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)
                 return np.round(D,decimals = 5) # for less than zero, greater than zero contraints

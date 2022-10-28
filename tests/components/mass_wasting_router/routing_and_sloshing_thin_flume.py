@@ -163,13 +163,13 @@ pdir = "D:/UW_PhD/PreeventsProject/Paper_2_MWR/Landlab_Development/mass_wasting_
 # rows = 27, columns = 15, slope_break = 0.8
 
 dxdy = 10
-rows = 27
-columns = 15
-ls_width = 3
-ls_length = 3
+rows = 270
+columns = 151 # must be odd number
+ls_width = 31 # must be odd number
+ls_length = 40
 slope_above_break = 0.6
-slope_below_break = 0.02
-slope_break = 0.8
+slope_below_break = 0.001
+slope_break = 0.7
 soil_thickness = 5
 
 mg, lsn, pf, cc = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
@@ -177,7 +177,7 @@ mg, lsn, pf, cc = flume_maker(rows = rows, columns = columns, slope_above_break 
 
 dem = mg.at_node['topographic__elevation']
 
-mg.at_node['topographic__elevation'][55] = mg.at_node['topographic__elevation'][55]+0.5
+mg.at_node['topographic__elevation'][55] = mg.at_node['topographic__elevation'][55]+1.3
 
 # domain for plots
 xmin = mg.node_x.min(); xmax = mg.node_x.max(); ymin = mg.node_y.min(); ymax = mg.node_y.max()
@@ -276,7 +276,7 @@ mg.at_node['mass__wasting_id'][lsn] = 1
 npu = [1] 
 nid = [1] 
 
-params_o = [0.01, 0.01, 0.05]
+params_o = [0.01, 0.01, 0.03]
 slpc = [params_o[0]]   
 SD = params_o[1]
 cs = params_o[2]
@@ -468,7 +468,7 @@ plt.figure()
 plt.plot(av)
 
 #%%
-MWRu = DebrisFlows
+# MWRu = DebrisFlows
 sumdif = []
 for c in MWRu.df_evo_maps[0].keys():                  
     dif = MWRu.df_evo_maps[0][c]-mg.at_node['topographic__initial_elevation']

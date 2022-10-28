@@ -276,7 +276,7 @@ mg.at_node['mass__wasting_id'][lsn] = 1
 npu = [1] 
 nid = [1] 
 
-params_o = [0.01, 0.01, 0.05]
+params_o = [0.01, 0.03, 0.05]
 slpc = [params_o[0]]   
 SD = params_o[1]
 cs = params_o[2]
@@ -290,7 +290,7 @@ mw_dict = {'critical slope':slpc, 'minimum flux':SD,
 
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
-MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 150,
+MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 150, anti_sloshing = True,sloshing_check_frequency = 2,
                                   dist_to_full_flux_constraint = 0,
                                   routing_surface = "energy__elevation",
                                   settle_deposit = False,
