@@ -163,17 +163,53 @@ pdir = "D:/UW_PhD/PreeventsProject/Paper_2_MWR/Landlab_Development/mass_wasting_
 # rows = 27, columns = 15, slope_break = 0.8
 
 dxdy = 10
-rows = 27
+rows = 15
 columns = 15 # must be odd number
 ls_width = 3 # must be odd number
-ls_length = 4
+ls_length = 5
 slope_above_break = 0.6
 slope_below_break = 0.001
 slope_break = 0.2
 soil_thickness = 5
 
-mg, lsn, pf, cc = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
+mg1, lsn1, pf1, cc1 = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
                               , slope_below_break = slope_below_break, slope_break = slope_break, ls_width = ls_width, ls_length = ls_length)
+
+
+dxdy = 10
+ls_width = 3 # must be odd number
+ls_length = 4
+slope_above_break = 0.6
+slope_below_break = 0.001
+slope_break = 0.7
+soil_thickness = 5
+
+mg2, lsn2, pf2, cc2 = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
+                              , slope_below_break = slope_below_break, slope_break = slope_break, ls_width = ls_width, ls_length = ls_length)
+
+
+
+mg = RasterModelGrid((rows*2,columns+2),dxdy)
+
+
+t1 = mg1.at_node['topographic__elevation'] + mg2.at_node['topographic__elevation'].max()-10
+t2 = mg2.at_node['topographic__elevation']
+
+topo = np.concatenate((t2,t1))
+_ = mg.add_field('topographic__elevation',
+                    topo,
+                    at='node')
+
+nn = len(mg2.node_x)
+
+pf = np.concatenate((pf2,np.array(pf1+nn).astype(int)))
+
+cc = cc1
+lsn = lsn1+nn
+
+
+mg2.at_node['topographic__elevation']
+
 
 dem = mg.at_node['topographic__elevation']
 
@@ -279,7 +315,7 @@ mg.at_node['mass__wasting_id'][lsn] = 1
 npu = [1] 
 nid = [1] 
 
-params_o = [0.03, 0.03, 0.02]
+params_o = [0.01, 0.06, 0.05]
 slpc = [params_o[0]]   
 SD = params_o[1]
 cs = params_o[2]

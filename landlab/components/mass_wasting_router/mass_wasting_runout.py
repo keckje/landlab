@@ -382,7 +382,7 @@ class MassWastingRunout(Component):
             self.arndn_r[mw_id] = []
             
             # prepare initial mass wasting material (precipitons) for release 
-            self._prep_initial_mass_wasting_material(inn, mw_i)
+            self._prep_initial_mass_wasting_material_v2(inn, mw_i)
 
             # save first set of data
             self.df_evo_maps[mw_i][0] = self._grid.at_node['energy__elevation'].copy()
@@ -1241,15 +1241,16 @@ class MassWastingRunout(Component):
         zo = self._determine_zo(n, zi, qsi )
         
         if self._deposit_style == 'downslope_deposit':
-            rule = ((zi-zo)<=(qsi+slp_h))#rule = ((zi-zo)<=(slp_h))#
+            rule = ((zi-zo)<=((qsi+slp_h)/2))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
             def eq(qsi, zo, zi, slp_h):
-                D = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)
+                # D = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)
+                D = min(qsi-(((qsi+(zi-zo)-slp_h)/2)+(qsi+(zi-zo)-slp_h)/8-slp_h/4),qsi)
                 return np.round(D,decimals = 5) # for less than zero, greater than zero contraints
             
         elif self._deposit_style == 'no_downslope_deposit':
             rule = ((zi-zo)<=(slp_h))
             def eq(qsi, zo, zi, slp_h):
-                D = min(zo-zi+slp_h,qsi)
+                D = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)#D = min(zo-zi+slp_h,qsi)
                 return np.round(D,decimals = 5)
             
         # print('it:{}, node:{}, zi:{}, zo:{}, rule value:{}'.format(self.c,n, zi, zo,rule))
