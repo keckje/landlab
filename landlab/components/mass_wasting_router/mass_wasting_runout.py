@@ -128,7 +128,7 @@ class MassWastingRunout(Component):
     itL = 1000,
     routing_surface = "energy__elevation",
     settle_deposit = False,
-    deposition_rule = "both",
+    deposition_rule = "critical_slope",
     veg_factor = 3,
     dist_to_full_flux_constraint = 0,
     deposit_style = 'downslope_deposit',
