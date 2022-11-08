@@ -365,7 +365,7 @@ print("difference in initial and final dem [m3] is:{}".format(np.round(DEMdf.sum
 
 #%% evoloving surface
 
-Visualize = False
+Visualize = True
 if Visualize:
     # plot how DEM changes
     for i in np.arange(0,len(MWRu.mw_ids)):
