@@ -395,9 +395,11 @@ class MWRu_calibrator():
         modeled[modeled == 0] = -1*np.abs((observed-modeled).mean()*c) 
         RMSE_Vd = self._RMSE(observed, modeled)
         
-        plt.figure()
+        nm = 'V_rms, iteration'+str(self.it)
+        plt.figure(nm)
         plt.plot(self.mbLdf_o['distance'], observed, label = 'observed')
         plt.plot(self.mbLdf_m['distance'], modeled, label = 'modeled')
+        plt.title(nm)
         plt.legend()
         plt.show()
         
@@ -595,11 +597,11 @@ class MWRu_calibrator():
                 p_table = p_table+[jump_size[key], candidate_value[key],selected_value[key]]
                 p_nms = p_nms+['jump_size_'+key, 'candidate_value_'+key, 'selected_value_'+key]
             if self.method == "omega":
-                self.LHList.append([i, prior_t,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                self.LHList.append([i, self.MWRu.c, prior_t, omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             elif self.method == "RMSE":
-                self.LHList.append([i, prior_t,1/RMSE_Vd,1/RMSE_pf,1/RMSE_map,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                self.LHList.append([i, self.MWRu.c, prior_t, 1/RMSE_Vd,1/RMSE_pf,1/RMSE_map,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             elif self.method == "both":
-                self.LHList.append([i, prior_t,1/RMSE_Vd,1/RMSE_pf,1/RMSE_map,DTE,RMSEomegaT,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                self.LHList.append([i, self.MWRu.c, prior_t, 1/RMSE_Vd,1/RMSE_pf,1/RMSE_map,DTE,RMSEomegaT,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
 
             # adjust jump size every N_cycles
             if i%self.N_cycles == 0:
@@ -615,11 +617,11 @@ class MWRu_calibrator():
 
         self.LHvals = pd.DataFrame(self.LHList)
         if self.method == "omega":
-            self.LHvals.columns = ['iteration', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'model interations', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
         elif self.method == "RMSE":
-            self.LHvals.columns = ['iteration', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'model interations', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
         elif self.method == "both":
-            self.LHvals.columns = ['iteration', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'DTE', 'RMSEomegaT', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'model interations', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'DTE', 'RMSEomegaT', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
 
         self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] # {'SD': selected_value_SD, 'cs': selected_value_cs}
 
