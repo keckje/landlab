@@ -1105,6 +1105,8 @@ class MassWastingRunout(Component):
             Ec = self.cs*(Tbs)**self.eta
             u = 5
         if opt == 2:
+            if depth < Dp: # grain size dependent erosion breaks if depth<Dp
+                Dp = depth*.99
             # shear stress apprixmated as a power functino of inertial shear stress
             phi = np.arctan(self.slpc) # approximate phi [radians] from criticle slope [L/L]
             
