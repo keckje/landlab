@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Sep 28 08:16:16 2022
 
-@author: keckj
-
-visualize tests for deposition rule
+visualize tests for deposition rule, using a pit
 """
 
 
@@ -74,7 +71,7 @@ def example_square_mg():
     fd.run_one_step()
     nn = mg.number_of_nodes
     mg.at_node['mass__wasting_id'] = np.zeros(nn).astype(int)
-    mg.at_node['mass__wasting_id'][np.array([38])] = 1  
+    # mg.at_node['mass__wasting_id'][np.array([38])] = 1  
     depth = np.ones(nn)*1
     mg.add_field('node', 'soil__thickness',depth)
     np.random.seed(seed=7)
@@ -96,7 +93,7 @@ plot_values(mg,'topographic__elevation',xmin,xmax,ymin,ymax)
 
 # mass wasting ide
 mg.at_node['mass__wasting_id'] = np.zeros(mg.number_of_nodes).astype(int)
-mg.at_node['mass__wasting_id'][30] = 1  
+mg.at_node['mass__wasting_id'][12] = 1  
 
 # run parameters
 npu = [1] 

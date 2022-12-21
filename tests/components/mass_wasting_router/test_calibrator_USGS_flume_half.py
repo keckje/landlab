@@ -164,15 +164,28 @@ pdir = "D:/UW_PhD/PreeventsProject/Paper_2_MWR/Landlab_Development/mass_wasting_
 
 # rows = 27, columns = 15, slope_break = 0.8
 
-dxdy = 0.5
-rows = 190
-columns = 61
+# 1m
+dxdy = 1
+rows = 95
+columns = 31
 ls_width = 1
 ls_length = 2
 slope_above_break = 0.6
 slope_below_break = 0.0
 slope_break = 0.3
 soil_thickness = 0.67
+
+
+# 0.5 m
+# dxdy = 0.5
+# rows = 190
+# columns = 61
+# ls_width = 1
+# ls_length = 2
+# slope_above_break = 0.6
+# slope_below_break = 0.0
+# slope_break = 0.3
+# soil_thickness = 0.67
 
 
 flume_width = 2
@@ -310,9 +323,9 @@ mg.at_node['mass__wasting_id'][lsn] = 1
 # run parameters
 npu = [1] 
 nid = [1] 
-slpc = [0.005]   
+slpc = [0.01]   
 SD = 0.05
-cs = 0.2
+cs = 0.03
 
 
 mw_dict = {'critical slope':slpc, 'minimum flux':SD,
@@ -320,10 +333,15 @@ mw_dict = {'critical slope':slpc, 'minimum flux':SD,
 
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
-example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,
-                                  routing_surface = "topographic__elevation",
-                                  settle_deposit = False,
-                                  deposition_rule = "both")
+# example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,
+#                                   routing_surface = "topographic__elevation",
+#                                   settle_deposit = False,
+#                                   deposition_rule = "critical_slope")
+
+
+example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,dist_to_full_flux_constraint = 0, veg_factor = 1,
+                                 routing_surface = "energy__elevation", settle_deposit = False, deposition_rule = "critical_slope")# DebrisFlowScourAndDeposition(mg, df_para_dict)
+
 
 #%% set up calibrator
 
@@ -413,7 +431,7 @@ if Visualize:
     x_ = mg.node_y[pf]
     y = mg.at_node['topographic__initial_elevation'][pf]
      
-    ef = 1   
+    ef = 2  
     for i in np.arange(0,len(example_MWRu.mw_ids)):
 
         for c in example_MWRu.df_evo_maps[i].keys():                  
@@ -454,21 +472,21 @@ plt.legend()
 
 
 #%% manually computed Vd
+###  slow because many nodes
+# field = "node_id" # slow
+# plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r')
+# plt.clim(-1,1)
 
-field = "node_id"
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r')
-plt.clim(-1,1)
+# field = "dem_dif_o"
+# plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r')
+# plt.clim(-1,1)
 
-field = "dem_dif_o"
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r')
-plt.clim(-1,1)
+# field = "topographic__elevation"
+# plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "topographic__elevation", cmap = 'terrain')
+# plt.clim(-1,1)
 
-field = "topographic__elevation"
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "topographic__elevation", cmap = 'terrain')
-plt.clim(-1,1)
-
-plt.figure()
-plt.plot(mbLdf_o['node'], mbLdf_o['Vd'], 'k-', label = 'initial dem')
+# plt.figure()
+# plt.plot(mbLdf_o['node'], mbLdf_o['Vd'], 'k-', label = 'initial dem')
 
 
 def manual_Vd(cn,datatype = "observed"):
@@ -549,7 +567,7 @@ plt.ylabel("downstream cumulative volumetric change")
 # plt.ylabel("downstream cumulative volumetric change")
 
 # manually computed RMSE
-RMSE =(sum((mbLdf_o['Vd']-mbLdf_m['Vd'])**2)/len(mbLdf_o['Vd']))**0.5
+RMSE =(sum((mbLdf_o['Vd']-mbLdf_m['Vd'])**2)/len(mbLdf_o['Vd']))
 RMSE_man = 1/RMSE
 
 # from _RMSE function
@@ -569,7 +587,7 @@ plt.plot(mbLdf_m['distance'], demdifm, 'r-', alpha = 0.5, label = "calib run")
 plt.xlabel("distance [m]")
 plt.ylabel("change dem, [m]")
 
-RMSE =(sum((demdifo-demdifm)**2)/len(demdifo))**0.5
+RMSE =(sum((demdifo-demdifm)**2)/len(demdifo))
 RMSE_man = 1/RMSE
 
 # from _RMSE function
@@ -579,7 +597,7 @@ print("RMSE manually determined: {}, function determined: {}".format(RMSE_man, R
 
 
 # using all grid cells
-RMSE_man = 1/(sum((mg.at_node['dem_dif_o']-mg.at_node['dem_dif_m'])**2)/len(mg.at_node['dem_dif_m']))**0.5
+RMSE_man = 1/(sum((mg.at_node['dem_dif_o']-mg.at_node['dem_dif_m'])**2)/len(mg.at_node['dem_dif_m']))
 
 # from _RMSE function
 RMSE_fun = calibrate.LHvals['1/RMSE m'].iloc[-1]

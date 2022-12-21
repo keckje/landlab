@@ -1,3 +1,8 @@
+
+#TODO add determine_alpha function
+# add constraint that selected alpha can not result in a scour depth greater than qsc
+# run for Capitol forest sites
+
 # setup
 import os
 import numpy as np
@@ -460,6 +465,7 @@ class MWRu_calibrator():
         standard deviation equal to the jump size"""
         min_val = self.params[key][0]
         max_val = self.params[key][1]
+        
         # get the jump size
         jump_size = self.jump_size*(max_val-min_val)
         pass_ = False

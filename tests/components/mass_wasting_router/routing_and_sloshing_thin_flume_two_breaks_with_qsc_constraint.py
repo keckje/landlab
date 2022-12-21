@@ -1,10 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Sep 17 07:23:30 2022
-
-@author: keckj
-
-seperate set of tests used to confirm routing and sloshing problem
+visualize flow behavior in a flume with two slope breaks, with the qsc constraint applied to alpha
 
 """
 import time
@@ -27,7 +23,6 @@ from landlab import Component, FieldError
 from landlab.components.mass_wasting_router import MassWastingRunout
 os.chdir('C:/Users/keckj/Documents/GitHub/code/landlab/LandlabTools')
 import LandlabTools as LLT
-
 
 
 os.chdir('C:/Users/keckj/Documents/GitHub/landlab/landlab/components/mass_wasting_router/')
@@ -447,10 +442,10 @@ def random_alpha_given_gsc(qsc, r):
     """randomly generate alpha that is less than but no smaller than r*alpha
     , where alpha is the value that results in E equal to the threshold flux value"""
     a_mx, Tau = determine_alpha(ros,vs,h,s,eta,qsc*10,dx,slpc = 0.1, Dp = Dp)
-    a_mn = a_mx/100
+    a_mn = a_mx/r
     return np.random.uniform(a_mn, a_mx)
 
-alpha = random_alpha(qsc)
+alpha = random_alpha_given_gsc(qsc, r=100)
 
 E, Tau = determine_E_l(ros,vs,h,s,eta,alpha,dx,slpc = 0.1, Dp = Dp)
 

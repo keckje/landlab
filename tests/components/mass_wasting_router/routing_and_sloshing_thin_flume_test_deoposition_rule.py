@@ -4,8 +4,7 @@ Created on Sat Sep 17 07:23:30 2022
 
 @author: keckj
 
-seperate set of tests used to confirm routing and sloshing problem
-
+use flume, set up as a flat, row of cells and one columne of material, to test deposition rule
 """
 import time
 import matplotlib.pyplot as plt

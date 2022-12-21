@@ -73,8 +73,6 @@ def plot_values(mg,field,xmin,xmax,ymin,ymax, field_back = "topographic__elevati
         
 def flume_maker(rows = 5, columns = 3, slope_above_break =.5, slope_below_break =.05, slope_break = 0.7, ls_width = 1, ls_length = 1, dxdy= 10):
     """
-    
-
     Parameters
     ----------
     rows : integer

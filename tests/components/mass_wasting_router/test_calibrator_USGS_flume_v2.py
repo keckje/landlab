@@ -1,17 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Sep  9 05:07:38 2022
-
-@author: keckj
-
-
-Are the calibration functions working correctly? draft tests for test file
-functions to test
-
-simulation
-
-
-# sloshing issue; deposit, slope updated, steep, 
+test runout behavior (lack of momentum representation) in a rough replicate of the USGS flume. 
 
 """
 
@@ -164,6 +153,7 @@ pdir = "D:/UW_PhD/PreeventsProject/Paper_2_MWR/Landlab_Development/mass_wasting_
 
 # rows = 27, columns = 15, slope_break = 0.8
 
+# 1m
 dxdy = 1
 rows = 95
 columns = 31
@@ -173,6 +163,18 @@ slope_above_break = 0.6
 slope_below_break = 0.0
 slope_break = 0.3
 soil_thickness = 0.67
+
+
+# 0.5 m
+# dxdy = 0.5
+# rows = 190
+# columns = 61
+# ls_width = 1
+# ls_length = 2
+# slope_above_break = 0.6
+# slope_below_break = 0.0
+# slope_break = 0.3
+# soil_thickness = 0.67
 
 
 flume_width = 2
@@ -185,9 +187,10 @@ mg, lsn, pf, cc, sbr = flume_maker(rows = rows, columns = columns, slope_above_b
 
 
 for n in np.hstack(mg.nodes):
-    if ((mg.node_x[n]==14) or (mg.node_x[n]==17)) and (mg.node_y[n]>sbr):
+    sbr_y = np.reshape(mg.node_y, mg.shape)[sbr][0]
+    if ((mg.node_x[n]==14) or (mg.node_x[n]==17)) and (mg.node_y[n]>sbr_y):
         mg.at_node['topographic__elevation'][n] = mg.at_node['topographic__elevation'][n]+1.5
-    if ((mg.node_x[n]<14) or (mg.node_x[n]>17)) and (mg.node_y[n]>sbr):
+    if ((mg.node_x[n]<14) or (mg.node_x[n]>17)) and (mg.node_y[n]>sbr_y):
         
         mg.at_node['topographic__elevation'][n] = -.009999
 
@@ -251,12 +254,12 @@ plot_values(mg,field,13,18,80,94)
 # plt.xlim(0,30); plt.ylim(80,100)
 
 
-field = 'topographic__steepest_slope'
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back= field_back)
+# field = 'topographic__steepest_slope'
+# plot_values(mg,field,xmin,xmax,ymin,ymax,field_back= field_back)
 
 
-field= "topographic__elevation"
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back= field_back)
+# field= "topographic__elevation"
+# plot_values(mg,field,xmin,xmax,ymin,ymax,field_back= field_back)
 
 el= mg.at_node['topographic__elevation'][pf]
 pf_x = mg.node_y[pf]
@@ -280,10 +283,10 @@ fd = FlowDirectorMFD(mg, diagonals=True,
 fd.run_one_step()
 
 
-plt.figure('grid and flow directions',figsize=(8, 10))
-receivers = mg.at_node['flow__receiver_node']
-proportions = mg.at_node['flow__receiver_proportions']
-LLT.drainage_plot_jk(mg, proportions = proportions, title='Basic Ramp',surf_cmap="Greys",clim = [dem.min(),dem.max()*1.2])
+# plt.figure('grid and flow directions',figsize=(8, 10))
+# receivers = mg.at_node['flow__receiver_node']
+# proportions = mg.at_node['flow__receiver_proportions']
+# LLT.drainage_plot_jk(mg, proportions = proportions, title='Basic Ramp',surf_cmap="Greys",clim = [dem.min(),dem.max()*1.2])
 
 # zoom in to top of flume
 plt.figure('grid and flow directions_top',figsize=(8, 10))
@@ -309,7 +312,7 @@ mg.at_node['mass__wasting_id'][lsn] = 1
 # run parameters
 npu = [1] 
 nid = [1] 
-slpc = [0.005]   
+slpc = [0.01]   
 SD = 0.05
 cs = 0.03
 
@@ -319,10 +322,15 @@ mw_dict = {'critical slope':slpc, 'minimum flux':SD,
 
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
-example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,
-                                  routing_surface = "topographic__elevation",
-                                  settle_deposit = False,
-                                  deposition_rule = "critical_slope")
+# example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,
+#                                   routing_surface = "topographic__elevation",
+#                                   settle_deposit = False,
+#                                   deposition_rule = "critical_slope")
+
+
+example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,dist_to_full_flux_constraint = 0, veg_factor = 1,
+                                 routing_surface = "energy__elevation", settle_deposit = False, deposition_rule = "critical_slope")# DebrisFlowScourAndDeposition(mg, df_para_dict)
+
 
 #%% set up calibrator
 
@@ -375,11 +383,11 @@ mg.at_node['dem_dif_o'] = mg.at_node['topographic__elevation']-mg.at_node['topog
 # mg.at_node['topographic__elevation'] = mg.at_node['topographic__elevation']+mg.at_node['dem_dif_o']
 #%% view obseved runout
 LLT.plot_node_field_with_shaded_dem(mg,field = 'dem_dif_o', fontsize = 10,cmap = 'RdBu_r', plot_name = 'hillshade')
-plt.clim(-1,1)
+plt.clim(-0.5,0.5)
 
 field = "dem_dif_o"
 plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r')
-plt.clim(-1,1)
+plt.clim(-0.5,0.5)
 
 
 el_p = mg.at_node['topographic__elevation'][pf]
@@ -397,8 +405,8 @@ if Visualize:
     for i in np.arange(0,len(example_MWRu.mw_ids)):
     
         for c in example_MWRu.df_evo_maps[i].keys():
-            if c>100:
-                break                  
+            # if c>100:
+            #     break                  
             plt.figure('dif'+str(c)+str(i),figsize=(12, 12))
             mg.at_node['df_topo'] = example_MWRu.df_evo_maps[i][c]-mg.at_node['topographic__initial_elevation']
             # imshow_grid_at_node(mg,'df_topo',cmap ='RdBu_r')  
@@ -412,7 +420,7 @@ if Visualize:
     x_ = mg.node_y[pf]
     y = mg.at_node['topographic__initial_elevation'][pf]
      
-    ef = 1   
+    ef = 2  
     for i in np.arange(0,len(example_MWRu.mw_ids)):
 
         for c in example_MWRu.df_evo_maps[i].keys():                  
@@ -453,21 +461,21 @@ plt.legend()
 
 
 #%% manually computed Vd
+###  slow because many nodes
+# field = "node_id" # slow
+# plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r')
+# plt.clim(-1,1)
 
-field = "node_id"
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r')
-plt.clim(-1,1)
+# field = "dem_dif_o"
+# plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r')
+# plt.clim(-1,1)
 
-field = "dem_dif_o"
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r')
-plt.clim(-1,1)
+# field = "topographic__elevation"
+# plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "topographic__elevation", cmap = 'terrain')
+# plt.clim(-1,1)
 
-field = "topographic__elevation"
-plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "topographic__elevation", cmap = 'terrain')
-plt.clim(-1,1)
-
-plt.figure()
-plt.plot(mbLdf_o['node'], mbLdf_o['Vd'], 'k-', label = 'initial dem')
+# plt.figure()
+# plt.plot(mbLdf_o['node'], mbLdf_o['Vd'], 'k-', label = 'initial dem')
 
 
 def manual_Vd(cn,datatype = "observed"):
@@ -548,7 +556,7 @@ plt.ylabel("downstream cumulative volumetric change")
 # plt.ylabel("downstream cumulative volumetric change")
 
 # manually computed RMSE
-RMSE =(sum((mbLdf_o['Vd']-mbLdf_m['Vd'])**2)/len(mbLdf_o['Vd']))**0.5
+RMSE =(sum((mbLdf_o['Vd']-mbLdf_m['Vd'])**2)/len(mbLdf_o['Vd']))
 RMSE_man = 1/RMSE
 
 # from _RMSE function
@@ -568,7 +576,7 @@ plt.plot(mbLdf_m['distance'], demdifm, 'r-', alpha = 0.5, label = "calib run")
 plt.xlabel("distance [m]")
 plt.ylabel("change dem, [m]")
 
-RMSE =(sum((demdifo-demdifm)**2)/len(demdifo))**0.5
+RMSE =(sum((demdifo-demdifm)**2)/len(demdifo))
 RMSE_man = 1/RMSE
 
 # from _RMSE function
@@ -578,7 +586,7 @@ print("RMSE manually determined: {}, function determined: {}".format(RMSE_man, R
 
 
 # using all grid cells
-RMSE_man = 1/(sum((mg.at_node['dem_dif_o']-mg.at_node['dem_dif_m'])**2)/len(mg.at_node['dem_dif_m']))**0.5
+RMSE_man = 1/(sum((mg.at_node['dem_dif_o']-mg.at_node['dem_dif_m'])**2)/len(mg.at_node['dem_dif_m']))
 
 # from _RMSE function
 RMSE_fun = calibrate.LHvals['1/RMSE m'].iloc[-1]
