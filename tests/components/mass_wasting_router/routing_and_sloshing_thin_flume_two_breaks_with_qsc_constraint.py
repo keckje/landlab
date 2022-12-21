@@ -154,6 +154,114 @@ def flume_maker(rows = 5, columns = 3, slope_above_break =.5, slope_below_break 
 
 
 
+def determine_alpha(ros,vs,h,s,eta,E_l,dx,slpc = 0.1, Dp = None):
+    """
+    determine the coeficient of equation 7 (alpha)
+    
+    Parameters
+    ----------
+    ros : density of grains in runout [kg/m3]
+    vs  : volumetric ratio of solids to matrix [m3/m3]
+    h   : depth [m] - typical runout depth
+    s   : slope [m/m] - average slope of erosion part of runout path
+    eta : exponent of scour model (equation 7) - 
+    E_l : average erosion rate per unit length of runout [m/m]
+    dx  : cell width [m]
+    slpc: average slope at which positive net deposition occurs
+    Dp  : representative grain size [m]
+
+    Returns
+    -------
+    alpha
+
+    """
+
+    g= 9.81
+    rof = 1000
+    rodf = vs*ros+(1-vs)*rof
+    theta = np.arctan(s)
+    
+       
+    if Dp: 
+        print('grain-inertia')
+        phi = np.arctan(slpc)
+        
+        # inertial stresses
+        us = (g*h*s)**0.5
+        u = us*5.75*np.log10(h/Dp)
+        
+        dudz = u/h
+        Tcn = np.cos(theta)*vs*ros*(Dp**2)*(dudz**2)
+        tau = Tcn*np.tan(phi)
+    else:
+        print('quasi-static')
+        tau = rodf*g*h*(np.sin(theta))
+
+    
+    alpha = E_l*dx/(tau**eta)
+    
+    return alpha, tau
+
+def determine_E_l(ros,vs,h,s,eta,alpha,dx,slpc = 0.1, Dp = None):
+    """
+    determine average erosion depth for comparison with qsc
+    
+    Parameters
+    ----------
+    ros : density of grains in runout [kg/m3]
+    vs  : volumetric ratio of solids to matrix [m3/m3]
+    h   : depth [m] - typical runout depth
+    s   : slope [m/m] - average slope of erosion part of runout path
+    eta : exponent of scour model (equation 7) - 
+    E_l : average erosion rate per unit length of runout [m/m]
+    dx  : cell width [m]
+    slpc: average slope at which positive net deposition occurs
+    Dp  : representative grain size [m]
+
+    Returns
+    -------
+    alpha
+
+    """
+
+    g= 9.81
+    rof = 1000
+    rodf = vs*ros+(1-vs)*rof
+    theta = np.arctan(s)
+    
+       
+    if Dp: 
+        print('grain-inertia')
+        phi = np.arctan(slpc)
+        
+        # inertial stresses
+        us = (g*h*s)**0.5
+        u = us*5.75*np.log10(h/Dp)
+        
+        dudz = u/h
+        Tcn = np.cos(theta)*vs*ros*(Dp**2)*(dudz**2)
+        tau = Tcn*np.tan(phi)
+    else:
+        print('quasi-static')
+        tau = rodf*g*h*(np.sin(theta))
+
+    E_l = (alpha*(tau**eta))/dx
+    
+    return E_l, tau
+
+ros = 2650
+vs = 0.55
+h = 2
+s = 0.2
+eta =1
+alpha = 0.00001
+dx = 10
+Dp = 0.4
+
+qsc = 0.5
+
+
+# determine_E_l(ros,vs,h,s,eta,alpha,dx,slpc = 0.1, Dp = None)
 
 #%% create the flume
 pi = 1 # plot index
@@ -163,22 +271,58 @@ pdir = "D:/UW_PhD/PreeventsProject/Paper_2_MWR/Landlab_Development/mass_wasting_
 # rows = 27, columns = 15, slope_break = 0.8
 
 dxdy = 10
-rows = 27
-columns = 1
-ls_width = 1
-ls_length = 1
-slope_above_break = 0.0
-slope_below_break = 0.0
-slope_break = 0.8
+rows = 15
+columns = 15 # must be odd number
+ls_width = 3 # must be odd number
+ls_length = 5
+slope_above_break = 0.6
+slope_below_break = 0.001
+slope_break = 0.2
 soil_thickness = 5
 
-mg, lsn, pf, cc = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
+mg1, lsn1, pf1, cc1 = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
                               , slope_below_break = slope_below_break, slope_break = slope_break, ls_width = ls_width, ls_length = ls_length)
-lsn = 76
+
+
+dxdy = 10
+ls_width = 3 # must be odd number
+ls_length = 4
+slope_above_break = 0.6
+slope_below_break = 0.001
+slope_break = 0.7
+soil_thickness = 5
+
+mg2, lsn2, pf2, cc2 = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
+                              , slope_below_break = slope_below_break, slope_break = slope_break, ls_width = ls_width, ls_length = ls_length)
+
+
+
+mg = RasterModelGrid((rows*2,columns+2),dxdy)
+
+
+t1 = mg1.at_node['topographic__elevation'] + mg2.at_node['topographic__elevation'].max()-10
+t2 = mg2.at_node['topographic__elevation']
+
+topo = np.concatenate((t2,t1))
+_ = mg.add_field('topographic__elevation',
+                    topo,
+                    at='node')
+
+nn = len(mg2.node_x)
+
+pf = np.concatenate((pf2,np.array(pf1+nn).astype(int)))
+
+cc = cc1
+lsn = lsn1+nn
+
+
+mg2.at_node['topographic__elevation']
+
+
 dem = mg.at_node['topographic__elevation']
 
-mg.at_node['topographic__elevation'][76] = mg.at_node['topographic__elevation'][76]+5
-mg.at_node['topographic__elevation'][79] = mg.at_node['topographic__elevation'][79]+7
+mg.at_node['topographic__elevation'][55] = mg.at_node['topographic__elevation'][55]+1.3
+
 # domain for plots
 xmin = mg.node_x.min(); xmax = mg.node_x.max(); ymin = mg.node_y.min(); ymax = mg.node_y.max()
 
@@ -203,7 +347,10 @@ mg.at_node['hillshade'] = mg.calc_hillshade_at_node(elevs=dem, alt=37., az=210.)
 # soil thickness
 thickness = np.ones(mg.number_of_nodes)*soil_thickness
 mg.add_field('node', 'soil__thickness',thickness)
-mg.at_node['soil__thickness'][76] = 5#mg.at_node['topographic__elevation'][70]+5
+
+# round out lower part of failure surface
+mg.at_node['soil__thickness'][lsn[0][0:]] = soil_thickness/2
+
 
 # # no soil thickness
 # thickness = np.zeros(mg.number_of_nodes)*soil_thickness
@@ -276,26 +423,59 @@ mg.at_node['mass__wasting_id'][lsn] = 1
 npu = [1] 
 nid = [1] 
 
-params_o = [0.001, 0.01, 0.05]
+
+# determine_alpha(ros,vs,h,s,eta,E_l,dx,slpc = 0.1, Dp = 0.4)
+
+# a_mx, Tau = determine_alpha(ros,vs,h,s,eta,qsc,dx,slpc = 0.1, Dp = 0.4)
+# a_mn = a_mx/100
+
+# def det_alpha(a_mn, a_mx, qsc):
+#     E = qsc
+#     while E >= qsc:
+#         alpha = np.random.uniform(a_mn, a_mx)
+#         E, Tau = determine_E_l(ros,vs,h,s,eta,alpha,dx,slpc = 0.1, Dp = 0.4)
+#         print(E)
+#     print(E)
+#     return alpha
+
+def alpha_given_gsc(qsc):
+    """compute alpha that results in E equal to the threshold flux value"""
+    a_mx, Tau = determine_alpha(ros,vs,h,s,eta,qsc*10,dx,slpc = 0.1, Dp = Dp)
+    return a_mx
+
+def random_alpha_given_gsc(qsc, r):
+    """randomly generate alpha that is less than but no smaller than r*alpha
+    , where alpha is the value that results in E equal to the threshold flux value"""
+    a_mx, Tau = determine_alpha(ros,vs,h,s,eta,qsc*10,dx,slpc = 0.1, Dp = Dp)
+    a_mn = a_mx/100
+    return np.random.uniform(a_mn, a_mx)
+
+alpha = random_alpha(qsc)
+
+E, Tau = determine_E_l(ros,vs,h,s,eta,alpha,dx,slpc = 0.1, Dp = Dp)
+
+
+params_o = [0.01, qsc, alpha]
 slpc = [params_o[0]]   
 SD = params_o[1]
 cs = params_o[2]
 
 
 
-# mg.at_node['particle__diameter'] = np.ones(len(mg.node_x))*0.15
+mg.at_node['particle__diameter'] = np.ones(len(mg.node_x))*0.15
 
 mw_dict = {'critical slope':slpc, 'minimum flux':SD,
-            'scour coefficient':cs, 'eta':0.2}
+            'scour coefficient':cs}
 
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
-MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 150, anti_sloshing = True,sloshing_check_frequency = 2,
+MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 500,
                                   dist_to_full_flux_constraint = 0,
                                   routing_surface = "energy__elevation",
                                   settle_deposit = False,
                                   deposition_rule = "critical_slope",
-                                  deposit_style = 'no_downslope_deposit')
+                                  deposit_style = 'downslope_deposit',
+                                  anti_sloshing = True)
 
 
 #%% run
@@ -308,7 +488,7 @@ mg.at_node['dem_dif_o'] = mg.at_node['topographic__elevation']-mg.at_node['topog
 
 #%% view obseved runout
 LLT.plot_node_field_with_shaded_dem(mg,field = 'dem_dif_o', fontsize = 10,cmap = 'RdBu_r', plot_name = 'hillshade')
-plt.clim(-1,1)
+plt.clim(-0.5,0.5)
 
 field = "dem_dif_o"
 plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r')
@@ -325,7 +505,7 @@ print("difference in initial and final dem [m3] is:{}".format(np.round(DEMdf.sum
 
 #%% evoloving surface
 
-Visualize = False
+Visualize = True
 if Visualize:
     # plot how DEM changes
     for i in np.arange(0,len(MWRu.mw_ids)):
@@ -371,8 +551,8 @@ if Visualize:
             etopo = MWRu.df_evo_maps[i][c]#-mg.at_node['topographic__initial_elevation']
             topo = MWRu.topo_evo_maps[i][c]
             # imshow_grid_at_node(mg,'df_topo',cmap ='RdBu_r')
-            if c>100:
-                break                  
+            # if c>100:
+            #     break                  
             y_ = topo[pf]
             _y_ = etopo[pf]
             plt.figure(figsize = (6,3))
@@ -383,7 +563,7 @@ if Visualize:
             plt.xlim([0, max(x_)])
             plt.legend()
             plt.grid(alpha = 0.5)  
-            plt.title('iteration:'+str(c-1))
+            plt.title('iteration '+str(c))
 
 
     # for i in np.arange(0,len(MWRu.mw_ids)):
@@ -438,3 +618,45 @@ plt.xlabel('slope'); plt.ylabel('scour depth [m]]')
 plt.figure()
 plt.plot(MWRu.slopeL, MWRu.DpL,'k.', alpha = 0.5)
 plt.xlabel('slope'); plt.ylabel('deposition depth [m]]')
+
+
+#%% scripts for checking metrics with dr_dq array
+# dr_dq = pd.DataFrame(zip(DebrisFlows.arndn_r[1],DebrisFlows.arn_r[1]), columns = ['deliverying nodes','receiving nodes'])
+met = []
+for i in range(dr_dq.shape[0]-5):
+    
+    a1 =dr_dq['deliverying nodes'].iloc[i+5]
+    a2 =dr_dq['deliverying nodes'].iloc[i]
+
+
+    l_m = (len(a1)+len(a2))/2
+    slosh = len(np.intersect1d(a1,a2))/l_m # number of shared delivering nodes / average number of delivering nodes
+    
+    met.append(slosh)
+    
+met = np.array(met)
+plt.figure()
+plt.plot(met)
+plt.title('number of shared delivering nodes / average number of delivering nodes')
+
+dm = met[1:]-met[:-1]
+plt.figure()
+plt.plot(dm)
+
+av = pd.DataFrame(dm).rolling(window = 5).mean()/np.abs(dm.max())
+plt.figure()
+plt.plot(av)
+
+#%%
+# MWRu = DebrisFlows
+sumdif = []
+for c in MWRu.df_evo_maps[0].keys():                  
+    dif = MWRu.df_evo_maps[0][c]-mg.at_node['topographic__initial_elevation']
+    dif[dif<0].sum()
+    sumdif.append(dif[dif>0].sum())
+sumdif = np.array(sumdif)    
+difs = (sumdif[:-1]-sumdif[1:])*mg.dx*mg.dy    
+difspd = pd.DataFrame(difs)    
+av = pd.DataFrame(difspd).rolling(window = 20).mean()/MWRu._lsvol#np.nanmax(np.abs(difspd))
+plt.figure()
+plt.plot(av)

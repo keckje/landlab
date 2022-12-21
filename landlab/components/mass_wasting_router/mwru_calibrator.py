@@ -396,12 +396,13 @@ class MWRu_calibrator():
         RMSE_Vd = self._RMSE(observed, modeled)
         
         nm = 'V_rms, iteration'+str(self.it)
-        plt.figure(nm)
-        plt.plot(self.mbLdf_o['distance'], observed, label = 'observed')
-        plt.plot(self.mbLdf_m['distance'], modeled, label = 'modeled')
-        plt.title(nm)
-        plt.legend()
-        plt.show()
+        if self.plot_tf == True:
+            plt.figure(nm)
+            plt.plot(self.mbLdf_o['distance'], observed, label = 'observed')
+            plt.plot(self.mbLdf_m['distance'], modeled, label = 'modeled')
+            plt.title(nm)
+            plt.legend()
+            plt.show()
         
         return RMSE_Vd
 

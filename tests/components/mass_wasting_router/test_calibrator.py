@@ -269,7 +269,7 @@ mg.at_node['mass__wasting_id'][lsn] = 1
 # run parameters
 npu = [1] 
 nid = [1] 
-
+# slpc, qsc, alpha
 params_o = [0.015, 0.02, 0.05]
 # params_o = [0.05, 0.82, 0.1]
 # params_o = [0.05, 0.78160412935585255, 0.023565070615077743] 
@@ -284,7 +284,7 @@ mw_dict = {'critical slope':slpc, 'minimum flux':SD,
 
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
-example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 200,
+example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 1000,
                                   # dist_to_full_flux_constraint = 10,
                                   routing_surface = "topographic__elevation",
                                   settle_deposit = False,
@@ -293,7 +293,7 @@ example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 200
 
 #%% set up calibrator
 
-params_c = {'SD': [0.01, 0.5, 0.2], 'slpc': [0.005, 0.15, 0.03]}
+params_c = {'SD': [0.01, 0.1, 0.05], 'cs': [0.005, 0.5, 0.3]}
 el_l = 0
 el_h = 20
 channel_nodes= pf
@@ -308,11 +308,10 @@ alpha_min = 0.6#alpha_max-0.4
 N_cycles = 100
 
 calibrate = MWRu_calibrator(example_MWRu, params_c, profile_calib_dict = profile_calib_dict, N_cycles = N_cycles,
-                            prior_distribution = "uniform", jump_size = jump_size, alpha_max = alpha_max, alpha_min=alpha_min, plot_tf = False, seed = 7)
+                            prior_distribution = "uniform", jump_size = jump_size, alpha_max = alpha_max, alpha_min = alpha_min, plot_tf = True, seed = 7)
 
 
 #%% run MWRu with known parameter values to create a dem_diff that can be set as the observed
-
 
 example_MWRu.run_one_step(dt = 0)
 mg.at_node['dem_dif_o'] = mg.at_node['topographic__elevation']-mg.at_node['topographic__initial_elevation']
@@ -349,7 +348,6 @@ plt.clim(-1,1)
 field = "dem_dif_o"
 plot_values(mg,field,xmin,xmax,ymin,ymax,field_back = "dem_dif_o", cmap = 'RdBu_r')
 plt.clim(-1,1)
-
 
 el_p = mg.at_node['topographic__elevation'][pf]
 el  = mg.at_node['topographic__initial_elevation'][pf]
@@ -500,8 +498,10 @@ plt.ylabel("downstream cumulative volumetric change")
 
 # using Vd
 # run a simulartion
-calibrate(max_number_of_runs = 2000)
+calibrate(max_number_of_runs = 100)
 
+
+#%%
 # get the modeled profile values
 mbLdf_m = calibrate._channel_profile_deposition("modeled")
 
@@ -519,7 +519,7 @@ plt.ylabel("downstream cumulative volumetric change")
 # plt.ylabel("downstream cumulative volumetric change")
 
 # manually computed RMSE
-RMSE =(sum((mbLdf_o['Vd']-mbLdf_m['Vd'])**2)/len(mbLdf_o['Vd']))**0.5
+RMSE =(sum((mbLdf_o['Vd']-mbLdf_m['Vd'])**2)/len(mbLdf_o['Vd']))
 RMSE_man = 1/RMSE
 
 # from _RMSE function
@@ -539,7 +539,7 @@ plt.plot(mbLdf_m['distance'], demdifm, 'r-', alpha = 0.5, label = "calib run")
 plt.xlabel("distance [m]")
 plt.ylabel("change dem, [m]")
 
-RMSE =(sum((demdifo-demdifm)**2)/len(demdifo))**0.5
+RMSE =(sum((demdifo-demdifm)**2)/len(demdifo))
 RMSE_man = 1/RMSE
 
 # from _RMSE function
@@ -549,7 +549,7 @@ print("RMSE manually determined: {}, function determined: {}".format(RMSE_man, R
 
 
 # using all grid cells
-RMSE_man = 1/(sum((mg.at_node['dem_dif_o']-mg.at_node['dem_dif_m'])**2)/len(mg.at_node['dem_dif_m']))**0.5
+RMSE_man = 1/(sum((mg.at_node['dem_dif_o']-mg.at_node['dem_dif_m'])**2)/len(mg.at_node['dem_dif_m']))
 
 # from _RMSE function
 RMSE_fun = calibrate.LHvals['1/RMSE m'].iloc[-1]
@@ -650,11 +650,9 @@ observed = mg.at_node['dem_dif_o']
 modeled = mg.at_node['dem_dif_m']
 RMSE_map = calibrate._RMSE(observed, modeled)
 
-
 observed = mg.at_node['dem_dif_o'][mbLdf_o['node']] 
 modeled = mg.at_node['dem_dif_m'][mbLdf_m['node']]
 RMSE_pf = calibrate._RMSE(observed, modeled)
-
 
 observed = mbLdf_o['Vd']; modeled = mbLdf_m['Vd']
 RMSE_Vd = calibrate._RMSE(observed, modeled)
@@ -757,7 +755,7 @@ plt.xlabel('n*10 iteration', fontsize = 16)
 
 
 # calibration plots
-params_c = params
+# params_c = params
 results = calibrate.LHvals
 
 x_mn = params_c['SD'][0]
@@ -822,9 +820,6 @@ def parameter_uncertainty(results, parameter, parameter2):
     plt.ylabel(parameter)
     plt.xlabel('iteration')
     plt.savefig(mdir+svnm+col+"_iterations.png", dpi = 300, bbox_inches='tight')
-
-    
-
 
     # get count in each parameter value bin
     # "The distributions of counts in each bin gives the probabilility distribution of the parameter as a function of the given the rules" 
