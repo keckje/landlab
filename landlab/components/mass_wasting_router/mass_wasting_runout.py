@@ -200,6 +200,17 @@ class MassWastingRunout(Component):
             self.g = self.mw_dict['gravity'] 
         else:
             self.g = 9.81
+        
+        if 'typical flow thickness, scour' in self.mw_dict:
+            self.h = self.mw_dict['typical flow thickness, scour'] 
+        else:
+            self.h = 2
+
+        if 'typical slope, scour' in self.mw_dict:
+            self.s = self.mw_dict['typical slope, scour'] 
+        else:
+            self.s = 0.15            
+
 
         # density of debris flow mixture
         self.rodf = self.vs*self.ros+(1-self.vs)*self.rof

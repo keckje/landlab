@@ -459,10 +459,60 @@ class MWRu_calibrator():
         return prior
 
 
+    def _determine_erosion(self, value, solve_for = 'alpha'):
+        """
+        determine alpha using (26) or E_l using (27)  
+        
+        Parameters
+        ----------
+        ros : density of grains in runout [kg/m3]
+        vs  : volumetric ratio of solids to matrix [m3/m3]
+        h   : depth [m] - typical runout depth
+        s   : slope [m/m] - average slope of erosion part of runout path
+        eta : exponent of scour model (equation 7) - 
+        E_l : average erosion rate per unit length of runout [m/m]
+        dx  : cell width [m]
+        slpc: average slope at which positive net deposition occurs
+        Dp  : representative grain size [m]
+    
+        Returns
+        -------
+        alpha
+    
+        """
+    
+        rodf = self.MWRu.vs*self.MWRu.ros+(1-self.MWRu.vs)*self.MWRu.rof
+        theta = np.arctan(self.MWRu.s)
+        
+           
+        if self.MWRu.VaryDp: 
+            print('grain-inertia')
+            phi = np.arctan(self.MWRu.slpc)
+            
+            # inertial stresses
+            us = (self.MWRu.g*self.MWRu.h*self.MWRu.s)**0.5
+            u = us*5.75*np.log10(self.MWRu.h/self.MWRu.Dp)
+            
+            dudz = u/self.MWRu.h
+            Tcn = np.cos(theta)*self.MWRu.vs*self.MWRu.ros*(self.MWRu.Dp**2)*(dudz**2)
+            tau = Tcn*np.tan(phi)
+        else:
+            print('quasi-static')
+            tau = rodf*self.MWRu.g*self.MWRu.h*(np.sin(theta))
+    
+        if solve_for == 'alpha':
+            alpha = value*self.mg.dx/(tau**self.MWRu.eta)
+            return_value = alpha
+        elif solve_for == 'E_l':
+            E_l = (value*tau**self.MWRu.eta)/self.mg.dx
+            return_value = E_l
+        return return_value
+
+
     def _candidate_value(self, selected_value, key):
         """determine the candidate parameter value as a random value from
         a normal distribution with mean equal to the presently selected value and
-        standard deviation equal to the jump size"""
+        standard deviation equal to the jump size"""   
         min_val = self.params[key][0]
         max_val = self.params[key][1]
         
@@ -533,6 +583,58 @@ class MWRu_calibrator():
                 if key == "t_avg":
                     # adjust thickness of landslide with id = 1
                     self.MWRu._grid.at_node['soil__thickness'][self.MWRu._grid.at_node['mass__wasting_id'] == 1] = candidate_value[key]
+            
+            
+            ## add check that erosion depth does not exceed flux constraint (E must be less than qsc)
+            ## if E>qsc, resample alpha until E<qsc OR resample qsc until qsc>E
+            equivalent_E = self._determine_erosion(self.MWRu.cs, solve_for = 'E_l')*self.mg.dx
+            if equivalent_E>self.MWRu.SD:
+                
+                # if alpha is a calibration parameter, first apply constraint to alpha, since model is very sensitive to qsc
+                if self.params.get('cs'):
+                    # check if minimum alpha range is low enough
+                    equivalent_E_min = self._determine_erosion(self.params['cs'][0], solve_for = 'E_l')*self.mg.dx
+                    if equivalent_E_min>self.MWRu.SD:
+                        msg = "minimum possible alpha value results in too much erosion"
+                        raise ValueError(msg)                    
+                    else: # if low enough, randomly select an alpha value until the erosion equivalent is less than qsc
+                        _pass = False
+                        _i_ = 0
+                        while _pass is False:
+                            candidate_value['cs'], jump_size['cs'] = self._candidate_value(selected_value['cs'], 'cs')
+                            self.MWRu.cs = candidate_value['cs']
+                            equivalent_E = self._determine_erosion(self.MWRu.cs, solve_for = 'E_l')*self.mg.dx
+                            if equivalent_E < self.MWRu.SD:
+                                _pass = True
+                                print('resampled, E<qsc')
+                            _i_+=1; 
+                            if _i_%1000 == 0:
+                                print('after {} runs, all sampled cs values are too large, decrease the lower range of cs'.format(_i_))
+                # if alpha is not a calibration parameter (alpha is fixed), then adjust qsc to meet constraint
+                elif self.params.get('SD'):
+                    # check if maximum qsi range is high enough
+                    equivalent_alpha_max = self._determine_erosion(self.params['SD'][1], solve_for = 'alpha')
+                    if equivalent_alpha_max<self.MWRu.cs:
+                        msg = "maximum possible qsc value is less than erosion caused by alpha value"
+                        raise ValueError(msg)                    
+                    else: # if high enough, randomly select a qsi value until that value exceeds the erosion equivalent of the alpha value
+                        _pass = False
+                        _i_ = 0
+                        while _pass is False:
+                            candidate_value['SD'], jump_size['SD'] = self._candidate_value(selected_value['SD'], 'SD')
+                            self.MWRu.SD = candidate_value['SD']
+                            equivalent_alpha = self._determine_erosion(self.MWRu.SD, solve_for = 'alpha')
+                            if equivalent_alpha > self.MWRu.cs:
+                                _pass = True
+                                print('resampled, qsc>E')
+                            _i_+=1; 
+                            if _i_%1000 == 0:
+                                print('after {} runs, all sampled SD values are to small, increase the upper range of SD'.format(_i_))
+                else:
+                    msg = "minimum possible alpha value results in too much erosion"
+                    raise ValueError(msg)  
+            else:
+                print('E<qsc')
             
             # run simulation with updated parameter
             self.it = i

@@ -210,6 +210,105 @@ def _scour(ros,vs,h,s,eta,cs,slpc = 0.1, Dp = None):
     return(Ec, Tbs, u)
 
 
+
+def determine_alpha(ros,vs,h,s,eta,E_l,dx,slpc = 0.1, Dp = None):
+    """
+    determine the coeficient of equation 7 (alpha)
+    
+    Parameters
+    ----------
+    ros : density of grains in runout [kg/m3]
+    vs  : volumetric ratio of solids to matrix [m3/m3]
+    h   : depth [m] - typical runout depth
+    s   : slope [m/m] - average slope of erosion part of runout path
+    eta : exponent of scour model (equation 7) - 
+    E_l : average erosion rate per unit length of runout [m/m]
+    dx  : cell width [m]
+    slpc: average slope at which positive net deposition occurs
+    Dp  : representative grain size [m]
+
+    Returns
+    -------
+    alpha
+
+    """
+
+    g= 9.81
+    rof = 1000
+    rodf = vs*ros+(1-vs)*rof
+    theta = np.arctan(s)
+    
+       
+    if Dp: 
+        print('grain-inertia')
+        phi = np.arctan(slpc)
+        
+        # inertial stresses
+        us = (g*h*s)**0.5
+        u = us*5.75*np.log10(h/Dp)
+        
+        dudz = u/h
+        Tcn = np.cos(theta)*vs*ros*(Dp**2)*(dudz**2)
+        tau = Tcn*np.tan(phi)
+    else:
+        print('quasi-static')
+        tau = rodf*g*h*(np.sin(theta))
+
+    
+    alpha = E_l*dx/(tau**eta)
+    
+    return alpha, tau
+
+def determine_E_l(ros,vs,h,s,eta,alpha,dx,slpc = 0.1, Dp = None):
+    """
+    determine average erosion depth for comparison with qsc
+    
+    Parameters
+    ----------
+    ros : density of grains in runout [kg/m3]
+    vs  : volumetric ratio of solids to matrix [m3/m3]
+    h   : depth [m] - typical runout depth
+    s   : slope [m/m] - average slope of erosion part of runout path
+    eta : exponent of scour model (equation 7) - 
+    E_l : average erosion rate per unit length of runout [m/m]
+    dx  : cell width [m]
+    slpc: average slope at which positive net deposition occurs
+    Dp  : representative grain size [m]
+
+    Returns
+    -------
+    alpha
+
+    """
+
+    g= 9.81
+    rof = 1000
+    rodf = vs*ros+(1-vs)*rof
+    theta = np.arctan(s)
+    
+       
+    if Dp: 
+        print('grain-inertia')
+        phi = np.arctan(slpc)
+        
+        # inertial stresses
+        us = (g*h*s)**0.5
+        u = us*5.75*np.log10(h/Dp)
+        
+        dudz = u/h
+        Tcn = np.cos(theta)*vs*ros*(Dp**2)*(dudz**2)
+        tau = Tcn*np.tan(phi)
+    else:
+        print('quasi-static')
+        tau = rodf*g*h*(np.sin(theta))
+
+    E_l = (alpha*(tau**eta))/dx
+    
+    return E_l, tau
+
+
+
+
 #%% create the flume
 pi = 1 # plot index
 
@@ -256,6 +355,11 @@ mg.at_node['hillshade'] = mg.calc_hillshade_at_node(elevs=dem, alt=37., az=210.)
 thickness = np.ones(mg.number_of_nodes)*soil_thickness
 mg.add_field('node', 'soil__thickness',thickness)
 
+
+Dp = 0.1
+# particle diameter
+Dp_ = np.ones(mg.number_of_nodes)*Dp
+mg.add_field('node', 'particle__diameter', Dp_)
 
 # copy of initial topography
 DEMi = mg.at_node['topographic__elevation'].copy()
@@ -320,7 +424,7 @@ mg.at_node['mass__wasting_id'][lsn] = 1
 npu = [1] 
 nid = [1] 
 # slpc, qsc, alpha
-params_o = [0.015, 0.02, 0.05]
+params_o = [0.015, 0.02, 0.005]
 # params_o = [0.05, 0.82, 0.1]
 # params_o = [0.05, 0.78160412935585255, 0.023565070615077743] 
 # params_o = [0.05, 0.87959043570258, 0.023963226618357404]
@@ -347,11 +451,12 @@ example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 100
 example_MWRu.cs
 ros = 2650; vs = 0.6; h = 1; s = 0.5; eta = 0.2; cs = example_MWRu.cs
 # convert alpha to equivalent scour depth, threshold flux needs to be larger than this value
-SDmx, tau, u = _scour(ros,vs,h,s,eta,cs,slpc = 0.1, Dp = None)
+E_l, tau, = determine_E_l(ros,vs,h,s,eta,example_MWRu.cs,mg.dx,slpc = slpc, Dp = Dp)
 
+SDmin = E_l*mg.dx/5
 
 #
-params_c = {'slpc':[0.001,.15,0.05], 'SD': [SDmx/100, SDmx, SDmx/2]}
+params_c = {'slpc':[0.001,.15,0.05], 'SD': [SDmin/5, SDmin*10, SDmin*1.3]}
 el_l = 0
 el_h = 20
 channel_nodes= pf

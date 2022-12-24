@@ -2,6 +2,8 @@
 """
 visualize flow behavior in a flume with two slope breaks, with the qsc constraint applied to alpha
 
+
+how much bigger than qsc and E be?
 """
 import time
 import matplotlib.pyplot as plt
@@ -247,13 +249,13 @@ def determine_E_l(ros,vs,h,s,eta,alpha,dx,slpc = 0.1, Dp = None):
 ros = 2650
 vs = 0.55
 h = 2
-s = 0.2
+s = 0.6
 eta =1
 alpha = 0.00001
 dx = 10
 Dp = 0.4
 
-qsc = 0.5
+qsc = 0.1
 
 
 # determine_E_l(ros,vs,h,s,eta,alpha,dx,slpc = 0.1, Dp = None)
@@ -433,24 +435,28 @@ nid = [1]
 #     print(E)
 #     return alpha
 
-def alpha_given_gsc(qsc):
-    """compute alpha that results in E equal to the threshold flux value"""
-    a_mx, Tau = determine_alpha(ros,vs,h,s,eta,qsc*10,dx,slpc = 0.1, Dp = Dp)
-    return a_mx
+# def alpha_given_gsc(qsc):
+#     """compute alpha that results in E equal to the threshold flux value"""
+#     a_mx, Tau = determine_alpha(ros,vs,h,s,eta,qsc*10,dx,slpc = 0.1, Dp = Dp)
+#     return a_mx
 
-def random_alpha_given_gsc(qsc, r):
-    """randomly generate alpha that is less than but no smaller than r*alpha
-    , where alpha is the value that results in E equal to the threshold flux value"""
-    a_mx, Tau = determine_alpha(ros,vs,h,s,eta,qsc*10,dx,slpc = 0.1, Dp = Dp)
-    a_mn = a_mx/r
-    return np.random.uniform(a_mn, a_mx)
+# def random_alpha_given_gsc(qsc, r):
+#     """randomly generate alpha that is less than but no smaller than r*alpha
+#     , where alpha is the value that results in E equal to the threshold flux value"""
+#     a_mx, Tau = determine_alpha(ros,vs,h,s,eta,qsc*10,dx,slpc = 0.1, Dp = Dp)
+#     a_mn = a_mx/r
+#     return np.random.uniform(a_mn, a_mx)
 
-alpha = random_alpha_given_gsc(qsc, r=100)
+# alpha = random_alpha_given_gsc(qsc, r=100)
 
-E, Tau = determine_E_l(ros,vs,h,s,eta,alpha,dx,slpc = 0.1, Dp = Dp)
+alpha, Tau = determine_alpha(ros,vs,h,s,eta,(qsc/dx),dx,slpc = 0.1, Dp = Dp)
+
+E_l, Tau = determine_E_l(ros, vs, h, s, eta, alpha, dx, slpc = 0.1, Dp = Dp)
 
 
-params_o = [0.01, qsc, alpha]
+# E needs to be less than qsc. alpha*(E_l*delta_x)**eta < qsc
+
+params_o = [0.01, 0.01, 0.5]#qsc, alpha]
 slpc = [params_o[0]]   
 SD = params_o[1]
 cs = params_o[2]
