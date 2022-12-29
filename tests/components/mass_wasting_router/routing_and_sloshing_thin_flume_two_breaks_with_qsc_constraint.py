@@ -38,6 +38,21 @@ os.chdir('C:/Users/keckj/Documents/GitHub/code/preevents/paper2/')
 import MassWastingRunoutEvaluationFunctions as MWF
 
 
+#%% run parameters
+
+qsc = 0.01 # pick qsc
+lam = 5 # coeficient multiplied by qsc to determine equivlanet alpha
+slpc = 0.01 # critical slope
+
+ros = 2650 # density
+vs = 0.55 # volumetric solids concentration
+h = 2 # flow thickness
+s = 0.6 # slope
+eta = 1 # exponent
+Dp = 0.2 # particle diameter
+
+hs = 10 # soil thickness
+
 #%% functions used in tests
 #######
 # use this to get values for manual computations
@@ -246,20 +261,6 @@ def determine_E_l(ros,vs,h,s,eta,alpha,dx,slpc = 0.1, Dp = None):
     
     return E_l, tau
 
-ros = 2650
-vs = 0.55
-h = 2
-s = 0.6
-eta =1
-alpha = 0.00001
-dx = 10
-Dp = 0.4
-
-qsc = 0.1
-
-
-# determine_E_l(ros,vs,h,s,eta,alpha,dx,slpc = 0.1, Dp = None)
-
 #%% create the flume
 pi = 1 # plot index
 
@@ -267,6 +268,7 @@ pdir = "D:/UW_PhD/PreeventsProject/Paper_2_MWR/Landlab_Development/mass_wasting_
 
 # rows = 27, columns = 15, slope_break = 0.8
 
+# flume parameters
 dxdy = 10
 rows = 15
 columns = 15 # must be odd number
@@ -275,19 +277,19 @@ ls_length = 5
 slope_above_break = 0.6
 slope_below_break = 0.001
 slope_break = 0.2
-soil_thickness = 5
+soil_thickness = hs
 
 mg1, lsn1, pf1, cc1 = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
                               , slope_below_break = slope_below_break, slope_break = slope_break, ls_width = ls_width, ls_length = ls_length)
 
-
+# landslide and soil parameters
 dxdy = 10
 ls_width = 3 # must be odd number
 ls_length = 4
 slope_above_break = 0.6
 slope_below_break = 0.001
 slope_break = 0.7
-soil_thickness = 5
+soil_thickness = hs
 
 mg2, lsn2, pf2, cc2 = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
                               , slope_below_break = slope_below_break, slope_break = slope_break, ls_width = ls_width, ls_length = ls_length)
@@ -296,7 +298,7 @@ mg2, lsn2, pf2, cc2 = flume_maker(rows = rows, columns = columns, slope_above_br
 
 mg = RasterModelGrid((rows*2,columns+2),dxdy)
 
-
+#
 t1 = mg1.at_node['topographic__elevation'] + mg2.at_node['topographic__elevation'].max()-10
 t2 = mg2.at_node['topographic__elevation']
 
@@ -347,6 +349,10 @@ mg.add_field('node', 'soil__thickness',thickness)
 
 # round out lower part of failure surface
 mg.at_node['soil__thickness'][lsn[0][0:]] = soil_thickness/2
+
+
+# set particle diameter
+mg.at_node['particle__diameter'] = np.ones(len(mg.node_x))*Dp
 
 
 # # no soil thickness
@@ -421,52 +427,33 @@ npu = [1]
 nid = [1] 
 
 
-# determine_alpha(ros,vs,h,s,eta,E_l,dx,slpc = 0.1, Dp = 0.4)
+# select alpha as a functionn of qsc
+E_l_alpha = (qsc/mg.dx)*lam
+alpha, Tau = determine_alpha(ros, vs, h, s, eta, E_l_alpha, mg.dx, slpc = slpc, Dp = Dp)
 
-# a_mx, Tau = determine_alpha(ros,vs,h,s,eta,qsc,dx,slpc = 0.1, Dp = 0.4)
-# a_mn = a_mx/100
+# check that average erosion rate is the same as 
+E_l, Tau = determine_E_l(ros, vs, h, s, eta, alpha, mg.dx, slpc = slpc, Dp = Dp)
 
-# def det_alpha(a_mn, a_mx, qsc):
-#     E = qsc
-#     while E >= qsc:
-#         alpha = np.random.uniform(a_mn, a_mx)
-#         E, Tau = determine_E_l(ros,vs,h,s,eta,alpha,dx,slpc = 0.1, Dp = 0.4)
-#         print(E)
-#     print(E)
-#     return alpha
 
-# def alpha_given_gsc(qsc):
-#     """compute alpha that results in E equal to the threshold flux value"""
-#     a_mx, Tau = determine_alpha(ros,vs,h,s,eta,qsc*10,dx,slpc = 0.1, Dp = Dp)
-#     return a_mx
 
-# def random_alpha_given_gsc(qsc, r):
-#     """randomly generate alpha that is less than but no smaller than r*alpha
-#     , where alpha is the value that results in E equal to the threshold flux value"""
-#     a_mx, Tau = determine_alpha(ros,vs,h,s,eta,qsc*10,dx,slpc = 0.1, Dp = Dp)
-#     a_mn = a_mx/r
-#     return np.random.uniform(a_mn, a_mx)
-
-# alpha = random_alpha_given_gsc(qsc, r=100)
-
-alpha, Tau = determine_alpha(ros,vs,h,s,eta,(qsc/dx),dx,slpc = 0.1, Dp = Dp)
-
-E_l, Tau = determine_E_l(ros, vs, h, s, eta, alpha, dx, slpc = 0.1, Dp = Dp)
-
+print('erosion rate used to determine alpha:{}'.format(E_l_alpha))
+print('erosion rate computed from alpha:{}'.format(E_l))
 
 # E needs to be less than qsc. alpha*(E_l*delta_x)**eta < qsc
-
-params_o = [0.01, 0.01, 0.5]#qsc, alpha]
+# params_o = [0.01, 0.01, 0.5]
+params_o = [slpc, qsc, alpha]
 slpc = [params_o[0]]   
 SD = params_o[1]
 cs = params_o[2]
 
 
 
-mg.at_node['particle__diameter'] = np.ones(len(mg.node_x))*0.15
 
 mw_dict = {'critical slope':slpc, 'minimum flux':SD,
-            'scour coefficient':cs}
+            'scour coefficient':cs, 'scour exponent':eta,
+            'effective particle diameter':Dp, 'vol solids concentration':vs,
+            'density solids':ros, 'typical flow thickness, scour':h,
+            'typical slope, scour':s}
 
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
@@ -476,7 +463,7 @@ MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 500,
                                   settle_deposit = False,
                                   deposition_rule = "critical_slope",
                                   deposit_style = 'downslope_deposit',
-                                  anti_sloshing = True)
+                                  anti_sloshing = False)
 
 
 #%% run

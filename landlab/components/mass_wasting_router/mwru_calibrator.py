@@ -585,8 +585,8 @@ class MWRu_calibrator():
                     self.MWRu._grid.at_node['soil__thickness'][self.MWRu._grid.at_node['mass__wasting_id'] == 1] = candidate_value[key]
             
             
-            ## add check that erosion depth does not exceed flux constraint (E must be less than qsc)
-            ## if E>qsc, resample alpha until E<qsc OR resample qsc until qsc>E
+            ## A check that average erosion depth (E) does not exceed flux constraint (E must be less than qsc)
+            ## if average E>qsc, resample alpha until average E<qsc OR resample qsc until qsc>E
             equivalent_E = self._determine_erosion(self.MWRu.cs, solve_for = 'E_l')*self.mg.dx
             if equivalent_E>self.MWRu.SD:
                 
@@ -613,7 +613,7 @@ class MWRu_calibrator():
                 # if alpha is not a calibration parameter (alpha is fixed), then adjust qsc to meet constraint
                 elif self.params.get('SD'):
                     # check if maximum qsi range is high enough
-                    equivalent_alpha_max = self._determine_erosion(self.params['SD'][1], solve_for = 'alpha')
+                    equivalent_alpha_max = self._determine_erosion(self.params['SD'][1]/self.mg.dx, solve_for = 'alpha')
                     if equivalent_alpha_max<self.MWRu.cs:
                         msg = "maximum possible qsc value is less than erosion caused by alpha value"
                         raise ValueError(msg)                    
@@ -623,7 +623,7 @@ class MWRu_calibrator():
                         while _pass is False:
                             candidate_value['SD'], jump_size['SD'] = self._candidate_value(selected_value['SD'], 'SD')
                             self.MWRu.SD = candidate_value['SD']
-                            equivalent_alpha = self._determine_erosion(self.MWRu.SD, solve_for = 'alpha')
+                            equivalent_alpha = self._determine_erosion(self.MWRu.SD/self.mg.dx, solve_for = 'alpha')
                             if equivalent_alpha > self.MWRu.cs:
                                 _pass = True
                                 print('resampled, qsc>E')

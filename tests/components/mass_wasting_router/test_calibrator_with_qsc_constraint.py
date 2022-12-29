@@ -450,8 +450,9 @@ example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 100
 
 example_MWRu.cs
 ros = 2650; vs = 0.6; h = 1; s = 0.5; eta = 0.2; cs = example_MWRu.cs
+
 # convert alpha to equivalent scour depth, threshold flux needs to be larger than this value
-E_l, tau, = determine_E_l(ros,vs,h,s,eta,example_MWRu.cs,mg.dx,slpc = slpc, Dp = Dp)
+E_l, tau, = determine_E_l(ros,vs,h,s,eta,example_MWRu.cs,mg.dx,slpc = slpc[0], Dp = Dp)
 
 SDmin = E_l*mg.dx/5
 
@@ -661,7 +662,7 @@ plt.ylabel("downstream cumulative volumetric change")
 
 # using Vd
 # run a simulartion
-calibrate(max_number_of_runs = 100)
+calibrate(max_number_of_runs = 30)
 
 
 #%%
@@ -1045,3 +1046,155 @@ try:
 except:
     parameter_uncertainty(results, 'slpc', 'SD')
     parameter_uncertainty(results, 'SD', 'slpc')
+
+
+
+#%% check MWRu calibrator _determine_erosion function
+
+
+def determine_E_l(ros,vs,h,s,eta,alpha,dx,slpc = 0.1, Dp = None):
+    """
+    determine average erosion depth for comparison with qsc
+    
+    Parameters
+    ----------
+    ros : density of grains in runout [kg/m3]
+    vs  : volumetric ratio of solids to matrix [m3/m3]
+    h   : depth [m] - typical runout depth
+    s   : slope [m/m] - average slope of erosion part of runout path
+    eta : exponent of scour model (equation 7) - 
+    E_l : average erosion rate per unit length of runout [m/m]
+    dx  : cell width [m]
+    slpc: average slope at which positive net deposition occurs
+    Dp  : representative grain size [m]
+
+    Returns
+    -------
+    alpha
+
+    """
+
+    g= 9.81
+    rof = 1000
+    rodf = vs*ros+(1-vs)*rof
+    theta = np.arctan(s)
+    
+       
+    if Dp: 
+        print('grain-inertia')
+        phi = np.arctan(slpc)
+        
+        # inertial stresses
+        us = (g*h*s)**0.5
+        u = us*5.75*np.log10(h/Dp)
+        
+        dudz = u/h
+        Tcn = np.cos(theta)*vs*ros*(Dp**2)*(dudz**2)
+        tau = Tcn*np.tan(phi)
+    else:
+        print('quasi-static')
+        tau = rodf*g*h*(np.sin(theta))
+
+    E_l = (alpha*(tau**eta))/dx
+    
+    return E_l, tau
+
+
+
+def determine_alpha(ros,vs,h,s,eta,E_l,dx,slpc = 0.1, Dp = None):
+    """
+    determine the coeficient of equation 7 (alpha)
+    
+    Parameters
+    ----------
+    ros : density of grains in runout [kg/m3]
+    vs  : volumetric ratio of solids to matrix [m3/m3]
+    h   : depth [m] - typical runout depth
+    s   : slope [m/m] - average slope of erosion part of runout path
+    eta : exponent of scour model (equation 7) - 
+    E_l : average erosion rate per unit length of runout [m/m]
+    dx  : cell width [m]
+    slpc: average slope at which positive net deposition occurs
+    Dp  : representative grain size [m]
+
+    Returns
+    -------
+    alpha
+
+    """
+
+    g= 9.81
+    rof = 1000
+    rodf = vs*ros+(1-vs)*rof
+    theta = np.arctan(s)
+    
+       
+    if Dp: 
+        print('grain-inertia')
+        phi = np.arctan(slpc)
+        
+        # inertial stresses
+        us = (g*h*s)**0.5
+        u = us*5.75*np.log10(h/Dp)
+        
+        dudz = u/h
+        Tcn = np.cos(theta)*vs*ros*(Dp**2)*(dudz**2)
+        tau = Tcn*np.tan(phi)
+    else:
+        print('quasi-static')
+        tau = rodf*g*h*(np.sin(theta))
+
+    
+    alpha = E_l*dx/(tau**eta)
+    
+    return alpha, tau
+
+
+
+#%%
+# test normal values
+cs = calibrate.MWRu.cs
+ros = calibrate.MWRu.ros
+vs = calibrate.MWRu.vs
+h = calibrate.MWRu.h
+s = calibrate.MWRu.s
+eta = calibrate.MWRu.eta
+dx = calibrate.mg.dx
+slpc = calibrate.MWRu.slpc
+Dp = calibrate.MWRu.Dp
+
+calibrate._determine_erosion(cs, solve_for = 'E_l')*calibrate.mg.dx
+determine_E_l(ros,vs,h,s,eta,cs,dx,slpc = slpc, Dp = Dp)
+
+calibrate._determine_erosion(calibrate.params['SD'][1], solve_for = 'alpha')
+E_l = calibrate.params['SD'][1]
+determine_alpha(ros,vs,h,s,eta,E_l,dx,slpc = slpc, Dp = Dp)
+
+
+# test unusual values 1
+calibrate.MWRu.cs =.01
+calibrate.MWRu.ros = 2650
+calibrate.MWRu.vs = 0.4
+calibrate.MWRu.h = 5
+calibrate.MWRu.s = 0.3
+calibrate.MWRu.eta = 1
+calibrate.MWRu.slpc = 0.001 # very low slope
+calibrate.MWRu.Dp = 0.25
+
+cs = calibrate.MWRu.cs
+ros = calibrate.MWRu.ros
+vs = calibrate.MWRu.vs
+h = calibrate.MWRu.h
+s = calibrate.MWRu.s
+eta = calibrate.MWRu.eta
+dx = calibrate.mg.dx
+slpc = calibrate.MWRu.slpc
+Dp = calibrate.MWRu.Dp
+
+calibrate._determine_erosion(cs, solve_for = 'E_l')*calibrate.mg.dx
+determine_E_l(ros,vs,h,s,eta,cs,dx,slpc = slpc, Dp = Dp)
+
+calibrate._determine_erosion(calibrate.params['SD'][1], solve_for = 'alpha')
+
+E_l = calibrate.params['SD'][1]
+determine_alpha(ros,vs,h,s,eta,E_l,dx,slpc = slpc, Dp = Dp)

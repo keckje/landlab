@@ -175,8 +175,8 @@ class MassWastingRunout(Component):
             self.eta = self.mw_dict['scour exponent']
         else:
             self.eta = 0.2
-        
-        if 'effective particle diameter' in self.mw_dict:
+                
+        if 'effective particle diameter' in self.mw_dict: # specify Dp
             self.Dp = self.mw_dict['effective particle diameter']
         else:
             self.Dp = 0.25   
