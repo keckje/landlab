@@ -509,6 +509,63 @@ class MWRu_calibrator():
         return return_value
 
 
+    def _check_E_lessthan_lambda_times_qsc(self, candidate_value, jump_size, selected_value):
+        """A check that average erosion depth (E) does not exceed flux constraint (E must be less than qsc*lambda)
+        if average E>qsc, resample alpha until average E<(qsc*lambda) OR resample qsc until (qsc*lambda)>E"""
+        equivalent_E = self._determine_erosion(self.MWRu.cs, solve_for = 'E_l')*self.mg.dx
+        
+        _lambda = 1 # when slpc is low, model is unstable when ~E>qsc.
+        if self.MWRu.slpc>=0.01: # when slpc is high (>0.01), model is unstable when ~E>(10*qsc)
+            _lambda = 10
+            
+        if equivalent_E>self.MWRu.SD*_lambda:
+            
+            # if alpha is a calibration parameter, first apply constraint to alpha, since model is very sensitive to qsc
+            if self.params.get('cs'):
+                # check if minimum alpha range is low enough
+                equivalent_E_min = self._determine_erosion(self.params['cs'][0], solve_for = 'E_l')*self.mg.dx
+                if equivalent_E_min>self.MWRu.SD*_lambda:
+                    msg = "minimum possible alpha value results in too much erosion"
+                    raise ValueError(msg)                    
+                else: # if low enough, randomly select an alpha value until the erosion equivalent is less than qsc
+                    _pass = False
+                    _i_ = 0
+                    while _pass is False:
+                        candidate_value['cs'], jump_size['cs'] = self._candidate_value(selected_value['cs'], 'cs')
+                        self.MWRu.cs = candidate_value['cs']
+                        equivalent_E = self._determine_erosion(self.MWRu.cs, solve_for = 'E_l')*self.mg.dx
+                        if equivalent_E < self.MWRu.SD*_lambda:
+                            _pass = True
+                            print('resampled, E<qsc')
+                        _i_+=1; 
+                        if _i_%1000 == 0:
+                            print('after {} runs, all sampled cs values are too large, decrease the lower range of cs'.format(_i_))
+            # if alpha is not a calibration parameter (alpha is fixed), then adjust qsc to meet constraint
+            elif self.params.get('SD'):
+                # check if maximum qsi range is high enough
+                equivalent_E = self._determine_erosion(self.MWRu.cs, solve_for = 'E_l')*self.mg.dx
+                if equivalent_E > self.params['SD'][1]*_lambda:
+                    msg = "maximum possible qsc value is less than erosion caused by alpha value"
+                    raise ValueError(msg)   
+                else: # if high enough, randomly select a qsi value until that value exceeds the erosion equivalent of the alpha value
+                    _pass = False
+                    _i_ = 0
+                    while _pass is False:
+                        candidate_value['SD'], jump_size['SD'] = self._candidate_value(selected_value['SD'], 'SD')
+                        self.MWRu.SD = candidate_value['SD']
+                        if equivalent_E < self.MWRu.SD*_lambda:
+                            _pass = True
+                            print('resampled, qsc>E')
+                            _i_+=1; 
+                            if _i_%1000 == 0:
+                                print('after {} runs, all sampled SD values are to small, increase the upper range of SD'.format(_i_))
+                
+            else:
+                msg = "minimum possible alpha value results in too much erosion"
+                raise ValueError(msg)  
+        else:
+            print('E<qsc')
+
     def _candidate_value(self, selected_value, key):
         """determine the candidate parameter value as a random value from
         a normal distribution with mean equal to the presently selected value and
@@ -566,7 +623,7 @@ class MWRu_calibrator():
                 candidate_value[key], jump_size[key] = self._candidate_value(selected_value[key], key)
             # liklihood of parameter given the min and max values
 
-            prior_t = 1
+            prior_t = 1  # THIS NEEDS TO GO AFTER _check_E_lessthan_lambda_times_qsc
             for key in self.params:
                 prior_ = self._prior_probability(candidate_value[key], key)
                 prior[key] = prior_
@@ -584,57 +641,7 @@ class MWRu_calibrator():
                     # adjust thickness of landslide with id = 1
                     self.MWRu._grid.at_node['soil__thickness'][self.MWRu._grid.at_node['mass__wasting_id'] == 1] = candidate_value[key]
             
-            
-            ## A check that average erosion depth (E) does not exceed flux constraint (E must be less than qsc)
-            ## if average E>qsc, resample alpha until average E<qsc OR resample qsc until qsc>E
-            equivalent_E = self._determine_erosion(self.MWRu.cs, solve_for = 'E_l')*self.mg.dx
-            if equivalent_E>self.MWRu.SD:
-                
-                # if alpha is a calibration parameter, first apply constraint to alpha, since model is very sensitive to qsc
-                if self.params.get('cs'):
-                    # check if minimum alpha range is low enough
-                    equivalent_E_min = self._determine_erosion(self.params['cs'][0], solve_for = 'E_l')*self.mg.dx
-                    if equivalent_E_min>self.MWRu.SD:
-                        msg = "minimum possible alpha value results in too much erosion"
-                        raise ValueError(msg)                    
-                    else: # if low enough, randomly select an alpha value until the erosion equivalent is less than qsc
-                        _pass = False
-                        _i_ = 0
-                        while _pass is False:
-                            candidate_value['cs'], jump_size['cs'] = self._candidate_value(selected_value['cs'], 'cs')
-                            self.MWRu.cs = candidate_value['cs']
-                            equivalent_E = self._determine_erosion(self.MWRu.cs, solve_for = 'E_l')*self.mg.dx
-                            if equivalent_E < self.MWRu.SD:
-                                _pass = True
-                                print('resampled, E<qsc')
-                            _i_+=1; 
-                            if _i_%1000 == 0:
-                                print('after {} runs, all sampled cs values are too large, decrease the lower range of cs'.format(_i_))
-                # if alpha is not a calibration parameter (alpha is fixed), then adjust qsc to meet constraint
-                elif self.params.get('SD'):
-                    # check if maximum qsi range is high enough
-                    equivalent_alpha_max = self._determine_erosion(self.params['SD'][1]/self.mg.dx, solve_for = 'alpha')
-                    if equivalent_alpha_max<self.MWRu.cs:
-                        msg = "maximum possible qsc value is less than erosion caused by alpha value"
-                        raise ValueError(msg)                    
-                    else: # if high enough, randomly select a qsi value until that value exceeds the erosion equivalent of the alpha value
-                        _pass = False
-                        _i_ = 0
-                        while _pass is False:
-                            candidate_value['SD'], jump_size['SD'] = self._candidate_value(selected_value['SD'], 'SD')
-                            self.MWRu.SD = candidate_value['SD']
-                            equivalent_alpha = self._determine_erosion(self.MWRu.SD/self.mg.dx, solve_for = 'alpha')
-                            if equivalent_alpha > self.MWRu.cs:
-                                _pass = True
-                                print('resampled, qsc>E')
-                            _i_+=1; 
-                            if _i_%1000 == 0:
-                                print('after {} runs, all sampled SD values are to small, increase the upper range of SD'.format(_i_))
-                else:
-                    msg = "minimum possible alpha value results in too much erosion"
-                    raise ValueError(msg)  
-            else:
-                print('E<qsc')
+            self._check_E_lessthan_lambda_times_qsc(candidate_value, jump_size, selected_value)
             
             # run simulation with updated parameter
             self.it = i

@@ -4,6 +4,12 @@ visualize flow behavior in a flume with two slope breaks, with the qsc constrain
 
 
 how much bigger than qsc and E be?
+
+    it depends on slpc and the soil thickness
+    if slpc < 0.005 or hs >>5, lambda should be 1
+    
+    set as 1 by default
+
 """
 import time
 import matplotlib.pyplot as plt
@@ -41,7 +47,7 @@ import MassWastingRunoutEvaluationFunctions as MWF
 #%% run parameters
 
 qsc = 0.01 # pick qsc
-lam = 5 # coeficient multiplied by qsc to determine equivlanet alpha
+lam = 10 # coeficient multiplied by qsc to determine equivlanet alpha
 slpc = 0.01 # critical slope
 
 ros = 2650 # density
@@ -51,7 +57,13 @@ s = 0.6 # slope
 eta = 1 # exponent
 Dp = 0.2 # particle diameter
 
-hs = 10 # soil thickness
+hs = 5 # soil thickness
+
+
+# Add warning in MWRu if E_l_alpha > 1*qsc, and slpc low or hs thick => check with eric
+# set lamba as a class variable of MWRu, = 1, as written is 1 but can not be adjusted
+# user can change if slpc high 
+# run at black hills sites
 
 #%% functions used in tests
 #######
