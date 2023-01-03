@@ -733,11 +733,11 @@ class MWRu_calibrator():
 
         self.LHvals = pd.DataFrame(self.LHList)
         if self.method == "omega":
-            self.LHvals.columns = ['iteration', 'model interations', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'model iterations', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
         elif self.method == "RMSE":
-            self.LHvals.columns = ['iteration', 'model interations', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'model iterations', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
         elif self.method == "both":
-            self.LHvals.columns = ['iteration', 'model interations', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'DTE', 'RMSEomegaT', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'model iterations', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'DTE', 'RMSEomegaT', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
 
         self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] # {'SD': selected_value_SD, 'cs': selected_value_cs}
 
