@@ -51,14 +51,15 @@ lam = 10 # coeficient multiplied by qsc to determine equivlanet alpha
 slpc = 0.01 # critical slope
 
 ros = 2650 # density
-vs = 0.55 # volumetric solids concentration
+vs = 0.6 # volumetric solids concentration
 h = 2 # flow thickness
 s = 0.6 # slope
-eta = 1 # exponent
+eta = 0.2 # exponent
 Dp = 0.2 # particle diameter
-
-hs = 5 # soil thickness
-
+g_erosion = True
+ls_h = 2
+hs = 2 # soil thickness
+deposit_style = 'downslope_deposit_sc'
 
 # Add warning in MWRu if E_l_alpha > 1*qsc, and slpc low or hs thick => check with eric
 # set lamba as a class variable of MWRu, = 1, as written is 1 but can not be adjusted
@@ -364,7 +365,8 @@ mg.at_node['soil__thickness'][lsn[0][0:]] = soil_thickness/2
 
 
 # set particle diameter
-mg.at_node['particle__diameter'] = np.ones(len(mg.node_x))*Dp
+if g_erosion:
+    mg.at_node['particle__diameter'] = np.ones(len(mg.node_x))*Dp
 
 
 # # no soil thickness
@@ -432,7 +434,9 @@ LLT.drainage_plot_jk(mg, proportions = proportions, title='Basic Ramp',surf_cmap
 
 # mass wasting ide
 mg.at_node['mass__wasting_id'] = np.zeros(mg.number_of_nodes).astype(int)
-mg.at_node['mass__wasting_id'][lsn] = 1  
+mg.at_node['mass__wasting_id'][lsn] = 1
+# set thickness of landslide
+mg.at_node['soil__thickness'][lsn] = ls_h  
 
 # run parameters
 npu = [1] 
@@ -441,10 +445,16 @@ nid = [1]
 
 # select alpha as a functionn of qsc
 E_l_alpha = (qsc/mg.dx)*lam
-alpha, Tau = determine_alpha(ros, vs, h, s, eta, E_l_alpha, mg.dx, slpc = slpc, Dp = Dp)
+if g_erosion:
+    alpha, Tau = determine_alpha(ros, vs, h, s, eta, E_l_alpha, mg.dx, slpc = slpc, Dp = Dp)
+else:
+    alpha, Tau = determine_alpha(ros, vs, h, s, eta, E_l_alpha, mg.dx, slpc = slpc)#, Dp = Dp)
 
 # check that average erosion rate is the same as 
-E_l, Tau = determine_E_l(ros, vs, h, s, eta, alpha, mg.dx, slpc = slpc, Dp = Dp)
+if g_erosion:
+    E_l, Tau = determine_E_l(ros, vs, h, s, eta, alpha, mg.dx, slpc = slpc, Dp = Dp)
+else:
+    E_l, Tau = determine_E_l(ros, vs, h, s, eta, alpha, mg.dx, slpc = slpc)#, Dp = Dp)
 
 
 
@@ -474,7 +484,7 @@ MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 500,
                                   routing_surface = "energy__elevation",
                                   settle_deposit = False,
                                   deposition_rule = "critical_slope",
-                                  deposit_style = 'downslope_deposit',
+                                  deposit_style = deposit_style,
                                   anti_sloshing = False)
 
 

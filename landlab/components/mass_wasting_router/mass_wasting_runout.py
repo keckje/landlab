@@ -1260,6 +1260,19 @@ class MassWastingRunout(Component):
                 D = min(qsi-(((qsi+(zi-zo)-slp_h)/2)+(qsi+(zi-zo)-slp_h)/8-slp_h/4),qsi)
                 return np.round(D,decimals = 5) # for less than zero, greater than zero contraints
             
+        elif self._deposit_style == 'downslope_deposit_sc':
+            rule = ((zi-zo)<=((qsi*self.slpc+slp_h)))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
+            def eq(qsi, zo, zi, slp_h):
+                # D = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)
+                D = min(qsi-(((qsi+(zi-zo)-slp_h)/2)+(qsi+(zi-zo)-slp_h)/8-slp_h/4),qsi)
+                return np.round(D,decimals = 5) # for less than zero, greater than zero contraints
+        elif self._deposit_style == 'downslope_deposit_sc2':
+            rule = ((zi-zo)<=(slp_h))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
+            def eq(qsi, zo, zi, slp_h):
+                # D = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)
+                D = min(qsi-(((qsi+(zi-zo)-slp_h)/2)+(qsi+(zi-zo)-slp_h)/8-slp_h/4),qsi)
+                return np.round(D,decimals = 5) # for less than zero, greater than zero contraints
+            
         elif self._deposit_style == 'no_downslope_deposit':
             rule = ((zi-zo)<=(slp_h))
             def eq(qsi, zo, zi, slp_h):
