@@ -40,7 +40,8 @@ class MWRu_calibrator():
                  alpha_min = 0.1,# 0.23 #0.1
                  alpha_max = 0.5,# 0.44#0.5
                  phi_minus = 0.9,
-                 phi_plus = 1.1):
+                 phi_plus = 1.1,
+                 qsc_constraint = True):
         """
         Parameters
         ----------
@@ -120,6 +121,7 @@ class MWRu_calibrator():
         self.alpha_max = alpha_max
         self.phi_minus = phi_minus
         self.phi_plus = phi_plus
+        self.qsc_constraint = qsc_constraint 
 
 
     def __call__(self, max_number_of_runs = 50):
@@ -641,7 +643,8 @@ class MWRu_calibrator():
                     # adjust thickness of landslide with id = 1
                     self.MWRu._grid.at_node['soil__thickness'][self.MWRu._grid.at_node['mass__wasting_id'] == 1] = candidate_value[key]
             
-            self._check_E_lessthan_lambda_times_qsc(candidate_value, jump_size, selected_value)
+            if self.qsc_constraint:
+                self._check_E_lessthan_lambda_times_qsc(candidate_value, jump_size, selected_value)
             
             # run simulation with updated parameter
             self.it = i
