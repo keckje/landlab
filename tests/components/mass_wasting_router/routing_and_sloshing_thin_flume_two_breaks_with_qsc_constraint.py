@@ -48,7 +48,7 @@ import MassWastingRunoutEvaluationFunctions as MWF
 
 qsc = 0.01 # pick qsc
 lam = 10 # coeficient multiplied by qsc to determine equivlanet alpha
-slpc = 0.01 # critical slope
+slpc = 0.02 # critical slope
 
 ros = 2650 # density
 vs = 0.6 # volumetric solids concentration
@@ -57,9 +57,13 @@ s = 0.6 # slope
 eta = 0.2 # exponent
 Dp = 0.2 # particle diameter
 g_erosion = True
-ls_h = 2
+ls_h = 5
+qsi_max = 5
 hs = 2 # soil thickness
-deposit_style = 'downslope_deposit_sc'
+deposition_rule = "critical_slope"
+deposit_style = 'downslope_deposit_sc3'
+effective_qsi = True
+
 
 # Add warning in MWRu if E_l_alpha > 1*qsc, and slpc low or hs thick => check with eric
 # set lamba as a class variable of MWRu, = 1, as written is 1 but can not be adjusted
@@ -333,7 +337,7 @@ mg2.at_node['topographic__elevation']
 
 dem = mg.at_node['topographic__elevation']
 
-mg.at_node['topographic__elevation'][55] = mg.at_node['topographic__elevation'][55]+1.3
+# mg.at_node['topographic__elevation'][55] = mg.at_node['topographic__elevation'][55]+1.3
 
 # domain for plots
 xmin = mg.node_x.min(); xmax = mg.node_x.max(); ymin = mg.node_y.min(); ymax = mg.node_y.max()
@@ -475,7 +479,7 @@ mw_dict = {'critical slope':slpc, 'minimum flux':SD,
             'scour coefficient':cs, 'scour exponent':eta,
             'effective particle diameter':Dp, 'vol solids concentration':vs,
             'density solids':ros, 'typical flow thickness, scour':h,
-            'typical slope, scour':s}
+            'typical slope, scour':s, 'max observed flow depth': qsi_max}
 
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
@@ -485,7 +489,8 @@ MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 500,
                                   settle_deposit = False,
                                   deposition_rule = "critical_slope",
                                   deposit_style = deposit_style,
-                                  anti_sloshing = False)
+                                  anti_sloshing = False,
+                                  effective_qsi = effective_qsi)
 
 
 #%% run
