@@ -153,4 +153,8 @@ print(MWRu._deposit_friction_angle(1,24))
 print(MWRu._deposit_friction_angle_v2(1,24))
 
 #%% test where material is routed too in each of the above scenarios
-
+dem = mg.at_node['topographic__elevation']
+plt.figure('grid and flow directions',figsize=(8, 10))
+receivers = mg.at_node['flow__receiver_node']
+proportions = mg.at_node['flow__receiver_proportions']
+LLT.drainage_plot_jk(mg, proportions = proportions, title='Basic Ramp',surf_cmap="Greys",clim = [dem.min(),dem.max()*1.2])
