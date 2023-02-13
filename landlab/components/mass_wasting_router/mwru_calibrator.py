@@ -517,7 +517,7 @@ class MWRu_calibrator():
         equivalent_E = self._determine_erosion(self.MWRu.cs, solve_for = 'E_l')*self.mg.dx
         
         _lambda = 1 # when slpc is low, model is unstable when ~E>qsc.
-        if self.MWRu.slpc>=0.01: # when slpc is high (>0.01), model is unstable when ~E>(10*qsc)
+        if self.MWRu.slpc>=0.02: # when slpc is low (<0.01), model is unstable when ~E>(10*qsc)
             _lambda = 10
             
         if equivalent_E>self.MWRu.SD*_lambda:
