@@ -45,10 +45,13 @@ import MassWastingRunoutEvaluationFunctions as MWF
 
 
 #%% run parameters
+PlanVisualize = False
+ProfileVisualize = True
 
-qsc = 0.01 # pick qsc
-lam = 1 # coeficient multiplied by qsc to determine equivlanet alpha
-slpc = 0.1 # critical slope
+
+qsc = 0.02 # pick qsc
+lam = 10 # coeficient multiplied by qsc to determine equivlanet alpha
+slpc = 0.01 # critical slope
 
 ros = 2650 # density
 vs = 0.6 # volumetric solids concentration
@@ -57,11 +60,24 @@ s = 0.6 # slope
 eta = 0.2 # exponent
 Dp = 0.2 # particle diameter
 g_erosion = True
-ls_h = 20
+ls_h = 5
 hs = 2 # soil thickness
-effective_qsi = True
-qsi_max = 4
+deposition_rule = "critical_slope"
 deposit_style = 'downslope_deposit_sc3'
+
+
+
+# flume parameters
+dxdy = 10
+rows = 15
+columns = 1 # must be odd number
+ls_width = 1 # must be odd number
+ls_length =1
+slope_above_break = 0.6
+slope_below_break = 0.001#0.001
+slope_break = 0.35
+soil_thickness = hs
+
 
 # Add warning in MWRu if E_l_alpha > 1*qsc, and slpc low or hs thick => check with eric
 # set lamba as a class variable of MWRu, = 1, as written is 1 but can not be adjusted
@@ -283,59 +299,13 @@ pdir = "D:/UW_PhD/PreeventsProject/Paper_2_MWR/Landlab_Development/mass_wasting_
 
 # rows = 27, columns = 15, slope_break = 0.8
 
-# flume parameters
-dxdy = 10
-rows = 15
-columns = 1 # must be odd number
-ls_width = 1 # must be odd number
-ls_length = 1
-slope_above_break = 0
-slope_below_break = 0#0.001
-slope_break = 0.6
-soil_thickness = hs
 
-mg1, lsn1, pf1, cc1 = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
+mg, lsn, pf, cc = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
                               , slope_below_break = slope_below_break, slope_break = slope_break, ls_width = ls_width, ls_length = ls_length)
-
-# landslide and soil parameters
-dxdy = 10
-ls_width = 1 # must be odd number
-ls_length = 4
-slope_above_break = 0.4
-slope_below_break = 0.001
-slope_break = 0.7
-soil_thickness = hs
-
-mg2, lsn2, pf2, cc2 = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
-                              , slope_below_break = slope_below_break, slope_break = slope_break, ls_width = ls_width, ls_length = ls_length)
-
-
-mg=mg1
-# mg = RasterModelGrid((rows*2,columns+2),dxdy)
-
-# #
-# t1 = mg1.at_node['topographic__elevation'] + mg2.at_node['topographic__elevation'].max()-10
-# t2 = mg2.at_node['topographic__elevation']
-
-# topo = np.concatenate((t2,t1))
-# _ = mg.add_field('topographic__elevation',
-#                     topo,
-#                     at='node')
-
-# nn = len(mg2.node_x)
-
-# pf = np.concatenate((pf2,np.array(pf1+nn).astype(int)))
-pf = pf1
-
-cc = cc1
-lsn = lsn1#+nn
-
 
 # mg2.at_node['topographic__elevation']
 
-mg.at_node['topographic__elevation'][40]=mg.at_node['topographic__elevation'][40]+ls_h
-
-# mg.at_node['topographic__elevation'][28] =mg.at_node['topographic__elevation'][28]+3
+# mg.at_node['topographic__elevation'][40]=mg.at_node['topographic__elevation'][40]+7
 
 
 dem = mg.at_node['topographic__elevation']
@@ -482,16 +452,15 @@ mw_dict = {'critical slope':slpc, 'minimum flux':SD,
             'scour coefficient':cs, 'scour exponent':eta,
             'effective particle diameter':Dp, 'vol solids concentration':vs,
             'density solids':ros, 'typical flow thickness, scour':h,
-            'typical slope, scour':s, 'max observed flow depth': qsi_max }
+            'typical slope, scour':s}
 
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
-MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 50,
+MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 30,
                                   dist_to_full_flux_constraint = 0,
                                   routing_surface = "energy__elevation",
                                   settle_deposit = False,
-                                  deposition_rule = "critical_slope",
-                                  effective_qsi = effective_qsi,
+                                  deposition_rule = deposition_rule,
                                   deposit_style = deposit_style,
                                   anti_sloshing = False)
 
@@ -523,8 +492,8 @@ print("difference in initial and final dem [m3] is:{}".format(np.round(DEMdf.sum
 
 #%% evoloving surface
 
-Visualize = False
-if Visualize:
+
+if PlanVisualize:
     # plot how DEM changes
     for i in np.arange(0,len(MWRu.mw_ids)):
     
@@ -555,8 +524,8 @@ if Visualize:
         #     plt.xlim([xmin*.8,xmax*1.2]); plt.ylim([ymin*.3,ymax])        
 
 #%% evolving profile
-Visualize = False
-if Visualize:
+
+if ProfileVisualize:
     # plot how DEM changes
 
     x_ = mg.node_y[pf]
@@ -601,13 +570,6 @@ if Visualize:
     #         plot_values(mg,field,xmin,xmax,125,250,field_back= field_back, background = False)
     #         plt.ylim(125, 250)
     
-    
-#%% plot slope
-plt.figure()
-plt.plot(mg.node_y[pf],mg.at_node['topographic__steepest_slope'][:,3][pf],'k.', alpha = 0.5)
-plt.xlabel('x'); plt.ylabel('slope')
-plt.ylim([0,0.1])
-plt.grid()    
     
 #%% look at delivery and receiving node squence if a small flume
 

@@ -47,8 +47,8 @@ import MassWastingRunoutEvaluationFunctions as MWF
 #%% run parameters
 
 qsc = 0.01 # pick qsc
-lam = 10 # coeficient multiplied by qsc to determine equivlanet alpha
-slpc = 0.02 # critical slope
+lam = 1 # coeficient multiplied by qsc to determine equivlanet alpha
+slpc = 0.01 # critical slope
 
 ros = 2650 # density
 vs = 0.6 # volumetric solids concentration
@@ -483,7 +483,7 @@ mw_dict = {'critical slope':slpc, 'minimum flux':SD,
 
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
-MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 500,
+MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 100,
                                   dist_to_full_flux_constraint = 0,
                                   routing_surface = "energy__elevation",
                                   settle_deposit = False,

@@ -868,7 +868,7 @@ class MassWastingRunout(Component):
 
                     # receiving volume
                     rv = rp*vo
-                    print('n{},rn{},rv{}'.format(n,rn,rv))
+                    
                     if (len(rn) ==1) and (n == rn): # if node is a pit
                         rn_new = rn
                         rp_new = rp   
@@ -884,12 +884,15 @@ class MassWastingRunout(Component):
                             a, b = self._det_a_and_b( n, qsi, rn_M)
                             # compute New resultant qT from incoming material and topographically determined azimuths
                             ang_rN = self._new_direction(ang_rM, a, ang_rT, b)
+                            # print('ang_rT:{}, ang_rN:{}'.format(ang_rT,ang_rN))
                         # from New azimuth, get new set of rn
                         rn_new, new_flow_directions = self._new_rn(n, ang_rN)
                         # from new set of rn, and their respective azimuths, determine new rp
                         rp_new = self._new_proportions(new_flow_directions, ang_rN)
-                   
+                        
                 if self.momentum:
+                    # print('n{},rn{},rp{}'.format(n,rn,rp))
+                    # print('n{},rn_new{},rp_new{}'.format(n,rn_new,rp_new))
                     rn = rn_new
                     rv = rp_new*vo
  
@@ -989,7 +992,7 @@ class MassWastingRunout(Component):
         if len(rn_M) > 0: # if there is a delivery node other than self, compute slope of qsi
             zo_rnM = self._grid.at_node['topographic__elevation'][rn_M]
             slp_M = max(((zi+qsi)-zo_rnM)/self._grid.dx, 0.00001)
-            a = 0.5*slp_M/slp_T; b = 1
+            a = 0.1*slp_M/slp_T; b = 1
         else: # if the delivery node is self
             zo_rnM = None; slp_M=None; a = None; b = 1
         # print('values of rn_M:{}, zo_rnM:{}, slpM:{}, slpT:{}, a:{}, b:{}'.format(rn_M,zo_rnM,slp_M,slp_T,a,b))

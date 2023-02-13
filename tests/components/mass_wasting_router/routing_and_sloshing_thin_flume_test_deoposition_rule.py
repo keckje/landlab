@@ -166,7 +166,7 @@ rows = 27
 columns = 1
 ls_width = 1
 ls_length = 1
-slope_above_break = 0.0
+slope_above_break = 0.6
 slope_below_break = 0.0
 slope_break = 0.8
 soil_thickness = 5
@@ -297,7 +297,7 @@ MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 150, anti_s
                                   routing_surface = "energy__elevation",
                                   settle_deposit = False,
                                   deposition_rule = "critical_slope",
-                                  deposit_style = 'no_downslope_deposit')
+                                  deposit_style = 'downslope_deposit_sc3')
 
 
 #%% run
