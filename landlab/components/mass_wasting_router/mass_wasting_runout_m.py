@@ -155,7 +155,7 @@ class MassWastingRunout(Component):
         self._anti_sloshing = anti_sloshing
         self._check_frequency = sloshing_check_frequency
         self.effecitve_qsi = effective_qsi
-        self.momentum = True
+        self.momentum = False
         if self.VaryDp:
             print(' running with spatially variable Dp ')
 
@@ -868,7 +868,7 @@ class MassWastingRunout(Component):
 
                     # receiving volume
                     rv = rp*vo
-                    print('n{},rn{},rv{}'.format(n,rn,rv))
+                    # print('n{},rn{},rv{}'.format(n,rn,rv))
                     if (len(rn) ==1) and (n == rn): # if node is a pit
                         rn_new = rn
                         rp_new = rp   
@@ -989,7 +989,7 @@ class MassWastingRunout(Component):
         if len(rn_M) > 0: # if there is a delivery node other than self, compute slope of qsi
             zo_rnM = self._grid.at_node['topographic__elevation'][rn_M]
             slp_M = max(((zi+qsi)-zo_rnM)/self._grid.dx, 0.00001)
-            a = 0.5*slp_M/slp_T; b = 1
+            a = 0.1*slp_M/slp_T; b = 1
         else: # if the delivery node is self
             zo_rnM = None; slp_M=None; a = None; b = 1
         # print('values of rn_M:{}, zo_rnM:{}, slpM:{}, slpT:{}, a:{}, b:{}'.format(rn_M,zo_rnM,slp_M,slp_T,a,b))
