@@ -138,7 +138,8 @@ class MassWastingRunout(Component):
     deposit_style = 'downslope_deposit',
     anti_sloshing = False,
     sloshing_check_frequency = 20,
-    effective_qsi = False):
+    effective_qsi = False,
+    number_deposition_nodes = 3):
         
         super().__init__(grid)
 
@@ -159,6 +160,7 @@ class MassWastingRunout(Component):
         self._anti_sloshing = anti_sloshing
         self._check_frequency = sloshing_check_frequency
         self.effecitve_qsi = effective_qsi
+        self.ndn = number_deposition_nodes
         if self.VaryDp:
             print(' running with spatially variable Dp ')
 
@@ -1268,7 +1270,7 @@ class MassWastingRunout(Component):
         
         slp_h = self.slpc*self._grid.dx
         
-            # elevation at node i
+            # elevation at node n
         zi = self._grid.at_node['topographic__elevation'][n]
         
         zo = self._determine_zo(n, zi, qsi )
@@ -1299,6 +1301,30 @@ class MassWastingRunout(Component):
             def eq(qsi, zo, zi, slp_h):
                 D = min(qsi-(((qsi+(zi-zo)-slp_h)/2)+(qsi+(zi-zo)-slp_h)/8-slp_h/4),qsi)
                 return np.round(D,decimals = 5) # for less than zero, greater than zero contraints
+            
+        elif self._deposit_style == 'downslope_deposit_sc5':
+            rule = ((zi-zo)<=(slp_h))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
+            def eq(qsi, zo, zi, slp_h):
+                D = min(qsi-((2/3)*qsi-slp_h/3+(2/3)*(zi-zo)),qsi)
+                return np.round(D,decimals = 5) # for less than zero, greater than zero contraints    
+
+        elif self._deposit_style == 'downslope_deposit_sc7':
+            rule = ((zi-zo)<=(slp_h))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
+            def eq(qsi, zo, zi, slp_h):
+                ndn = self.ndn
+                # ((1/5)*qsi+2*slp_h-(4/5)*(zi-zo))
+                D = min((1/ndn)*qsi+((ndn-1)/2)*slp_h-((ndn-1)/ndn)*(zi-zo),qsi)
+                return np.round(D,decimals = 5) # for less than zero, greater than zero contraints    
+
+
+        elif self._deposit_style == 'downslope_deposit_sc9':
+            rule = ((zi-zo)<=(slp_h))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
+            def eq(qsi, zo, zi, slp_h):
+                ndn = self.ndn
+                # ((1/5)*qsi+2*slp_h-(4/5)*(zi-zo))
+                D = min((1/ndn)*qsi+((ndn-1)/2)*(slp_h-(zi-zo)),qsi)
+                return np.round(D,decimals = 5) # for less than zero, greater than zero contraints   
+                        
         
         elif self._deposit_style == 'no_downslope_deposit_sc':
             rule = ((zi-zo)<=(slp_h))

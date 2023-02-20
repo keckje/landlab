@@ -51,7 +51,7 @@ ProfileVisualize = True
 
 qsc = 0.02 # pick qsc
 lam = 10 # coeficient multiplied by qsc to determine equivlanet alpha
-slpc = 0.01 # critical slope
+slpc = 0.07 # critical slope
 
 ros = 2650 # density
 vs = 0.6 # volumetric solids concentration
@@ -60,10 +60,11 @@ s = 0.6 # slope
 eta = 0.2 # exponent
 Dp = 0.2 # particle diameter
 g_erosion = True
-ls_h = 5
-hs = 2 # soil thickness
+ls_h = 20
+hs =10 # soil thickness
 deposition_rule = "critical_slope"
-deposit_style = 'downslope_deposit_sc3'
+number_deposition_nodes =3
+deposit_style = 'downslope_deposit_sc9'
 
 
 
@@ -74,8 +75,8 @@ columns = 1 # must be odd number
 ls_width = 1 # must be odd number
 ls_length =1
 slope_above_break = 0.6
-slope_below_break = 0.001#0.001
-slope_break = 0.35
+slope_below_break = 0.05#0.001
+slope_break = 0.5
 soil_thickness = hs
 
 
@@ -462,7 +463,8 @@ MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 30,
                                   settle_deposit = False,
                                   deposition_rule = deposition_rule,
                                   deposit_style = deposit_style,
-                                  anti_sloshing = False)
+                                  anti_sloshing = False,
+                                  number_deposition_nodes = number_deposition_nodes)
 
 
 #%% run
@@ -576,74 +578,91 @@ if ProfileVisualize:
 dr_dq = pd.DataFrame(zip(MWRu.arndn_r[1],MWRu.arn_r[1]), columns = ['deliverying nodes','receiving nodes'])
 print(dr_dq)
 
-#%% flow characteristics 
-
-#         self.df_evo_maps = {} # copy of dem after each routing iteration
-#         self.topo_evo_maps = {}
-#         self.enL = [] # entrainment depth / regolith depth
-#         self.DpL = [] # deposition depth
-#         self.dfdL = [] # incoming debris flow thickness (qsi)
-#         self.TdfL = [] # basal shear stress 
-#         self.slopeL = [] # slope
-#         self.velocityL = [] # velocity (if any)
-
-# slope vs shear stress
-plt.figure()
-plt.semilogy(MWRu.slopeL, MWRu.TdfL,'k.', alpha = 0.5)
-plt.xlabel('slope'); plt.ylabel('shear stress [Pa]')
-
-plt.figure()
-plt.plot(MWRu.slopeL, MWRu.dfdL,'k.', alpha = 0.5)
-plt.xlabel('slope'); plt.ylabel('flow thickness [m]]')
-
-
-plt.figure()
-plt.plot(MWRu.slopeL, MWRu.enL,'k.', alpha = 0.5)
-plt.xlabel('slope'); plt.ylabel('scour depth [m]]')
-
-
-plt.figure()
-plt.plot(MWRu.slopeL, MWRu.DpL,'k.', alpha = 0.5)
-plt.xlabel('slope'); plt.ylabel('deposition depth [m]]')
-
-
-#%% scripts for checking metrics with dr_dq array
-# dr_dq = pd.DataFrame(zip(DebrisFlows.arndn_r[1],DebrisFlows.arn_r[1]), columns = ['deliverying nodes','receiving nodes'])
-met = []
-for i in range(dr_dq.shape[0]-5):
     
-    a1 =dr_dq['deliverying nodes'].iloc[i+5]
-    a2 =dr_dq['deliverying nodes'].iloc[i]
-
-
-    l_m = (len(a1)+len(a2))/2
-    slosh = len(np.intersect1d(a1,a2))/l_m # number of shared delivering nodes / average number of delivering nodes
+#%% plot slope
+plt.figure()
+plt.plot(mg.node_y[pf],mg.at_node['topographic__steepest_slope'][:,3][pf],'k.', alpha = 0.5)
+plt.xlabel('x'); plt.ylabel('slope')
+plt.ylim([0,0.1])
+plt.grid()    
     
-    met.append(slosh)
+#%% look at delivery and receiving node squence if a small flume
+
+dr_dq = pd.DataFrame(zip(MWRu.arndn_r[1],MWRu.arn_r[1]), columns = ['deliverying nodes','receiving nodes'])
+print(dr_dq)
+
+
+#%% flow characteristics
+check_model = False 
+if check_model:
     
-met = np.array(met)
-plt.figure()
-plt.plot(met)
-plt.title('number of shared delivering nodes / average number of delivering nodes')
-
-dm = met[1:]-met[:-1]
-plt.figure()
-plt.plot(dm)
-
-av = pd.DataFrame(dm).rolling(window = 5).mean()/np.abs(dm.max())
-plt.figure()
-plt.plot(av)
-
-#%%
-# MWRu = DebrisFlows
-sumdif = []
-for c in MWRu.df_evo_maps[0].keys():                  
-    dif = MWRu.df_evo_maps[0][c]-mg.at_node['topographic__initial_elevation']
-    dif[dif<0].sum()
-    sumdif.append(dif[dif>0].sum())
-sumdif = np.array(sumdif)    
-difs = (sumdif[:-1]-sumdif[1:])*mg.dx*mg.dy    
-difspd = pd.DataFrame(difs)    
-av = pd.DataFrame(difspd).rolling(window = 20).mean()/MWRu._lsvol#np.nanmax(np.abs(difspd))
-plt.figure()
-plt.plot(av)
+    #         self.df_evo_maps = {} # copy of dem after each routing iteration
+    #         self.topo_evo_maps = {}
+    #         self.enL = [] # entrainment depth / regolith depth
+    #         self.DpL = [] # deposition depth
+    #         self.dfdL = [] # incoming debris flow thickness (qsi)
+    #         self.TdfL = [] # basal shear stress 
+    #         self.slopeL = [] # slope
+    #         self.velocityL = [] # velocity (if any)
+    
+    
+    # slope vs shear stress
+    plt.figure()
+    plt.semilogy(MWRu.slopeL, MWRu.TdfL,'k.', alpha = 0.5)
+    plt.xlabel('slope'); plt.ylabel('shear stress [Pa]')
+    
+    plt.figure()
+    plt.plot(MWRu.slopeL, MWRu.dfdL,'k.', alpha = 0.5)
+    plt.xlabel('slope'); plt.ylabel('flow thickness [m]]')
+    
+    
+    plt.figure()
+    plt.plot(MWRu.slopeL, MWRu.enL,'k.', alpha = 0.5)
+    plt.xlabel('slope'); plt.ylabel('scour depth [m]]')
+    
+    
+    plt.figure()
+    plt.plot(MWRu.slopeL, MWRu.DpL,'k.', alpha = 0.5)
+    plt.xlabel('slope'); plt.ylabel('deposition depth [m]]')
+    
+    
+    ## scripts for checking metrics with dr_dq array
+    # dr_dq = pd.DataFrame(zip(DebrisFlows.arndn_r[1],DebrisFlows.arn_r[1]), columns = ['deliverying nodes','receiving nodes'])
+    met = []
+    for i in range(dr_dq.shape[0]-5):
+        
+        a1 =dr_dq['deliverying nodes'].iloc[i+5]
+        a2 =dr_dq['deliverying nodes'].iloc[i]
+    
+    
+        l_m = (len(a1)+len(a2))/2
+        slosh = len(np.intersect1d(a1,a2))/l_m # number of shared delivering nodes / average number of delivering nodes
+        
+        met.append(slosh)
+        
+    met = np.array(met)
+    plt.figure()
+    plt.plot(met)
+    plt.title('number of shared delivering nodes / average number of delivering nodes')
+    
+    dm = met[1:]-met[:-1]
+    plt.figure()
+    plt.plot(dm)
+    
+    av = pd.DataFrame(dm).rolling(window = 5).mean()/np.abs(dm.max())
+    plt.figure()
+    plt.plot(av)
+     
+    ## plot cumulative deta of each model iteration
+    # MWRu = DebrisFlows
+    sumdif = []
+    for c in MWRu.df_evo_maps[0].keys():                  
+        dif = MWRu.df_evo_maps[0][c]-mg.at_node['topographic__initial_elevation']
+        dif[dif<0].sum()
+        sumdif.append(dif[dif>0].sum())
+    sumdif = np.array(sumdif)    
+    difs = (sumdif[:-1]-sumdif[1:])*mg.dx*mg.dy    
+    difspd = pd.DataFrame(difs)    
+    av = pd.DataFrame(difspd).rolling(window = 1).mean()/MWRu._lsvol#np.nanmax(np.abs(difspd))
+    plt.figure()
+    plt.plot(av)
