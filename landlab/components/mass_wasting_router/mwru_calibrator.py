@@ -32,7 +32,7 @@ class MWRu_calibrator():
                  prior_distribution = "uniform",
                  method = 'both',
                  omega_metric = "runout",
-                 RMSE_metric = "Vd",
+                 RMSE_metric = "Vu",
                  jump_size = 0.2,
                  N_cycles = 10,
                  plot_tf = True,
@@ -163,8 +163,7 @@ class MWRu_calibrator():
             plt.title("it:{}, slpc:{}, SD:{}, alpha:{}".format(self.it, self.MWRu.slpc, self.MWRu.SD, self.MWRu.cs ))
             plt.clim(-1,1)
             plt.show()
-            
-            
+                        
 
     def _update_topographic_slope(self):
         """updates the topographic__slope and flow directions fields using the 
@@ -173,19 +172,21 @@ class MWRu_calibrator():
                 partition_method = self.MWRu.routing_partition_method)
         fd.run_one_step()
 
+
     def _channel_profile_deposition(self, datatype):
         """determines deposition patterns along the channel profile:
         """
         mg = self.mg
-        
+        dA = mg.dx*mg.dx
         el_l = self.pcd['el_l']
         el_h = self.pcd['el_h']
         channel_nodes = self.pcd['channel_nodes']
         channel_distance = self.pcd['channel_distance']
+        runout_distance = (channel_distance-channel_distance.max())*-1
         node_slope = mg.at_node['topographic__steepest_slope']
         cL = self.pcd['cL']
-       
-        def cv_mass_change_v2(cn,dem,demd,el_l,el_h,dA,node_slope,channel_distance):
+               
+        def cv_mass_change(cn):
 
             el = dem[cn]
             # cumulative downstream deposition and upstream scour
@@ -203,55 +204,21 @@ class MWRu_calibrator():
             Vt = dpe*dA
             dV = sce*dA
 
-            # cumulative volumetric change in the upstream and downstream directions
+            # cumulative volumetric change in the downstream direction
             dd = np.nansum(demd[(dem<=el) & (dem>=el_l)])
-            du = np.nansum(demd[(dem>=el) & (dem<=el_h)])
-            # multiply by cell area to get volume
             Vd = dd*dA
+            
+            # cumulative flow volume past station along profile
+            du = np.nansum(demd[(dem>=el) & (dem<=el_h)])*-1 # multiply by negative 1 because upslope erosion is moves past station
             Vu = du*dA
 
             # get channel characteristics
             # same, nut get node distance
             cd = channel_distance[channel_nodes == cn]
+            rd = runout_distance[channel_nodes == cn]
             # node slope
             cns = node_slope[cn]
-            return Vu, Vd, dV, Vt, cns, cn, cd, el
-        
-        def cv_mass_change(el,dem,demd,el_l,el_h,dA,channel_nodes,node_slope,channel_distance):
-            """may need this approach, because node order can cause problems, 
-            but most recent profile extraction did not have problem, need to double check"""
-
-            # cumulative downstream deposition and upstream scour
-            # dp: change > 0; Mask dem to get matching array of elevation
-            dp = demd[demd>0]; dem_dp = dem[demd>0]
-            # sc: change < 0; Mask dem to get matching array of elevation
-            sc = demd[demd<0]; dem_sc = dem[demd<0]
-
-            # sum masked dp and and sc
-            # deposition below elevation
-            dpe = np.nansum(dp[(dem_dp<el)&(dem_dp>=el_l)])
-            # scour above elevation
-            sce = np.nansum(sc[(dem_sc>el)&(dem_sc<=el_h)])
-            # multiply by cell area to get volume
-            Vt = dpe*dA
-            dV = sce*dA
-
-            # cumulative volumetric change in the upstream and downstream directions
-            dd = np.nansum(demd[(dem<=el) & (dem>=el_l)])
-            du = np.nansum(demd[(dem>=el) & (dem<=el_h)])
-            # multiply by cell area to get volume
-            Vd = dd*dA
-            Vu = du*dA
-
-            # get channel characteristics
-            cne = dem[channel_nodes]; cne_d = cne-el # cne closest to zero is node
-            # channel node at elevation closeset to el, use mask to finde
-            cn = channel_nodes[np.abs(cne_d) == min(np.abs(cne_d))].astype(int)
-            # same, nut get node distance
-            cd = channel_distance[np.abs(cne_d) == min(np.abs(cne_d))].astype(int)
-            # node slope
-            cns = node_slope[cn]
-            return Vu, Vd, dV, Vt, cns[0], cn[0], cd[0], el
+            return Vu, Vd, dV, Vt, cns, cn, cd, rd, el        
 
         dem_m = mg.at_node['topographic__elevation']
         if datatype == "modeled":
@@ -262,12 +229,10 @@ class MWRu_calibrator():
             dem = mg.at_node['topographic__initial_elevation']+demd
 
         mbL = []
-        # for el in np.linspace(el_l,el_h,100):
-        #     mbL.append(cv_mass_change(el, dem, demd,el_l,el_h,cL**2,channel_nodes, node_slope, channel_distance))
         for cn in channel_nodes:
-            mbL.append(cv_mass_change_v2(cn,dem,demd,el_l,el_h,cL**2,node_slope,channel_distance))    
+            mbL.append(cv_mass_change(cn))
         mbLdf = pd.DataFrame(mbL)
-        mbLdf.columns = ['Vu','Vd','dV','Vt', 'slope', 'node','distance','elevation']
+        mbLdf.columns = ['Vu','Vd','dV','Vt', 'slope', 'node','distance','runout_distance','elevation']
         return mbLdf
 
 
@@ -397,16 +362,16 @@ class MWRu_calibrator():
 
     def _RMSE_Vd(self):
         c = 2
-        observed = self.mbLdf_o[self.RMSE_metric]; 
+        observed = self.mbLdf_o[self.RMSE_metric] 
         modeled = self.mbLdf_m[self.RMSE_metric]
-        modeled[modeled == 0] = -1*np.abs((observed-modeled).mean()*c) 
+        # modeled[modeled == 0] = np.abs((observed-modeled).mean()*c) 
         RMSE_Vd = self._RMSE(observed, modeled)
         
         nm = 'V_rms, iteration'+str(self.it)
         if self.plot_tf == True:
             plt.figure(nm)
-            plt.plot(self.mbLdf_o['distance'], observed, label = 'observed')
-            plt.plot(self.mbLdf_m['distance'], modeled, label = 'modeled')
+            plt.plot(self.mbLdf_o['runout_distance'], observed, label = 'observed')
+            plt.plot(self.mbLdf_m['runout_distance'], modeled, label = 'modeled')
             plt.title(nm)
             plt.legend()
             plt.show()

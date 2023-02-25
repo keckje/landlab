@@ -155,7 +155,7 @@ class MassWastingRunout(Component):
         self._anti_sloshing = anti_sloshing
         self._check_frequency = sloshing_check_frequency
         self.effecitve_qsi = effective_qsi
-        self.momentum = True
+        self.momentum = False
         if self.VaryDp:
             print(' running with spatially variable Dp ')
 
@@ -868,7 +868,7 @@ class MassWastingRunout(Component):
 
                     # receiving volume
                     rv = rp*vo
-                    
+                    # print('n{},rn{},rv{}'.format(n,rn,rv))
                     if (len(rn) ==1) and (n == rn): # if node is a pit
                         rn_new = rn
                         rp_new = rp   
@@ -884,15 +884,12 @@ class MassWastingRunout(Component):
                             a, b = self._det_a_and_b( n, qsi, rn_M)
                             # compute New resultant qT from incoming material and topographically determined azimuths
                             ang_rN = self._new_direction(ang_rM, a, ang_rT, b)
-                            # print('ang_rT:{}, ang_rN:{}'.format(ang_rT,ang_rN))
                         # from New azimuth, get new set of rn
                         rn_new, new_flow_directions = self._new_rn(n, ang_rN)
                         # from new set of rn, and their respective azimuths, determine new rp
                         rp_new = self._new_proportions(new_flow_directions, ang_rN)
-                        
+                   
                 if self.momentum:
-                    # print('n{},rn{},rp{}'.format(n,rn,rp))
-                    # print('n{},rn_new{},rp_new{}'.format(n,rn_new,rp_new))
                     rn = rn_new
                     rv = rp_new*vo
  
