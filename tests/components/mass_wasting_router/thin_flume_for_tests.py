@@ -51,7 +51,7 @@ ProfileVisualize = True
 
 qsc = 0.02 # pick qsc
 lam = 10 # coeficient multiplied by qsc to determine equivlanet alpha
-slpc = 0.07 # critical slope
+slpc = 0.01 # critical slope
 
 ros = 2650 # density
 vs = 0.6 # volumetric solids concentration
@@ -62,9 +62,9 @@ Dp = 0.2 # particle diameter
 g_erosion = True
 ls_h = 20
 hs =10 # soil thickness
-deposition_rule = "critical_slope"
-number_deposition_nodes =9
-deposit_style = 'downslope_deposit_sc9'
+deposition_rule = "critical_slope"#"L_metric"#"critical_slope"#
+number_deposition_nodes =3
+deposit_style = 'downslope_deposit_sc10'#'no_downslope_deposit_sc'#'downslope_deposit_sc9'
 
 
 
@@ -75,7 +75,7 @@ columns = 1 # must be odd number
 ls_width = 1 # must be odd number
 ls_length =1
 slope_above_break = 0.6
-slope_below_break = 0.05#0.001
+slope_below_break = 0.001#0.001
 slope_break = 0.5
 soil_thickness = hs
 

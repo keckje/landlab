@@ -1323,9 +1323,35 @@ class MassWastingRunout(Component):
                 ndn = self.ndn
                 # ((1/5)*qsi+2*slp_h-(4/5)*(zi-zo))
                 D = min((1/ndn)*qsi+((ndn-1)/2)*(slp_h-(zi-zo)),qsi)
+                print('qsi:{}, N:{}, D:{}'.format(qsi, ndn,D))
                 return np.round(D,decimals = 5) # for less than zero, greater than zero contraints   
-                        
-        
+
+        elif self._deposit_style == 'downslope_deposit_sc10':
+            # print('zi:{}, zo:{}, slp_h:{}'.format(zi,zo,slp_h))
+            rule = ((zi-zo)<(slp_h))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
+            def eq(qsi, zo, zi, slp_h):
+                # ndn = self.ndn
+                # ndn = max(np.round(qsi/(1.1*slp_h)-(zi-zo)),1)
+                dx = self._grid.dx
+                sc = self.slpc
+                s = (zi-zo)/dx
+                sd = sc-s
+                
+                D1 = sc*dx/2
+                a = 0.5*dx*sd
+                b = D1-0.5*dx*sd
+                c = -qsi
+                N1 = -b+(((b**2)-4*a*c)**0.5)/(2*a)
+                N2 = -b-(((b**2)-4*a*c)**0.5)/(2*a)
+                ndn = np.round(max([N1,N2,1]))
+                # ndn = self.ndn
+                # ((1/5)*qsi+2*slp_h-(4/5)*(zi-zo))
+                D = min((1/ndn)*qsi+((ndn-1)/2)*dx*sd, qsi)
+                print('a:{}, b:{}, c:{}'.format(a, b,c))
+                print('qsi:{}, N:{}, D:{}, N1{}, N2{}'.format(qsi, ndn,D, N1, N2))
+                return np.round(D,decimals = 5) # for less than zero, greater than zero contraints   
+                                                
+                
         elif self._deposit_style == 'no_downslope_deposit_sc':
             rule = ((zi-zo)<=(slp_h))
             def eq(qsi, zo, zi, slp_h):

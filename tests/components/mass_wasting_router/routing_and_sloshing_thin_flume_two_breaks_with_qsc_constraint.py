@@ -48,7 +48,7 @@ import MassWastingRunoutEvaluationFunctions as MWF
 
 qsc = 0.01 # pick qsc
 lam = 1 # coeficient multiplied by qsc to determine equivlanet alpha
-slpc = 0.01 # critical slope
+slpc = 0.05 # critical slope
 
 ros = 2650 # density
 vs = 0.6 # volumetric solids concentration
@@ -60,9 +60,24 @@ g_erosion = True
 ls_h = 5
 qsi_max = 5
 hs = 2 # soil thickness
-deposition_rule = "critical_slope"
-deposit_style = 'downslope_deposit_sc3'
+deposition_rule = "critical_slope"#"L_metric"#
+number_deposition_nodes = 1
+deposit_style = 'downslope_deposit_sc10'#'no_downslope_deposit_sc'#'downslope_deposit_sc10'#'no_downslope_deposit_sc'#
 effective_qsi = True
+
+
+
+# flume parameters
+dxdy = 10
+rows = 15
+columns = 15 # must be odd number
+ls_width = 3 # must be odd number
+ls_length = 5
+slope_above_break = 0.6
+slope_below_break = 0.001
+slope_break1 = 0.2 # ratio of flume 1 to place the slope break
+slope_break2 = 0.7 # ratio of flume 2 to place the slope break
+soil_thickness = hs
 
 
 # Add warning in MWRu if E_l_alpha > 1*qsc, and slpc low or hs thick => check with eric
@@ -285,31 +300,21 @@ pdir = "D:/UW_PhD/PreeventsProject/Paper_2_MWR/Landlab_Development/mass_wasting_
 
 # rows = 27, columns = 15, slope_break = 0.8
 
-# flume parameters
-dxdy = 10
-rows = 15
-columns = 15 # must be odd number
-ls_width = 3 # must be odd number
-ls_length = 5
-slope_above_break = 0.6
-slope_below_break = 0.001
-slope_break = 0.2
-soil_thickness = hs
 
 mg1, lsn1, pf1, cc1 = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
-                              , slope_below_break = slope_below_break, slope_break = slope_break, ls_width = ls_width, ls_length = ls_length)
+                              , slope_below_break = slope_below_break, slope_break = slope_break1, ls_width = ls_width, ls_length = ls_length)
 
-# landslide and soil parameters
-dxdy = 10
-ls_width = 3 # must be odd number
-ls_length = 4
-slope_above_break = 0.6
-slope_below_break = 0.001
-slope_break = 0.7
-soil_thickness = hs
+# # landslide and soil parameters
+# dxdy = 10
+# ls_width = 3 # must be odd number
+# ls_length = 4
+# slope_above_break = 0.6
+# slope_below_break = 0.001
+# slope_break = 0.7
+# soil_thickness = hs
 
 mg2, lsn2, pf2, cc2 = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
-                              , slope_below_break = slope_below_break, slope_break = slope_break, ls_width = ls_width, ls_length = ls_length)
+                              , slope_below_break = slope_below_break, slope_break = slope_break2, ls_width = ls_width, ls_length = ls_length)
 
 
 
@@ -487,10 +492,11 @@ MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 100,
                                   dist_to_full_flux_constraint = 0,
                                   routing_surface = "energy__elevation",
                                   settle_deposit = False,
-                                  deposition_rule = "critical_slope",
+                                  deposition_rule = deposition_rule,
                                   deposit_style = deposit_style,
                                   anti_sloshing = False,
-                                  effective_qsi = effective_qsi)
+                                  effective_qsi = effective_qsi,
+                                  number_deposition_nodes = number_deposition_nodes)
 
 
 #%% run
@@ -675,3 +681,13 @@ difspd = pd.DataFrame(difs)
 av = pd.DataFrame(difspd).rolling(window = 20).mean()/MWRu._lsvol#np.nanmax(np.abs(difspd))
 plt.figure()
 plt.plot(av)
+
+
+    
+#%% plot slope
+plt.figure()
+plt.plot(mg.node_y[pf],mg.at_node['topographic__steepest_slope'][:,3][pf],'k.', alpha = 0.5)
+plt.xlabel('x'); plt.ylabel('slope')
+# plt.ylim([0,0.1])
+plt.grid()    
+    
