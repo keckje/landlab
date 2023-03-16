@@ -763,8 +763,8 @@ class LandslideProbability(Component):
         self._grid.at_node["soil__probability_of_saturation"] = self._prob_sat
         # arrays of n iterations of factor of safety values and soil depth for 
         # each core node
-        self._FSarray = np.array(self._FS_list)
-        self._hsarray = np.array(self._hs_list)
+        # self._FSarray = np.array(self._FS_list)
+        # self._hsarray = np.array(self._hs_list)
         
     def _seed_generator(self, seed=0):
         """Method to initiate random seed.

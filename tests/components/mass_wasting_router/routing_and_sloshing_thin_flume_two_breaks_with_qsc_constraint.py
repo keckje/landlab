@@ -48,7 +48,7 @@ import MassWastingRunoutEvaluationFunctions as MWF
 
 qsc = 0.01 # pick qsc
 lam = 1 # coeficient multiplied by qsc to determine equivlanet alpha
-slpc = 0.05 # critical slope
+slpc = 0.01 # critical slope
 
 ros = 2650 # density
 vs = 0.6 # volumetric solids concentration
@@ -337,8 +337,7 @@ cc = cc1
 lsn = lsn1+nn
 
 
-mg2.at_node['topographic__elevation']
-
+mg.at_node['topographic__elevation'] = mg.at_node['topographic__elevation']+10
 
 dem = mg.at_node['topographic__elevation']
 
@@ -490,7 +489,7 @@ release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
 MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 100,
                                   dist_to_full_flux_constraint = 0,
-                                  routing_surface = "energy__elevation",
+                                  routing_surface = "topographic__elevation",
                                   settle_deposit = False,
                                   deposition_rule = deposition_rule,
                                   deposit_style = deposit_style,
@@ -526,7 +525,7 @@ print("difference in initial and final dem [m3] is:{}".format(np.round(DEMdf.sum
 
 #%% evoloving surface
 
-Visualize = True
+Visualize = False
 if Visualize:
     # plot how DEM changes
     for i in np.arange(0,len(MWRu.mw_ids)):
@@ -558,7 +557,7 @@ if Visualize:
         #     plt.xlim([xmin*.8,xmax*1.2]); plt.ylim([ymin*.3,ymax])        
 
 #%% evolving profile
-Visualize = True
+Visualize = False
 if Visualize:
     # plot how DEM changes
 

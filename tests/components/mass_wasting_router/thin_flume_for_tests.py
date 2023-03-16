@@ -49,9 +49,9 @@ PlanVisualize = False
 ProfileVisualize = True
 
 
-qsc = 0.02 # pick qsc
+qsc = 0.01 # pick qsc
 lam = 10 # coeficient multiplied by qsc to determine equivlanet alpha
-slpc = 0.01 # critical slope
+slpc = 0.01# critical slope
 
 ros = 2650 # density
 vs = 0.6 # volumetric solids concentration
@@ -60,20 +60,19 @@ s = 0.6 # slope
 eta = 0.2 # exponent
 Dp = 0.2 # particle diameter
 g_erosion = True
-ls_h = 20
-hs =10 # soil thickness
+ls_h = 5
+hs = 10 # soil thickness
 deposition_rule = "critical_slope"#"L_metric"#"critical_slope"#
-number_deposition_nodes =3
+number_deposition_nodes = 3
 deposit_style = 'downslope_deposit_sc10'#'no_downslope_deposit_sc'#'downslope_deposit_sc9'
-
-
+effective_qsi = False
 
 # flume parameters
 dxdy = 10
 rows = 15
 columns = 1 # must be odd number
 ls_width = 1 # must be odd number
-ls_length =1
+ls_length = 4
 slope_above_break = 0.6
 slope_below_break = 0.001#0.001
 slope_break = 0.5
@@ -459,12 +458,13 @@ release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
 MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 30,
                                   dist_to_full_flux_constraint = 0,
-                                  routing_surface = "energy__elevation",
+                                  routing_surface = "topographic__elevation",
                                   settle_deposit = False,
                                   deposition_rule = deposition_rule,
                                   deposit_style = deposit_style,
                                   anti_sloshing = False,
-                                  number_deposition_nodes = number_deposition_nodes)
+                                  number_deposition_nodes = number_deposition_nodes,
+                                  effective_qsi = effective_qsi)
 
 
 #%% run

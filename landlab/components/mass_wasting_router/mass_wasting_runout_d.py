@@ -35,6 +35,7 @@ class MassWastingRunout(Component):
                    directional constraint uses nodes in delivery node dictionary
                    
                once 
+               or keep a list of all delivery nodes as a field value
     
     
     author: Jeff Keck
@@ -133,7 +134,7 @@ class MassWastingRunout(Component):
     routing_surface = "energy__elevation",
     settle_deposit = False,
     deposition_rule = "critical_slope",
-    veg_factor = 3,
+    veg_factor = 1,
     dist_to_full_flux_constraint = 0,
     deposit_style = 'downslope_deposit',
     anti_sloshing = False,
@@ -592,7 +593,7 @@ class MassWastingRunout(Component):
             # check for repeat delivery nodes
             a1 = self.arndn_r[mw_id][-1]; a2 = self.arndn_r[mw_id][-5]
             l_m = (len(a1)+len(a2))/2
-            rnr = len(np.intersect1d(a1,a2))/l_m
+            rnr = len(np.intersect1d(a1,a2))/l_m # ratio of number of matching nodes in the dn and rn lists to the length of the rn and dn lists
             # print('repeat node ratio{},a1:{}, a2:{}'.format(rnr, a1, a2))
             
             if self.difsmn < 0.001 or rnr > 0.3:
@@ -821,7 +822,7 @@ class MassWastingRunout(Component):
             rn_g = rn_g[np.where(rn_g != -1)]
             # rn_g = rn_g[~np.isin(rn_g,dn)]
             # if qsi less than the vegetation SD in an undisturbed cell
-            if ((qsi <=(self.SD_v*self.veg_factor)) and (self._grid.at_node['disturbance_map'][n] == False)):
+            if ((qsi <=(self.SD_v*self.veg_factor)) and (self._grid.at_node['disturbance_map'][n] == False)):# or ((len(rn) == 1) and ([n] == [rn])):
                 D = qsi 
                 qso = 0
                 # D = min(qsi, self._deposit(qsi_, slpn, n))
@@ -835,21 +836,22 @@ class MassWastingRunout(Component):
             # if qsi is less than SD in a disturbed cell or the iteration limit has been reached or their are no receiving cells
             # if no receiving cells, then deposition is at node n
                                                             # TODO: this "or, or, and" constraint keeps material from being sent to the same node and an unending model loop. But, it causes erratic depositon. Figure out different way to prevent unending loop (still need material to deposit at a pit to be ablve to go around an object, but allow program to detect when in an unending loop)
-            elif (qsi <=self.SD_v) or self.c == self.itL-1 or (len(rn) < 1) or ((len(rn) == 1) and ([n] == [rn])):# 
-                D = qsi
-                qso = 0
-                # D = min(qsi, self._deposit(qsi_, slpn, n))
-                # qso = qsi-D
-                E = 0
-                deta = D
-                pd_up = 0
-                Tbs = 0
-                u = 0
-                # print('qsi less than SD or rn <1 or sent to self, it:{}, node:{}, qsi:{}, D:{}, qso:{}'.format(self.c,n,qsi,D,qso))
-                # print('SDv:{}, rn:{}'.format(self.SD_v, rn))
+            # elif (qsi <=self.SD_v) or self.c == self.itL-1 or (len(rn) < 1) or ((len(rn) == 1) and ([n] == [rn])):# 
+            #     D = qsi
+            #     qso = 0
+            #     # D = min(qsi, self._deposit(qsi_, slpn, n))
+            #     # qso = qsi-D
+            #     E = 0
+            #     deta = D
+            #     pd_up = 0
+            #     Tbs = 0
+            #     u = 0
+            #     # print('qsi less than SD or rn <1 or sent to self, it:{}, node:{}, qsi:{}, D:{}, qso:{}'.format(self.c,n,qsi,D,qso))
+            #     # print('SDv:{}, rn:{}'.format(self.SD_v, rn))
+            
             else:
-                D = self._deposit(qsi_, slpn, n) # function of qsi and topographic elevation before settle/scour by qsi                
-                
+                D = min(qsi, self._deposit(qsi_, slpn, n)) # function of qsi and topographic elevation before settle/scour by qsi                
+                print('it:{}, DEPOSTION:{}'.format(self.c, D))
                 # scour a function of steepes topographic slope at node, determined before settle/scour by qsi
                
                 if self.VaryDp:   
@@ -873,6 +875,8 @@ class MassWastingRunout(Component):
                 # print('qso:'+str(qso))
                 # chage elevation
                 deta = D-E 
+                
+                print('Mass Continuity -it:{}, qsi:{}, D:{}, E:{}, qso:{}'.format(self.c, qsi,D,E,qso))
             # qso  = np.round(qso,decimals = 8)   
             # print(qso)
             # model behavior tracking
@@ -922,12 +926,21 @@ class MassWastingRunout(Component):
             
             # nodes that receive material from node n
             # rn = self.rn[n]
+            
+            print('it:{},#### determine receiver node and proportions#### '.format(self.c))
+            print('slope:{}'.format(self._grid.at_node['topographic__steepest_slope'][n]))
+            print('RN:{}'.format(self._grid.at_node['flow__receiver_node'][n]))
+            print('elevation:{}'.format(self._grid.at_node['topographic__elevation'][n]))
+            
             rn = self._grid.at_node.dataset['flow__receiver_node'].values[n] #   #  defining rn from the energy elevation causes flow to slosh
             rn_ = rn.copy()
-            rn_ = rn_[np.where(rn_ != -1)]  
-            rn_ = rn_[~np.isin(rn_,dn)] 
-
+            rn_ = rn_[np.where(rn_ != -1)]
+            print('delivery nodes, rn: {}'.format(rn_))
+            rn_ = rn_[~np.isin(rn_,dn)]  # cant go backwards, but his rule doesnt work because node delivers to self before trying to go backwards, need to compare dn from 2 iterations before 
+            print('remove delivery nodes, rn: {}'.format(rn_))
            
+            print('qso:{}'.format(qso))
+            print('it:{},#### determine receiver node and proportions#### '.format(self.c))
             
             if qso>0 and n not in self._grid.boundary_nodes: 
                 # move this out of funciton, need to determine rn and rp after material is in cell, not before
@@ -968,6 +981,10 @@ class MassWastingRunout(Component):
                 self.arvL.append(rv)
                 self.arpdL.append(rpd)
                 self.arndnL.append(rndn)
+
+                # # add delivery node and receiver node to list
+                # self._grid['DN'][n] = np.array([self._grid['DN'][n], dn])
+                # self._grid['RN'][n] = np.array([self._grid['RN'][n], rn])
                 # print('n = {}, rn = {}, rp ={}, rv ={}, qsi ={} '.format(n, rn, rp, rv, qsi))
                 # if n in np.array([  8,  25,  42,  59,  76,  93, 110, 127, 144, 161, 178, 195, 212,
                 #         229, 246, 263, 280, 297, 314, 331, 348, 365, 382, 399, 416, 433, 450]):
@@ -1202,6 +1219,9 @@ class MassWastingRunout(Component):
         # get adjacent nodes
         adj_n = np.hstack((self._grid.adjacent_nodes_at_node[n],
         self._grid.diagonal_adjacent_nodes_at_node[n]))
+        
+        # exclude closed boundary nodes               
+        adj_n = adj_n[~np.isin(adj_n,self._grid.closed_boundary_nodes)]
                         
         # incoming energy at node i
         ei = qsi+zi
@@ -1280,6 +1300,11 @@ class MassWastingRunout(Component):
         
         zo = self._determine_zo(n, zi, qsi )
         
+        print('it:{},#### slope and elevation when depostion function is implemented #### '.format(self.c))
+        print('slope:{}'.format(self._grid.at_node['topographic__steepest_slope'][n]))
+        print('RN:{}'.format(self._grid.at_node['flow__receiver_node'][n]))
+        print('elevation:{}'.format(self._grid.at_node['topographic__elevation'][n]))
+        
         # print('it:{}, node:{}, zi:{}, zo:{}, qsi:{}'.format(self.c,n, zi, zo, qsi))
         
         if self._deposit_style == 'downslope_deposit':
@@ -1353,8 +1378,8 @@ class MassWastingRunout(Component):
                 # ((1/5)*qsi+2*slp_h-(4/5)*(zi-zo))
                 D = min((1/ndn)*qsi+((ndn-1)/2)*dx*sd, qsi)
                 # print('a:{}, b:{}, c:{}'.format(a, b,c))
-                # print('qsi:{}, N:{}, D:{}, N1{}, N2{}'.format(qsi, ndn,D, N1, N2))
-                return np.round(D,decimals = 5) # for less than zero, greater than zero contraints   
+                print('depostion rule -it:{}, qsi:{}, N:{}, D:{}, N1{}, N2{}'.format(self.c, qsi, ndn,D, N1, N2))
+                return D #np.round(D,decimals = 5) # for less than zero, greater than zero contraints   
                                                 
                 
         elif self._deposit_style == 'no_downslope_deposit_sc':
@@ -1363,30 +1388,39 @@ class MassWastingRunout(Component):
                 D = min(zo-zi+slp_h,qsi)
                 return np.round(D,decimals = 5)
         # elif self._deposit_style == "nolans_rule":
-            
-            
-        # print('it:{}, node:{}, zi:{}, zo:{}, rule value:{}'.format(self.c,n, zi, zo,rule))
         
-        if zo is None:# a pit in the energy elevation surface
-            Dc = qsi 
+        if rule:
+            Dc = eq(qsi,zo,zi, slp_h)
         else:
-            if zo>zi:            
+            Dc = 0
+        
+        if Dc <0:
+            print('D less than zero, qsi:{}, D:{}'.format(qsi, Dc))
+            print("negative deposition!! n {}, qsi{}, ei {}, DL {}, Dc {}".format(n,qsi,ei,DL,Dc))
+            raise(ValueError)            
+        
+        print('it:{}, node:{}, zi:{}, zo:{}, qsi:{}, D:{}, rule value:{}'.format(self.c,n, zi, zo, qsi, Dc, rule))
+        
+        # if zo is None:# a pit in the energy elevation surface
+        #     Dc = qsi 
+        # else:
+        #     if zo>zi:            
 
-                Dc = eq(qsi,zo,zi, slp_h)
-                # print('zo>zi, qsi:{}, D:{}'.format(qsi, Dc))
+        #         Dc = eq(qsi,zo,zi, slp_h)
+        #         print('zo>zi, qsi:{}, D:{}'.format(qsi, Dc))
             
-            elif (zo<=zi) and rule:#((zi-zo)<=(slp_h)):#######: #
+        #     elif (zo<=zi) and rule:#((zi-zo)<=(slp_h)):#######: #
                 
-                Dc = eq(qsi,zo,zi, slp_h)
-                # print('zo<=zi, qsi:{}, D:{}'.format(qsi, Dc))
-            else:
-                Dc = 0
-                # print('slope exceeds slp_h or slp_h+qsi, qsi:{}, D:{}'.format(qsi, Dc))
-            if Dc <0:
-                Dc = 0
-                # print('D less than zero, qsi:{}, D:{}'.format(qsi, Dc))
-                # print("negative deposition!! n {}, qsi{}, ei {}, DL {}, Dc {}".format(n,qsi,ei,DL,Dc))
-                # raise(ValueError)
+        #         Dc = eq(qsi,zo,zi, slp_h)
+        #         print('zo<=zi, qsi:{}, D:{}'.format(qsi, Dc))
+        #     else:
+        #         Dc = 0
+        #         print('slope exceeds slp_h or slp_h+qsi, qsi:{}, D:{}'.format(qsi, Dc))
+        #     if Dc <0:
+        #         Dc = 0
+        #         # print('D less than zero, qsi:{}, D:{}'.format(qsi, Dc))
+        #         # print("negative deposition!! n {}, qsi{}, ei {}, DL {}, Dc {}".format(n,qsi,ei,DL,Dc))
+        #         # raise(ValueError)
             
             
         # print('slp_h = {}, zi = {}, qsi ={}, zo ={}, D ={} '.format(slp_h, zi, qsi, zo, Dc))

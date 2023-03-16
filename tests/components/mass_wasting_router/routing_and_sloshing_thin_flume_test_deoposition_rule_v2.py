@@ -62,7 +62,7 @@ hs = 2 # soil thickness
 effective_qsi = False
 qsi_max = 4
 number_deposition_nodes = 5
-deposit_style = 'downslope_deposit_sc9'
+deposit_style = 'downslope_deposit_sc10'
 
 # Add warning in MWRu if E_l_alpha > 1*qsc, and slpc low or hs thick => check with eric
 # set lamba as a class variable of MWRu, = 1, as written is 1 but can not be adjusted
@@ -489,7 +489,7 @@ release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
 MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 50,
                                   dist_to_full_flux_constraint = 0,
-                                  routing_surface = "energy__elevation",
+                                  routing_surface = "topographic__elevation",
                                   settle_deposit = False,
                                   deposition_rule = "critical_slope",
                                   effective_qsi = effective_qsi,

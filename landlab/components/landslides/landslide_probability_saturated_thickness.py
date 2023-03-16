@@ -169,11 +169,13 @@ class LandslideProbabilitySaturatedThickness(LandslideProbabilityBase):
         """compute relative wetness: relative wetness is stochastically determined 
         from the user selected recharge pdf for each iteration"""
         if self._saturated__thickness_distribution == 'event':
-            # relative wetness is determined by the saturated thickness value
-            # at each grid node
+            # relative wetness is a single value and determined from the
+            # saturated thickness at the grid node
             self._rel_wetness = ((self._grid.at_node["saturated__thickness"][i]) / 
                                  self._hs)        
         elif self._saturated__thickness_distribution == 'lognormal_spatial': 
-            # relative wetness is stochastically determined from a lognormal
-            # pdf of saturated zone thickness for each iteration
+            # relative wetness is an array of values, equal in length to the 
+            # number of iterations (self._n). The values are stochastically 
+            # determined from a lognormal pdf of saturated zone thickness 
+            # at the grid node in the function _get_soil_water
             self._rel_wetness = (self._satthick) / self._hs   
