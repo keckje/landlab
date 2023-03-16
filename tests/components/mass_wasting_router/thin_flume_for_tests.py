@@ -66,13 +66,14 @@ deposition_rule = "critical_slope"#"L_metric"#"critical_slope"#
 number_deposition_nodes = 3
 deposit_style = 'downslope_deposit_sc10'#'no_downslope_deposit_sc'#'downslope_deposit_sc9'
 effective_qsi = True
+settle_deposit = True
 
 # flume parameters
 dxdy = 10
 rows = 15
 columns = 1 # must be odd number
 ls_width = 1 # must be odd number
-ls_length = 2
+ls_length = 3
 slope_above_break = 0.6
 slope_below_break = 0.001#0.001
 slope_break = 0.5
@@ -459,7 +460,7 @@ release_dict = {'number of pulses':npu, 'iteration delay':nid }
 MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 1000,
                                   dist_to_full_flux_constraint = 0,
                                   routing_surface = "topographic__elevation",
-                                  settle_deposit = False,
+                                  settle_deposit = settle_deposit,
                                   deposition_rule = deposition_rule,
                                   deposit_style = deposit_style,
                                   anti_sloshing = False,

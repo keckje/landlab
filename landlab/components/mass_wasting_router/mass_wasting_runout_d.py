@@ -796,8 +796,7 @@ class MassWastingRunout(Component):
             self._grid.diagonal_adjacent_nodes_at_node[n]))
             
             # maximum slope at node n
-            slpn = self._grid.at_node['topographic__steepest_slope'][n].max()
-            
+            slpn = self._grid.at_node['topographic__steepest_slope'][n].max()           
             # slpn = self._grid.at_node['topographic__steepest_slope'][adj_n].mean()
 
             
@@ -807,22 +806,13 @@ class MassWastingRunout(Component):
             # incoming particle diameter (weighted average)
             pd_in = self._particle_diameter_in(n,vin) # move
 
-            # can flow continue? need rn node to avoid direction flow towards self.
-            # 
-            
-            # rn: receiver nodes based on either the pre-flow underlying topographic 
-            # slope at node n or slope of the flow at node n once it is over node n
-            # rn = self._grid.at_node.dataset['flow__receiver_node'].values[n] ## receiving node needs to be based on energy el
-            # rn = self.rn[n]
-            # rn = rn[np.where(rn != -1)] 
-            # rn = rn[~np.isin(rn,dn)]  # material can not be sent back to the delivery nodes
-            
+           
             # rn_g: receiver nodes based on the pre-flow underlying topographic slope at node n
             rn_g = self._grid.at_node.dataset['flow__receiver_node'].values[n]
             rn_g = rn_g[np.where(rn_g != -1)]
             # rn_g = rn_g[~np.isin(rn_g,dn)]
             # if qsi less than the vegetation SD in an undisturbed cell
-            if ((qsi <=(self.SD_v*self.veg_factor)) and (self._grid.at_node['disturbance_map'][n] == False)):# or ((len(rn) == 1) and ([n] == [rn])):
+            if (qsi <=(self.SD_v*self.veg_factor)):# and (self._grid.at_node['disturbance_map'][n] == False)):# or ((len(rn) == 1) and ([n] == [rn])):
                 D = qsi 
                 qso = 0
                 # D = min(qsi, self._deposit(qsi_, slpn, n))
@@ -832,23 +822,7 @@ class MassWastingRunout(Component):
                 pd_up = 0
                 Tbs = 0
                 u = 0
-                # print('less than SD veg, it:{}, node:{}, qsi:{}, D:{}, qso:{}'.format(self.c,n,qsi,D,qso))
-            # if qsi is less than SD in a disturbed cell or the iteration limit has been reached or their are no receiving cells
-            # if no receiving cells, then deposition is at node n
-                                                            # TODO: this "or, or, and" constraint keeps material from being sent to the same node and an unending model loop. But, it causes erratic depositon. Figure out different way to prevent unending loop (still need material to deposit at a pit to be ablve to go around an object, but allow program to detect when in an unending loop)
-            # elif (qsi <=self.SD_v) or self.c == self.itL-1 or (len(rn) < 1) or ((len(rn) == 1) and ([n] == [rn])):# 
-            #     D = qsi
-            #     qso = 0
-            #     # D = min(qsi, self._deposit(qsi_, slpn, n))
-            #     # qso = qsi-D
-            #     E = 0
-            #     deta = D
-            #     pd_up = 0
-            #     Tbs = 0
-            #     u = 0
-            #     # print('qsi less than SD or rn <1 or sent to self, it:{}, node:{}, qsi:{}, D:{}, qso:{}'.format(self.c,n,qsi,D,qso))
-            #     # print('SDv:{}, rn:{}'.format(self.SD_v, rn))
-            
+ 
             else:
                 D = min(qsi, self._deposit(qsi_, slpn, n)) # function of qsi and topographic elevation before settle/scour by qsi                
                 # print('it:{}, DEPOSTION:{}'.format(self.c, D))
@@ -1098,7 +1072,7 @@ class MassWastingRunout(Component):
                     pp = slpn/sslp
                     
                     # determine the total flux / unit width sent to S > Sc downslope cells
-                    # mean downslope cell elevation
+                    # mean/min downslope cell elevation
                     zo = self._grid.at_node['topographic__elevation'][rn].min()
                     
                     # node n elevation
@@ -1128,6 +1102,13 @@ class MassWastingRunout(Component):
                     # update the soil thickness
                     self._grid.at_node['soil__thickness'][n] = self._grid.at_node['soil__thickness'][n]-qso_s
                     self._grid.at_node['soil__thickness'][rn] = self._grid.at_node['soil__thickness'][rn]+qso_s_i
+                    
+                    # update properties, try to vectorize this, will loop
+                    # for each property...right now just for pd                   
+                    pd_ = self._grid.at_node['particle__diameter'][n]                    
+                    for v, n_ in enumerate(rn):
+                        D = qso_s_i[v]
+                        self._grid.at_node['particle__diameter'][n_] = self._particle_diameter_node(n_,pd_,0,D)
     
 
     def _scour(self, n, depth, slope, opt = 1, pd_in = None):
@@ -1192,7 +1173,7 @@ class MassWastingRunout(Component):
             if self.deposition_rule == "L_metric":
                 D = self._deposit_L_metric(qsi, slpn)
             elif self.deposition_rule == "critical_slope":
-                D = self._deposit_friction_angle_v3(qsi, n)
+                D = self._deposit_friction_angle(qsi, n)
             elif self.deposition_rule == "both":
                 DL = self._deposit_L_metric(qsi, slpn)
                 Dc = self._deposit_friction_angle(qsi, n) 
@@ -1213,7 +1194,7 @@ class MassWastingRunout(Component):
         # exclude closed boundary nodes               
         adj_n = adj_n[~np.isin(adj_n,self._grid.closed_boundary_nodes)]
                         
-        # incoming energy at node i
+        # elevation of flow surface at node... may not need this
         ei = qsi+zi
         
         # nodes below incoming energy surface
@@ -1243,45 +1224,8 @@ class MassWastingRunout(Component):
         
         return(DL)
     
-    
+
     def _deposit_friction_angle(self, qsi, n):
-        
-        slp_h = self.slpc*self._grid.dx
-        
-            # elevation at node i
-        zi = self._grid.at_node['topographic__elevation'][n]
-        
-        zo = self._determine_zo(n, zi, qsi )
-        
-        if self._deposit_style == 'downslope_deposit':
-            rule = ((zi-zo)<=(qsi+slp_h))
-        elif self._deposit_style == 'no_downslope_deposit':
-            rule = ((zi-zo)<=(slp_h))
-        
-        if zo is not None:
-        
-            if zo>zi:            
-    
-                Dc = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)
-            
-            elif (zo<=zi) and rule:#((zi-zo)<=(slp_h)):#######: #
-                
-                Dc = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)
-            else:
-                Dc = 0
-            
-            if Dc <0:
-                print("negative deposition!! n {}, qsi{}, ei {}, DL {}, Dc {}".format(n,qsi,ei,DL,Dc))
-                raise(ValueError)
-        else: # a pit in the energy elevation surface
-            print('a pit in the energy surface, it:{}, node:{}, zi:{}, zo:{}'.format(self.c,n, zi, zo))
-            Dc = qsi 
-            
-        # print('slp_h = {}, zi = {}, qsi ={}, zo ={}, D ={} '.format(slp_h, zi, qsi, zo, Dc))
-        return(Dc)
-
-
-    def _deposit_friction_angle_v3(self, qsi, n):
         
         slp_h = self.slpc*self._grid.dx
         
@@ -1289,74 +1233,15 @@ class MassWastingRunout(Component):
         zi = self._grid.at_node['topographic__elevation'][n]
         
         zo = self._determine_zo(n, zi, qsi )
-        
-        # print('it:{},#### slope and elevation when depostion function is implemented #### '.format(self.c))
-        # print('slope:{}'.format(self._grid.at_node['topographic__steepest_slope'][n]))
-        # print('RN:{}'.format(self._grid.at_node['flow__receiver_node'][n]))
-        # print('elevation:{}'.format(self._grid.at_node['topographic__elevation'][n]))
-        
-        # print('it:{}, node:{}, zi:{}, zo:{}, qsi:{}'.format(self.c,n, zi, zo, qsi))
-        
-        if self._deposit_style == 'downslope_deposit':
-            rule = ((zi-zo)<=((qsi+slp_h)/2))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
-            def eq(qsi, zo, zi, slp_h):
-                # D = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)
-                D = min(qsi-(((qsi+(zi-zo)-slp_h)/2)+(qsi+(zi-zo)-slp_h)/8-slp_h/4),qsi)
-                return np.round(D,decimals = 5) # for less than zero, greater than zero contraints
-            
-        elif self._deposit_style == 'downslope_deposit_sc':
-            rule = ((zi-zo)<=((qsi*self.slpc+slp_h)))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
-            def eq(qsi, zo, zi, slp_h):
-                D = min(qsi-(((qsi+(zi-zo)-slp_h)/2)+(qsi+(zi-zo)-slp_h)/8-slp_h/4),qsi)
-                return np.round(D,decimals = 5) # for less than zero, greater than zero contraints
-        
-        elif self._deposit_style == 'downslope_deposit_sc2':
-            rule = ((zi-zo)<=(slp_h))
-            def eq(qsi, zo, zi, slp_h):
-                D = min(0.5*qsi+(zo-zi+slp_h)/2,qsi)#D = min(zo-zi+slp_h,qsi)
-                return np.round(D,decimals = 5)
-        
-        elif self._deposit_style == 'downslope_deposit_sc3':
-            rule = ((zi-zo)<=(slp_h))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
-            def eq(qsi, zo, zi, slp_h):
-                D = min(qsi-(((qsi+(zi-zo)-slp_h)/2)+(qsi+(zi-zo)-slp_h)/8-slp_h/4),qsi)
-                return np.round(D,decimals = 5) # for less than zero, greater than zero contraints
-            
-        elif self._deposit_style == 'downslope_deposit_sc5':
-            rule = ((zi-zo)<=(slp_h))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
-            def eq(qsi, zo, zi, slp_h):
-                D = min(qsi-((2/3)*qsi-slp_h/3+(2/3)*(zi-zo)),qsi)
-                return np.round(D,decimals = 5) # for less than zero, greater than zero contraints    
 
-        elif self._deposit_style == 'downslope_deposit_sc7':
-            rule = ((zi-zo)<=(slp_h))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
-            def eq(qsi, zo, zi, slp_h):
-                ndn = self.ndn
-                # ((1/5)*qsi+2*slp_h-(4/5)*(zi-zo))
-                D = min((1/ndn)*qsi+((ndn-1)/2)*slp_h-((ndn-1)/ndn)*(zi-zo),qsi)
-                return np.round(D,decimals = 5) # for less than zero, greater than zero contraints    
-
-
-        elif self._deposit_style == 'downslope_deposit_sc9':
-            rule = ((zi-zo)<=(slp_h))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
-            def eq(qsi, zo, zi, slp_h):
-                ndn = self.ndn
-                # ((1/5)*qsi+2*slp_h-(4/5)*(zi-zo))
-                D = min((1/ndn)*qsi+((ndn-1)/2)*(slp_h-(zi-zo)),qsi)
-                # print('qsi:{}, N:{}, D:{}'.format(qsi, ndn,D))
-                return np.round(D,decimals = 5) # for less than zero, greater than zero contraints   
-
-        elif self._deposit_style == 'downslope_deposit_sc10':
+        if self._deposit_style == 'downslope_deposit_sc10':
             # print('zi:{}, zo:{}, slp_h:{}'.format(zi,zo,slp_h))
             rule = ((zi-zo)<=(slp_h))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
             def eq(qsi, zo, zi, slp_h):
-                # ndn = self.ndn
-                # ndn = max(np.round(qsi/(1.1*slp_h)-(zi-zo)),1)
                 dx = self._grid.dx
                 sc = self.slpc
                 s = (zi-zo)/dx
-                sd = sc-s
-                
+                sd = sc-s              
                 D1 = sc*dx/2
                 a = 0.5*dx*sd
                 b = D1-0.5*dx*sd
@@ -1364,12 +1249,8 @@ class MassWastingRunout(Component):
                 N1 = -b+(((b**2)-4*a*c)**0.5)/(2*a)
                 N2 = -b-(((b**2)-4*a*c)**0.5)/(2*a)
                 ndn = np.round(max([N1,N2,1]))
-                # ndn = self.ndn
-                # ((1/5)*qsi+2*slp_h-(4/5)*(zi-zo))
                 D = min((1/ndn)*qsi+((ndn-1)/2)*dx*sd, qsi)
-                # print('a:{}, b:{}, c:{}'.format(a, b,c))
-                # print('depostion rule -it:{}, qsi:{}, s:{}, N:{}, D:{}, N1{}, N2{}'.format(self.c, qsi, s, ndn,D, N1, N2))
-                return D #np.round(D,decimals = 5) # for less than zero, greater than zero contraints   
+                return D 
                                                 
                 
         elif self._deposit_style == 'no_downslope_deposit_sc':
@@ -1388,57 +1269,10 @@ class MassWastingRunout(Component):
             print('D less than zero, qsi:{}, D:{}'.format(qsi, Dc))
             print("negative deposition!! n {}, qsi{}, ei {}, DL {}, Dc {}".format(n,qsi,ei,DL,Dc))
             raise(ValueError)            
-        
-        # print('it:{}, node:{}, zi:{}, zo:{}, qsi:{}, D:{}, rule value:{}'.format(self.c,n, zi, zo, qsi, Dc, rule))
-        
-        # if zo is None:# a pit in the energy elevation surface
-        #     Dc = qsi 
-        # else:
-        #     if zo>zi:            
 
-        #         Dc = eq(qsi,zo,zi, slp_h)
-        #         print('zo>zi, qsi:{}, D:{}'.format(qsi, Dc))
-            
-        #     elif (zo<=zi) and rule:#((zi-zo)<=(slp_h)):#######: #
-                
-        #         Dc = eq(qsi,zo,zi, slp_h)
-        #         print('zo<=zi, qsi:{}, D:{}'.format(qsi, Dc))
-        #     else:
-        #         Dc = 0
-        #         print('slope exceeds slp_h or slp_h+qsi, qsi:{}, D:{}'.format(qsi, Dc))
-        #     if Dc <0:
-        #         Dc = 0
-        #         # print('D less than zero, qsi:{}, D:{}'.format(qsi, Dc))
-        #         # print("negative deposition!! n {}, qsi{}, ei {}, DL {}, Dc {}".format(n,qsi,ei,DL,Dc))
-        #         # raise(ValueError)
-            
-            
-        # print('slp_h = {}, zi = {}, qsi ={}, zo ={}, D ={} '.format(slp_h, zi, qsi, zo, Dc))
         return(Dc)
 
-    
-    def _deposit_friction_angle_v2(self, qsi, n):
         
-        slp_h = self.slpc*self._grid.dx
-        
-            # elevation at node i
-        zi = self._grid.at_node['topographic__elevation'][n]
-        
-        zo = self._determine_zo(n, zi, qsi )
-        
-        if zo >= zi+qsi: # if closest node at energy elevation or higher, all deposited
-            Dc = qsi
-        elif (zi-zo) > (qsi+slp_h):#slp_h: # if step down is higher than critical slope, no deposit
-            Dc = 0
-        else:
-            Dc = 0.5*qsi+(zo-zi+slp_h)/2#zo-zi+slp_h# qsi+zo-zi-slp_h#
-
-        # if n in np.array([  8,  25,  42,  59,  76,  93, 110, 127, 144, 161, 178, 195, 212,
-        #        229, 246, 263, 280, 297, 314, 331, 348, 365, 382, 399, 416, 433, 450]):            
-        # print('slp_h = {}, zi = {}, qsi ={}, zo ={}, D ={} '.format(slp_h, zi, qsi, zo, Dc))
-        return(Dc)
-
-    
     def _particle_diameter_in(self,n,vin):
         """determine the weighted average particle diameter of the incoming
         flow"""       
