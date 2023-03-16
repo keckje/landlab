@@ -51,7 +51,7 @@ ProfileVisualize = True
 
 qsc = 0.01 # pick qsc
 lam = 10 # coeficient multiplied by qsc to determine equivlanet alpha
-slpc = 0.01# critical slope
+slpc = 0.05# critical slope
 
 ros = 2650 # density
 vs = 0.6 # volumetric solids concentration
@@ -65,14 +65,14 @@ hs = 10 # soil thickness
 deposition_rule = "critical_slope"#"L_metric"#"critical_slope"#
 number_deposition_nodes = 3
 deposit_style = 'downslope_deposit_sc10'#'no_downslope_deposit_sc'#'downslope_deposit_sc9'
-effective_qsi = False
+effective_qsi = True
 
 # flume parameters
 dxdy = 10
 rows = 15
 columns = 1 # must be odd number
 ls_width = 1 # must be odd number
-ls_length = 4
+ls_length = 2
 slope_above_break = 0.6
 slope_below_break = 0.001#0.001
 slope_break = 0.5
@@ -456,7 +456,7 @@ mw_dict = {'critical slope':slpc, 'minimum flux':SD,
 
 release_dict = {'number of pulses':npu, 'iteration delay':nid }
 
-MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 30,
+MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True, itL = 1000,
                                   dist_to_full_flux_constraint = 0,
                                   routing_surface = "topographic__elevation",
                                   settle_deposit = False,

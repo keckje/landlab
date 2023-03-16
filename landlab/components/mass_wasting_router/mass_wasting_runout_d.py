@@ -813,9 +813,9 @@ class MassWastingRunout(Component):
             # rn: receiver nodes based on either the pre-flow underlying topographic 
             # slope at node n or slope of the flow at node n once it is over node n
             # rn = self._grid.at_node.dataset['flow__receiver_node'].values[n] ## receiving node needs to be based on energy el
-            rn = self.rn[n]
-            rn = rn[np.where(rn != -1)] 
-            rn = rn[~np.isin(rn,dn)]  # material can not be sent back to the delivery nodes
+            # rn = self.rn[n]
+            # rn = rn[np.where(rn != -1)] 
+            # rn = rn[~np.isin(rn,dn)]  # material can not be sent back to the delivery nodes
             
             # rn_g: receiver nodes based on the pre-flow underlying topographic slope at node n
             rn_g = self._grid.at_node.dataset['flow__receiver_node'].values[n]
@@ -851,7 +851,7 @@ class MassWastingRunout(Component):
             
             else:
                 D = min(qsi, self._deposit(qsi_, slpn, n)) # function of qsi and topographic elevation before settle/scour by qsi                
-                print('it:{}, DEPOSTION:{}'.format(self.c, D))
+                # print('it:{}, DEPOSTION:{}'.format(self.c, D))
                 # scour a function of steepes topographic slope at node, determined before settle/scour by qsi
                
                 if self.VaryDp:   
@@ -876,7 +876,7 @@ class MassWastingRunout(Component):
                 # chage elevation
                 deta = D-E 
                 
-                print('Mass Continuity -it:{}, qsi:{}, D:{}, E:{}, qso:{}'.format(self.c, qsi,D,E,qso))
+                # print('Mass Continuity -it:{}, qsi:{}, D:{}, E:{}, qso:{}'.format(self.c, qsi,D,E,qso))
             # qso  = np.round(qso,decimals = 8)   
             # print(qso)
             # model behavior tracking
@@ -926,22 +926,12 @@ class MassWastingRunout(Component):
             
             # nodes that receive material from node n
             # rn = self.rn[n]
-            
-            print('it:{},#### determine receiver node and proportions#### '.format(self.c))
-            print('slope:{}'.format(self._grid.at_node['topographic__steepest_slope'][n]))
-            print('RN:{}'.format(self._grid.at_node['flow__receiver_node'][n]))
-            print('elevation:{}'.format(self._grid.at_node['topographic__elevation'][n]))
-            
+
             rn = self._grid.at_node.dataset['flow__receiver_node'].values[n] #   #  defining rn from the energy elevation causes flow to slosh
             rn_ = rn.copy()
             rn_ = rn_[np.where(rn_ != -1)]
-            print('delivery nodes, rn: {}'.format(rn_))
             rn_ = rn_[~np.isin(rn_,dn)]  # cant go backwards, but his rule doesnt work because node delivers to self before trying to go backwards, need to compare dn from 2 iterations before 
-            print('remove delivery nodes, rn: {}'.format(rn_))
-           
-            print('qso:{}'.format(qso))
-            print('it:{},#### determine receiver node and proportions#### '.format(self.c))
-            
+
             if qso>0 and n not in self._grid.boundary_nodes: 
                 # move this out of funciton, need to determine rn and rp after material is in cell, not before
                 
@@ -1213,8 +1203,8 @@ class MassWastingRunout(Component):
 
 
     def _determine_zo(self, n, zi, qsi):
-        """determine the mean energy elevation of the nodes lower than the
-        incoming energy elevation of node n"""
+        """determine the minimum elevation of the adjacent nodes. If all adjacent
+        nodes are higher than the elevation of the node + qsi, zo is set to zi"""
         
         # get adjacent nodes
         adj_n = np.hstack((self._grid.adjacent_nodes_at_node[n],
@@ -1300,10 +1290,10 @@ class MassWastingRunout(Component):
         
         zo = self._determine_zo(n, zi, qsi )
         
-        print('it:{},#### slope and elevation when depostion function is implemented #### '.format(self.c))
-        print('slope:{}'.format(self._grid.at_node['topographic__steepest_slope'][n]))
-        print('RN:{}'.format(self._grid.at_node['flow__receiver_node'][n]))
-        print('elevation:{}'.format(self._grid.at_node['topographic__elevation'][n]))
+        # print('it:{},#### slope and elevation when depostion function is implemented #### '.format(self.c))
+        # print('slope:{}'.format(self._grid.at_node['topographic__steepest_slope'][n]))
+        # print('RN:{}'.format(self._grid.at_node['flow__receiver_node'][n]))
+        # print('elevation:{}'.format(self._grid.at_node['topographic__elevation'][n]))
         
         # print('it:{}, node:{}, zi:{}, zo:{}, qsi:{}'.format(self.c,n, zi, zo, qsi))
         
@@ -1353,12 +1343,12 @@ class MassWastingRunout(Component):
                 ndn = self.ndn
                 # ((1/5)*qsi+2*slp_h-(4/5)*(zi-zo))
                 D = min((1/ndn)*qsi+((ndn-1)/2)*(slp_h-(zi-zo)),qsi)
-                print('qsi:{}, N:{}, D:{}'.format(qsi, ndn,D))
+                # print('qsi:{}, N:{}, D:{}'.format(qsi, ndn,D))
                 return np.round(D,decimals = 5) # for less than zero, greater than zero contraints   
 
         elif self._deposit_style == 'downslope_deposit_sc10':
             # print('zi:{}, zo:{}, slp_h:{}'.format(zi,zo,slp_h))
-            rule = ((zi-zo)<(slp_h))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
+            rule = ((zi-zo)<=(slp_h))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
             def eq(qsi, zo, zi, slp_h):
                 # ndn = self.ndn
                 # ndn = max(np.round(qsi/(1.1*slp_h)-(zi-zo)),1)
@@ -1378,7 +1368,7 @@ class MassWastingRunout(Component):
                 # ((1/5)*qsi+2*slp_h-(4/5)*(zi-zo))
                 D = min((1/ndn)*qsi+((ndn-1)/2)*dx*sd, qsi)
                 # print('a:{}, b:{}, c:{}'.format(a, b,c))
-                print('depostion rule -it:{}, qsi:{}, N:{}, D:{}, N1{}, N2{}'.format(self.c, qsi, ndn,D, N1, N2))
+                # print('depostion rule -it:{}, qsi:{}, s:{}, N:{}, D:{}, N1{}, N2{}'.format(self.c, qsi, s, ndn,D, N1, N2))
                 return D #np.round(D,decimals = 5) # for less than zero, greater than zero contraints   
                                                 
                 
@@ -1399,7 +1389,7 @@ class MassWastingRunout(Component):
             print("negative deposition!! n {}, qsi{}, ei {}, DL {}, Dc {}".format(n,qsi,ei,DL,Dc))
             raise(ValueError)            
         
-        print('it:{}, node:{}, zi:{}, zo:{}, qsi:{}, D:{}, rule value:{}'.format(self.c,n, zi, zo, qsi, Dc, rule))
+        # print('it:{}, node:{}, zi:{}, zo:{}, qsi:{}, D:{}, rule value:{}'.format(self.c,n, zi, zo, qsi, Dc, rule))
         
         # if zo is None:# a pit in the energy elevation surface
         #     Dc = qsi 

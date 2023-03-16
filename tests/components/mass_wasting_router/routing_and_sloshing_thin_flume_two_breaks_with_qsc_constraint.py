@@ -48,7 +48,7 @@ import MassWastingRunoutEvaluationFunctions as MWF
 
 qsc = 0.01 # pick qsc
 lam = 1 # coeficient multiplied by qsc to determine equivlanet alpha
-slpc = 0.01 # critical slope
+slpc = 0.05 # critical slope
 
 ros = 2650 # density
 vs = 0.6 # volumetric solids concentration
