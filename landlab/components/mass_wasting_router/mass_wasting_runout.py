@@ -752,8 +752,9 @@ class MassWastingRunout(Component):
                         
                     E, pd_up, Tbs, u = self._scour(n, qsi_, slpn, opt = opt, pd_in = pd_in)   
                     # model behavior tracking
-                    self.TdfL.append(Tbs)
-                    self.velocityL.append(u) # velocity (if any)
+                    if self.save:
+                        self.TdfL.append(Tbs)
+                        self.velocityL.append(u) # velocity (if any)
 
                 ## flow out
                 qso = qsi-D+E                
@@ -768,10 +769,11 @@ class MassWastingRunout(Component):
             # print(qso)
             
             # model behavior tracking
-            self.enL.append(E)
-            self.DpL.append(D)
-            self.dfdL.append(qsi)
-            self.slopeL.append(slpn) # slope
+            if self.save:
+                self.enL.append(E)
+                self.DpL.append(D)
+                self.dfdL.append(qsi)
+                self.slopeL.append(slpn) # slope
 
 
             # if n in np.array([  8,  25,  42,  59,  76,  93, 110, 127, 144, 161, 178, 195, 212,
@@ -1030,7 +1032,8 @@ class MassWastingRunout(Component):
             if depth < Dp: # grain size dependent erosion breaks if depth<Dp
                 Dp = depth*.99
             # shear stress apprixmated as a power functino of inertial shear stress
-            phi = np.arctan(self.slpc) # approximate phi [radians] from criticle slope [L/L]
+            # phi = np.arctan(self.slpc) # approximate phi [radians] from criticle slope [L/L]
+            phi = np.arctan(0.32)
             
             # inertial stresses
             us = (self.g*depth*slope)**0.5
@@ -1162,9 +1165,8 @@ class MassWastingRunout(Component):
             Dc = 0
         
         if Dc <0:
-            print('D less than zero, qsi:{}, D:{}'.format(qsi, Dc))
-            print("negative deposition!! n {}, qsi{}, ei {}, DL {}, Dc {}".format(n,qsi,ei,DL,Dc))
-            raise(ValueError)            
+            print("negative deposition!! n {}, qsi{}, D {}, zo{}, zi{}".format(n,qsi,Dc,zo,zi))
+            # raise(ValueError)            
 
         return(Dc)
 

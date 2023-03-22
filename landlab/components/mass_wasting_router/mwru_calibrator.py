@@ -180,8 +180,17 @@ class MWRu_calibrator():
         dA = mg.dx*mg.dx
         el_l = self.pcd['el_l']
         el_h = self.pcd['el_h']
+        
         channel_nodes = self.pcd['channel_nodes']
-        channel_distance = self.pcd['channel_distance']
+        
+        # extract all nodes between lower and upper profile limits
+        # use observed runout dem to get elevations
+        demd_ = mg.at_node['dem_dif_o']
+        dem_ = mg.at_node['topographic__initial_elevation']+demd_
+        cel = dem_[channel_nodes]
+        mask = (cel > el_l) & (cel < el_h)
+        channel_nodes = channel_nodes[mask]
+        channel_distance = self.pcd['channel_distance'][mask]
         runout_distance = (channel_distance-channel_distance.max())*-1
         node_slope = mg.at_node['topographic__steepest_slope']
         cL = self.pcd['cL']
@@ -454,7 +463,8 @@ class MWRu_calibrator():
            
         if self.MWRu.VaryDp: 
             print('grain-inertia')
-            phi = np.arctan(self.MWRu.slpc)
+            # phi = np.arctan(self.MWRu.slpc)
+            phi = np.arctan(0.32)
             
             # inertial stresses
             us = (self.MWRu.g*self.MWRu.h*self.MWRu.s)**0.5
