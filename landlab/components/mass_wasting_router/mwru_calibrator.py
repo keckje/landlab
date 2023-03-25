@@ -127,7 +127,13 @@ class MWRu_calibrator():
     def __call__(self, max_number_of_runs = 50):
         """instantiate the class"""
         if (self.method == "both") or (self.method == "RMSE"):
+            # get profile of observed total flow
             self.mbLdf_o = self._channel_profile_deposition("observed")
+            # compute total mobilized volume
+            self.TMV = (-1*(self.mg.at_node['dem_dif_o'][self.mg.at_node['dem_dif_o']<0]).sum())*self.mg.dx*self.mg.dy
+            # mean total flow
+            self.Qtm = self.mbLdf_o['Vu'].mean()
+            
         self._MCMC_sampler(max_number_of_runs)
 
     
@@ -272,7 +278,7 @@ class MWRu_calibrator():
         U = len(n_u)*na*c
         O = len(n_o)*na*c
         T = X+U+O
-        omegaT = X/T-U/T-O/T
+        omegaT = X/T-U/T-O/T+1
         return omegaT
 
 
@@ -282,7 +288,7 @@ class MWRu_calibrator():
         modeled debris flow deposition and the the calibration metric OmegaT following
         Heiser et al. (2017)
         """
-        c1 = 10; c2 = 2
+        c1 = 1; c2 = 1
         n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
         na = self.mg.dx*self.mg.dy
         if metric == 'runout':
@@ -311,70 +317,75 @@ class MWRu_calibrator():
         
         modeled = modeled_[mask]
         observed = observed_[mask]
-        X = A_x*self._RMSE(observed, modeled)
+        X = A_x*self._SE(observed, modeled)
         # if X != 0:
         #     X = 1/X
         modeled = modeled_[n_u]
         observed = observed_[n_u]
-        U = A_u*self._RMSE(observed, modeled)
+        U = A_u*self._MSE(observed, modeled)
         # if U != 0:
         #     U = 1/(U*c)
         modeled = modeled_[n_o]
         observed = observed_[n_o]        
-        O = A_o*self._RMSE(observed, modeled)
+        O = A_o*self._MSE(observed, modeled)
         # if O != 0:
         #     O = 1/(O*c)
-        T = X+U*c1+O*c2
+        T = X+c1*U+c2*O
         # T = X/T+(U*c)/T+(O*c)/T
         RMSEomegaT =1/T# X/T-U/T-O/T+1 ##
         return RMSEomegaT
 
 
-    def _RMSEomegaTv2(self, metric = 'runout'):
-         """ Computes the mean and max RSE over the intersection area. Metric is equal to 
-         the mean RSE * the intersection area + the max RSE * the over and under prediction
-         areas
-         """
-         c = 1
-         n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
-         na = self.mg.dx*self.mg.dy
-         n_o =  n_a[np.abs(self.mg.at_node['dem_dif_o']) > 0] # get nodes with scour or deposit
-         n_m = n_a[np.abs(self.mg.at_node['dem_dif_m']) > 0]
-  
-         self.a_o = n_o*na
-         self.a_m = n_m*na
-         n_x =  n_o[np.isin(n_o,n_m)]#np.unique(np.concatenate([n_o,n_m])) # intersection nodes
-         n_u = n_o[~np.isin(n_o,n_m)] # underestimate
-         n_o = n_m[~np.isin(n_m,n_o)] # overestimate
-         A_x = len(n_x)*self.mg.dx*self.mg.dy
-         A_u = len(n_u)*self.mg.dx*self.mg.dy
-         A_o = len(n_o)*self.mg.dx*self.mg.dy
-         
-         observed_ = self.mg.at_node['dem_dif_o']
-         mask =  np.abs(observed_)>0 
-         modeled_ = self.mg.at_node['dem_dif_m']       
-         # mask_m =  np.abs(modeled_)<=0 
-         # modeled_[mask_m] = np.abs(modeled_).max()
-         
-         modeled = modeled_[mask]
-         observed = observed_[mask]
-         X = A_x*self._RMSE(observed, modeled)
-  
-         U = A_u*self._RMxSE(observed, modeled)
-     
-         O = A_o*self._RMxSE(observed, modeled)
-  
-         T = X+U*c+O*c
-         # T = X/T+(U*c)/T+(O*c)/T
-         RMSEomegaT =1/T# X/T-U/T-O/T+1 ##
-         return RMSEomegaT
 
-    def _RMSE_Vd(self):
-        c = 2
+    def _Vse(self, metric = 'runout'):
+        """ determine the volumetric square error, normalized by the total mobilized
+        volume.
+        """
+        
+        c1 = 1; c2 = 1
+        n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
+        na = self.mg.dx*self.mg.dy
+        if metric == 'runout':
+            n_o =  n_a[np.abs(self.mg.at_node['dem_dif_o']) > 0] # get nodes with scour or deposit
+            n_m = n_a[np.abs(self.mg.at_node['dem_dif_m']) > 0]
+        elif metric == 'deposition':
+            n_o =  n_a[self.mg.at_node['dem_dif_o'] > 0] # get nodes with scour or deposit
+            n_m = n_a[self.mg.at_node['dem_dif_m'] > 0]
+        elif metric == 'scour':
+            n_o =  n_a[self.mg.at_node['dem_dif_o'] < 0] # get nodes with scour or deposit
+            n_m = n_a[self.mg.at_node['dem_dif_m'] < 0]
+        self.a_o = n_o*na
+        self.a_m = n_m*na
+        n_x =  n_o[np.isin(n_o,n_m)]#np.unique(np.concatenate([n_o,n_m])) # intersection nodes
+        n_u = n_o[~np.isin(n_o,n_m)] # underestimate
+        n_o = n_m[~np.isin(n_m,n_o)] # overestimate
+        A_x = len(n_x)*self.mg.dx*self.mg.dy
+        A_u = len(n_u)*self.mg.dx*self.mg.dy
+        A_o = len(n_o)*self.mg.dx*self.mg.dy
+        CA = self.mg.dx*self.mg.dy
+        observed_ = self.mg.at_node['dem_dif_o']
+        mask =  np.abs(observed_)>0 
+        modeled_ = self.mg.at_node['dem_dif_m']       
+
+        modeled = modeled_[mask]
+        observed = observed_[mask]
+        X = self._SE(observed, modeled)*CA**2
+        modeled = modeled_[n_u]
+        observed = observed_[n_u]
+        U = self._SE(observed, modeled)*CA**2
+        modeled = modeled_[n_o]
+        observed = observed_[n_o]        
+        O = self._SE(observed, modeled)*CA**2        
+        Vse = (X+c1*U+c2*O)/(self.TMV**2)
+        
+        return Vse
+
+    def _MSE_Qt(self):
+
         observed = self.mbLdf_o[self.RMSE_metric] 
         modeled = self.mbLdf_m[self.RMSE_metric]
-        # modeled[modeled == 0] = np.abs((observed-modeled).mean()*c) 
-        RMSE_Vd = self._RMSE(observed, modeled)
+        CA = self.mg.dx*self.mg.dy
+        MSE_Qst = (self._MSE(observed, modeled)**2)/(self.Qtm**2)
         
         nm = 'V_rms, iteration'+str(self.it)
         if self.plot_tf == True:
@@ -385,9 +396,9 @@ class MWRu_calibrator():
             plt.legend()
             plt.show()
         
-        return RMSE_Vd
+        return MSE_Qst
 
-    def _RMSE(self, observed, modeled):
+    def _MSE(self, observed, modeled):
         """computes the root mean square error (RMSE) between two difference 
         datasets
         """
@@ -397,15 +408,29 @@ class MWRu_calibrator():
         RMSE = (((observed-modeled)**2).mean())
         return RMSE
     
+    
+    
+    def _SE(self, observed, modeled):
+        """computes the cumulative square error (RMSE) between two difference 
+        datasets
+        """
+        if modeled.size == 0:
+            modeled = np.array([0])
+            observed = np.array([0])
+            print("NO MODELED VALUES")
+        SE = ((observed-modeled)**2).sum()
+        return SE
+    
+    
 
-    def _RMxSE(self, observed, modeled):
+    def _RMSE(self, observed, modeled):
         """computes the root mean square error (RMSE) between two difference 
         datasets
         """
         if modeled.size == 0:
             modeled = np.array([0])
             observed = np.array([0])
-        RSEmax = (((observed-modeled)**2).max())**0.5
+        RSEmax = (((observed-modeled)**2).mean())**0.5
         return RSEmax
 
     
@@ -625,45 +650,35 @@ class MWRu_calibrator():
             self.it = i
             self._simulation()
             if self.method == "omega":
-                omegaT = 1+self._omegaT(metric = "runout")
+                omegaT = self._omegaT(metric = "runout")
                 candidate_posterior = prior_t*omegaT
-            elif self.method == "RMSE":
-                self.mbLdf_m = self._channel_profile_deposition("modeled")
-                # determine RMSE metric
-                observed = self.mbLdf_o[self.RMSE_metric]; modeled = self.mbLdf_m[self.RMSE_metric]
-                RMSE_Vd = self._RMSE(observed, modeled)
-
-                observed = self.mg.at_node['dem_dif_o'][self.mbLdf_o['node']] 
-                modeled = self.mg.at_node['dem_dif_m'][self.mbLdf_m['node']]
-                RMSE_pf = self._RMSE(observed, modeled)
-                
-                observed = self.mg.at_node['dem_dif_o'] 
-                modeled = self.mg.at_node['dem_dif_m']
-                RMSE_map = self._RMSE(observed, modeled)
-                # determine psoterior likilhood: product of RMSE, omegaT and prior liklihood
-                candidate_posterior = prior_t*(1/RMSE_Vd)*(1/RMSE_pf)*(1/RMSE_map)
             elif self.method == "both":
                 # get modeled deposition profile
                 self.mbLdf_m = self._channel_profile_deposition("modeled")
-                # determine RMSE metric
-                # observed = self.mbLdf_o[self.RMSE_metric]; modeled = self.mbLdf_m[self.RMSE_metric]
-                # RMSE_Vd = self._RMSE(observed, modeled)
-                RMSE_Vd = self._RMSE_Vd()
 
-                
+                # MSE of Qt
+                MSE_Qt = self._MSE_Qt()
                 observed = self.mg.at_node['dem_dif_o'][self.mbLdf_o['node']] 
                 modeled = self.mg.at_node['dem_dif_m'][self.mbLdf_m['node']]
+                
+                # RMSE of topographic profile
                 RMSE_pf = self._RMSE(observed, modeled)
+                
+                # RMSE of topography
                 observed = self.mg.at_node['dem_dif_o'] 
                 modeled = self.mg.at_node['dem_dif_m']
                 RMSE_map = self._RMSE(observed, modeled)
-                # determine deposition overlap metric, omegaT
-                omegaT = 1+self._omegaT(metric = self.omega_metric)
-                # determine the difference in thickness
-                RMSEomegaT = self._RMSEomegaT(metric = self.omega_metric)
+                
+                # omegaT
+                omegaT = self._omegaT(metric = self.omega_metric)
+                
+                # volumetric square error
+                Vse = self._Vse(metric = self.omega_metric)
+                
                 DTE = self._deposition_thickness_error()
+                
                 # determine psoterior likilhood: product of RMSE, omegaT and prior liklihood
-                candidate_posterior = prior_t*(1/RMSE_Vd)*omegaT*RMSEomegaT#*(1/RMSE_pf)*(1/RMSE_map)#*DTE
+                candidate_posterior = prior_t*omegaT*(1/MSE_Qt)*(1/Vse)#*(1/RMSE_pf)*(1/RMSE_map)#*DTE
                 # candidate_posterior = (1/RMSE_map)
             # decide to jump or not to jump
             if i == 0:
@@ -693,9 +708,9 @@ class MWRu_calibrator():
             if self.method == "omega":
                 self.LHList.append([i, self.MWRu.c, prior_t, omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             elif self.method == "RMSE":
-                self.LHList.append([i, self.MWRu.c, prior_t, 1/RMSE_Vd,1/RMSE_pf,1/RMSE_map,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                self.LHList.append([i, self.MWRu.c, prior_t, MSE_Qt,1/RMSE_pf,1/RMSE_map,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             elif self.method == "both":
-                self.LHList.append([i, self.MWRu.c, prior_t, 1/RMSE_Vd,1/RMSE_pf,1/RMSE_map,DTE,RMSEomegaT,omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                self.LHList.append([i, self.MWRu.c, self.TMV, self.Qtm, prior_t, omegaT, MSE_Qt**0.5, Vse**0.5, RMSE_pf, RMSE_map, DTE, candidate_posterior, acceptance_ratio, rv, msg, selected_posterior]+p_table)
 
             # adjust jump size every N_cycles
             if i%self.N_cycles == 0:
@@ -715,7 +730,7 @@ class MWRu_calibrator():
         elif self.method == "RMSE":
             self.LHvals.columns = ['iteration', 'model iterations', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
         elif self.method == "both":
-            self.LHvals.columns = ['iteration', 'model iterations', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'DTE', 'RMSEomegaT', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+            self.LHvals.columns = ['iteration', 'model iterations', 'total_mobilized_volume', 'obs_mean_total_flow',  'prior', 'omegaT','MSE_Qt^1/2','Vse^1/2', 'RMSE_pf', 'RMSE_map', 'DTE', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
 
         self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] # {'SD': selected_value_SD, 'cs': selected_value_cs}
 
