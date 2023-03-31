@@ -16,8 +16,9 @@ from landlab import imshow_grid_at_node
 
 class MassWastingRunoutProbability(Component):
     """this component iteratively runs MassWastingRunout using a user provided landslide
-    polygon and instantiated MassWastingRunout model set up for the landslide. User 
-    has the option to allow landslide area to vary or be fixed
+    polygon(s) and instantiated MassWastingRunout model set up for the landslide. User 
+    has the option to allow landslide area to vary or be fixed or can provide externally
+    modeled landslide areas that vary each model iteration.
     
     author: Jeff Keck
     """

@@ -1,8 +1,3 @@
-
-#TODO add determine_alpha function
-# add constraint that selected alpha can not result in a scour depth greater than qsc
-# run for Capitol forest sites
-
 # setup
 import os
 import numpy as np
