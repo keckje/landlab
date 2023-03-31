@@ -132,7 +132,7 @@ class MWRu_calibrator():
             # compute total mobilized volume
             self.TMV = (-1*(self.mg.at_node['dem_dif_o'][self.mg.at_node['dem_dif_o']<0]).sum())*self.mg.dx*self.mg.dy
             # mean total flow
-            self.Qtm = self.mbLdf_o['Vu'].mean()
+            self.Qtm = self.mbLdf_o[self.RMSE_metric].mean()
             
         self._MCMC_sampler(max_number_of_runs)
 
@@ -385,7 +385,7 @@ class MWRu_calibrator():
         observed = self.mbLdf_o[self.RMSE_metric] 
         modeled = self.mbLdf_m[self.RMSE_metric]
         CA = self.mg.dx*self.mg.dy
-        MSE_Qst = (self._MSE(observed, modeled)**2)/(self.Qtm**2)
+        MSE_Qt = self._MSE(observed, modeled)/(self.Qtm**2)
         
         nm = 'V_rms, iteration'+str(self.it)
         if self.plot_tf == True:
@@ -396,7 +396,7 @@ class MWRu_calibrator():
             plt.legend()
             plt.show()
         
-        return MSE_Qst
+        return MSE_Qt
 
     def _MSE(self, observed, modeled):
         """computes the root mean square error (RMSE) between two difference 
@@ -405,8 +405,8 @@ class MWRu_calibrator():
         if modeled.size == 0:
             modeled = np.array([0])
             observed = np.array([0])
-        RMSE = (((observed-modeled)**2).mean())
-        return RMSE
+        MSE = (((observed-modeled)**2).mean())
+        return MSE
     
     
     

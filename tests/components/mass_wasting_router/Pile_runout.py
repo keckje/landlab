@@ -126,7 +126,7 @@ ProfileVisualize = True
 
 qsc = 0.01 # pick qsc
 lam = 10 # coeficient multiplied by qsc to determine equivlanet alpha
-slpc = 0.02# critical slope
+slpc = 0.01# critical slope
 
 ros = 2650 # density
 vs = 0.6 # volumetric solids concentration
@@ -140,7 +140,7 @@ hs = 1 # soil thickness
 deposition_rule = "critical_slope"#"L_metric"#"critical_slope"#
 deposit_style = 'downslope_deposit_sc10'#'no_downslope_deposit_sc'#'downslope_deposit_sc9'
 effective_qsi = True
-settle_deposit = True
+settle_deposit = False
 
 #%%create model grid
 
