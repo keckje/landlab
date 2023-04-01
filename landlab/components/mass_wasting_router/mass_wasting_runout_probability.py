@@ -33,6 +33,7 @@ class MassWastingRunoutProbability(Component):
         method = 'fixed_size_landslide',
         min_landslide_area = 200,
         modeled_input = {},
+        reset_fields = True,
         seed = None):
         """
 
@@ -65,7 +66,8 @@ class MassWastingRunoutProbability(Component):
         # get node id of landslide / potentially unstable slope polygon
         self.ni = number_iterations
         self.plot = plot
-        self._method = method  
+        self._method = method
+        self._reset_fields = reset_fields
         self._initial_soil_depth = self._grid.at_node['soil__thickness'].copy()
         self._topographic__initial_elevation = self._grid.at_node['topographic__elevation'].copy()
         if self._grid.has_field('particle__diameter'):
@@ -211,8 +213,9 @@ class MassWastingRunoutProbability(Component):
         for i in range(self.ni):
             
                 # reset soil depth, grain size and topography
-            self._grid.at_node['topographic__elevation'] = self._topographic__initial_elevation.copy()
-            self._grid.at_node['soil__thickness'] = self._initial_soil_depth.copy()
+            if self._reset_fields:
+                self._grid.at_node['topographic__elevation'] = self._topographic__initial_elevation.copy()
+                self._grid.at_node['soil__thickness'] = self._initial_soil_depth.copy()
             if self._grid.has_field('particle__diameter'):
                 self._grid.at_node['particle__diameter'] = self._initial_particle_diameter.copy()
             
