@@ -12,7 +12,7 @@ from landlab import Component, FieldError
 from landlab.plot import graph
 from landlab.io import read_esri_ascii
 # from landlab.utils.channel_network_grid_tools_v2 import ChannelNetworkGridTools
-# from landlab.utils.channel_network_grid_tools_v3 import ChannelNetworkToolsMapper
+from landlab.utils.channel_network_grid_tools_v3 import ChannelNetworkToolsMapper
 # from landlab.components.network_sediment_transporter.bed_parcel_initializers import BedParcelInitializerArea
 
 class DHSVMtoLandlab(Component):
