@@ -218,12 +218,12 @@ class LandslideProbabilityRecharge(LandslideProbabilityBase):
             self._Re /= 1000.0  # Convert mm to m
                    
     
-   def _compute_rel_wetness(self):
-       """compute relative wetness: relative wetness is stochastically determined 
-       from the user selected recharge pdf for each iteration"""
-       self._rel_wetness = ((self._Re) / self._T) * ( 
-           self._a / np.sin(np.arctan(self._theta))
-       ) 
+    def _compute_rel_wetness(self):
+        """compute relative wetness: relative wetness is stochastically determined 
+        from the user selected recharge pdf for each iteration"""
+        self._rel_wetness = ((self._Re) / self._T) * ( 
+            self._a / np.sin(np.arctan(self._theta))
+        ) 
    
         
     def _interpolate_HSD_dict(self):
