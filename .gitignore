@@ -92,3 +92,5 @@ test-results.xml
 
 # nox virtual envs
 .nox
+requirements.in
+requirements.txt
