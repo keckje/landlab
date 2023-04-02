@@ -7,7 +7,6 @@ from statsmodels.distributions.empirical_distribution import ECDF
 
 from landlab.components.landslides.landslide_probability_base import LandslideProbabilityBase
 
-
 class LandslideProbabilitySaturatedThickness(LandslideProbabilityBase):
     """Landlab component designed to calculate probability of failure at
     each grid node based on the infinite slope stability model
@@ -49,10 +48,7 @@ class LandslideProbabilitySaturatedThickness(LandslideProbabilityBase):
                              saturated__thickness_mean = mean__saturated_thickness_np_array,
                              saturated__thickness_standard_deviation = stdev__saturated_thickness_np_array
 
-
-    
     """
-    
     
     # component name
     _name = "Landslide Probability from Soil Saturated Thickness"
@@ -61,7 +57,9 @@ class LandslideProbabilitySaturatedThickness(LandslideProbabilityBase):
 
     __version__ = "1.1"
     
-    _info = LandslideProbabilityBase._info["saturated__thickness"] = {
+    _info = LandslideProbabilityBase._info
+    
+    _info["saturated__thickness"] = {
         "dtype": float,
         "intent": "in",
         "optional": True,
@@ -70,7 +68,7 @@ class LandslideProbabilitySaturatedThickness(LandslideProbabilityBase):
         "doc": "thickness of the soil saturated zone at each node, can be the output from a distributed hydrology model in response to a specific precipitation event",
     }
     
-    
+
     def __init__(
         self,
         grid,
@@ -105,14 +103,17 @@ class LandslideProbabilitySaturatedThickness(LandslideProbabilityBase):
             sequence. To create a certain sequence repititively, use the same
             value as input for seed.
         """
-        super().__init__(grid)
+
+        super().__init__(grid, 
+                         number_of_iterations, 
+                         g,
+                         seed)
         
         self._saturated__thickness_distribution = saturated__thickness_distribution
+        self._prep_saturated_thickness(saturated__thickness_mean, saturated__thickness_standard_deviation)
         
-        self._prep_saturated_thickness
         
-        
-    def _prep_saturated_thickness(self):
+    def _prep_saturated_thickness(self, saturated__thickness_mean, saturated__thickness_standard_deviation):
         
         if self._saturated__thickness_distribution == "event":     
             if (grid.at_node["saturated__thickness"]<0).any():

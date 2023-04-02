@@ -79,7 +79,6 @@ class LandslideProbabilityRecharge(LandslideProbabilityBase):
     
     """
     
-    
     # component name
     _name = "Landslide Probability from Soil Recharge"
 
@@ -87,7 +86,7 @@ class LandslideProbabilityRecharge(LandslideProbabilityBase):
 
     __version__ = "1.1"
     
-    
+    _info = LandslideProbabilityBase._info
     
     
     def __init__(
@@ -103,6 +102,7 @@ class LandslideProbabilityRecharge(LandslideProbabilityBase):
         groundwater__recharge_HSD_inputs=[],
         seed=0,
         ):
+        
         """
         Parameters
         ----------
@@ -141,10 +141,12 @@ class LandslideProbabilityRecharge(LandslideProbabilityBase):
             sequence. To create a certain sequence repititively, use the same
             value as input for seed.
         """
-        super().__init__(grid)
+        super().__init__(grid, 
+                         number_of_iterations, 
+                         g,
+                         seed)
         
         self._groundwater__recharge_distribution = groundwater__recharge_distribution
-        
         self._prep_recharge()
         
         
