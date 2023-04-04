@@ -78,6 +78,7 @@ class LandslideProbabilitySaturatedThickness(LandslideProbabilityBase):
         saturated__thickness_mean = None,
         saturated__thickness_standard_deviation = None,
         seed=0,
+        save = False
         ):
         """
         Parameters
@@ -107,7 +108,8 @@ class LandslideProbabilitySaturatedThickness(LandslideProbabilityBase):
         super().__init__(grid, 
                          number_of_iterations, 
                          g,
-                         seed)
+                         seed,
+                         save)
         
         self._saturated__thickness_distribution = saturated__thickness_distribution
         self._prep_saturated_thickness(saturated__thickness_mean, saturated__thickness_standard_deviation)

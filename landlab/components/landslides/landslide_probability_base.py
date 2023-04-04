@@ -153,6 +153,7 @@ class LandslideProbabilityBase(Component):
         number_of_iterations=250,
         g=scipy.constants.g,
         seed=0,
+        save = False
         ):
         
         """
@@ -179,7 +180,7 @@ class LandslideProbabilityBase(Component):
         # Store parameters and do unit conversions
         self._n = int(number_of_iterations)
         self._g = g
-        
+        self._save = save
         # Check if all output fields are initialized
         self.initialize_output_fields()
         
@@ -196,9 +197,10 @@ class LandslideProbabilityBase(Component):
             
         self._nodal_values = self._grid.at_node
         # create list for storing soil depth and Factor of Safety values from 
-        # each iteration    
-        self._hs_list = [] # figure out a way to get rid of these
-        self._FS_list = []
+        # each iteration
+        if self._save:
+            self._hs_list = [] # figure out a way to get rid of these
+            self._FS_list = []
 
 
     def _seed_generator(self, seed=0):
@@ -337,8 +339,9 @@ class LandslideProbabilityBase(Component):
         
         # store "self._n" soil depth and factor of safety values used to determine
         # probability at node i
-        self._hs_list.append(self._hs)
-        self._FS_list.append(self._FS)
+        if self._save:
+            self._hs_list.append(self._hs)
+            self._FS_list.append(self._FS)
         count = 0
         for val in self._FS:  # find how many FS values <= 1
             if val <= 1.0:
@@ -379,5 +382,6 @@ class LandslideProbabilityBase(Component):
         self._grid.at_node["soil__probability_of_saturation"] = self._prob_sat
         # arrays of n iterations of factor of safety values and soil depth for 
         # each core node
-        self._FSarray = np.array(self._FS_list)
-        self._hsarray = np.array(self._hs_list)
+        if self._save:
+            self._FSarray = np.array(self._FS_list)
+            self._hsarray = np.array(self._hs_list)
