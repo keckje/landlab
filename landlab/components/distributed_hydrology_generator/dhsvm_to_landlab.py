@@ -11,7 +11,8 @@ import xarray as xr
 from landlab import Component, FieldError
 from landlab.plot import graph
 from landlab.io import read_esri_ascii
-from landlab.utils.channel_network_grid_tools_v2 import ChannelNetworkGridTools
+# from landlab.utils.channel_network_grid_tools_v2 import ChannelNetworkGridTools
+from landlab.utils.channel_network_grid_tools_v3 import ChannelNetworkToolsMapper
 
 class DHSVMtoLandlab(Component):
 
@@ -64,33 +65,31 @@ class DHSVMtoLandlab(Component):
                   Ct = 5000,
                   BCt = 100000,
                   seed = None,
-                  gt = None
+                  gtm = None
                   ):        
 
+        # run component init
         super().__init__(grid)
 
-        # call __init__ from parent classes
+        # determine run option based on user input
+        # if both a nmg and rmg provided, will be option 1 or 2
         if (nmgrid != None) and (grid != None):
-            # super().__init__(grid, nmgrid)
-        
-            # instantiate channel network grid tools or use provided instance
-            if gt != None:
-                self.gt = gt
+            
+            # option 1 and 2 update flow, updating flow requires ChannelNetworkToolsMapper
+            if gtm != None:
+                self.gtm = gtm
             else:
-                self.gt = ChannelNetworkGridTools(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
-                
+                self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
+            # option 1, a dtw dictionary is provided and flow and depth to water table will be updated
             if DHSVM_dtw_dict != None:
                 self.opt = 1
+            # option 2, a dtw dictionary was not provided and only flow will be updated
             elif DHSVM_dtw_dict == None:
                 self.opt = 2                
+        
+        # option 3, only a grid was provided and only depth to water table will be updated
         elif grid != None:
-            
-            # instantiate channel network grid tools or use provided instance
-            if gt != None:
-                self.gt = gt
-            else:
-                self.gt = ChannelNetworkGridTools(grid = grid, Ct = Ct,BCt = BCt)
-            
+            # only depth to water table
             self.opt = 3
         else:
             raise ValueError("a network model grid and raster model grid or a" \
@@ -233,8 +232,6 @@ class DHSVMtoLandlab(Component):
             self._time = self.storm_dates[0]  # duration of model run (hours, excludes time between time steps)
 
 
-
-
                              
     def _prep_flow(self):
         """Prepare DHSVMtoLandlab for generating flow values at each link"""
@@ -244,14 +241,14 @@ class DHSVMtoLandlab(Component):
         # determine raster mg nodes that correspond to landlab network mg
 
         
-        if not hasattr(self.gt,"xyDf"):
+        if not hasattr(self,"xyDf"):
             # determine raster mg nodes that correspond to nmg links 
-            linknodes = self._nmgrid.nodes_at_link
+            linknodes = self._nmgrid.nodes_at_link # make this an internal part of CNT
             active_links = self._nmgrid.active_links
             nmgx = self._nmgrid.x_of_node
             nmgy = self._nmgrid.y_of_node            
         
-            out = self.gt.map_nmg_links_to_rmg_nodes(linknodes, active_links, nmgx, nmgy)
+            out = self.gtm.map_nmg_links_to_rmg_nodes(linknodes, active_links, nmgx, nmgy)
             
             self.Lnodelist = out[0]
             self.Ldistlist = out[1]
@@ -260,13 +257,13 @@ class DHSVMtoLandlab(Component):
 
 
             # determine raster mg nodes that correspond to dhsvm links
-        if not hasattr(self.gt,"xyDf_d"):
-            linknodes = self.nmgrid_d.nodes_at_link
+        if not hasattr(self,"xyDf_d"):
+            linknodes = self.nmgrid_d.nodes_at_link # make this an internal part of CNT
             active_links = self.nmgrid_d.active_links
             nmgx = self.nmgrid_d.x_of_node
             nmgy = self.nmgrid_d.y_of_node
         
-            out = self.gt.map_nmg_links_to_rmg_nodes(linknodes, active_links, nmgx, nmgy)
+            out = self.gtm.map_nmg_links_to_rmg_nodes(linknodes, active_links, nmgx, nmgy)
     
             self.Lnodelist_d = out[0]
             self.Ldistlist_d = out[1]
@@ -275,15 +272,15 @@ class DHSVMtoLandlab(Component):
         ## define bedload and debris flow channel nodes       
         ## channel
         # self._ChannelNodes()
-        if not hasattr(self.gt,"ChannelNodes"):
-            self.gt.extract_channel_nodes(self.Ct,self.BCt)
+        if not hasattr(self.gtm,"ChannelNodes"):
+            self.gtm.extract_channel_nodes(self.Ct,self.BCt)
     
         # map dhsvm network model grid to landlab network model grid and prepare
         # time series of flow at each landlab network model grid link
     
         # determine dhsvm network mg links that correspond to the landlab network mg
         # self._map_nmg1_links_to_nmg2_links()
-        self.LinkMapper, self.LinkMapL = self.gt.map_nmg1_links_to_nmg2_links(self.Lnodelist,self.xyDf_d)
+        self.LinkMapper, self.LinkMapL = self.gtm.map_nmg1_links_to_nmg2_links(self.Lnodelist,self.xyDf_d)
         
         # aggregate flow time series
         if self.flow_metric == 'max':
@@ -302,7 +299,7 @@ class DHSVMtoLandlab(Component):
         self.streamflowonly_nmg()
         
         # determine dhsvm network mg links that correspond to the landlab network mg
-        self.gt.map_nmg_links_to_rmg_channel_nodes(self.xyDf_d)   # not needed? Use
+        self.gtm.map_nmg_links_to_rmg_channel_nodes(self.xyDf_d)   # not needed? Use
         
         # compute partial duration series and bankful flow rate for each nmgrid_d link
         # used by the nmgrid        
