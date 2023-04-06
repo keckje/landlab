@@ -17,11 +17,11 @@ from landlab.utils.channel_network_grid_tools_v3 import ChannelNetworkToolsMappe
 class DHSVMtoLandlab(Component):
 
     """Generate a time series of flow rates and/or soil water conditions on the
-    network model grid and/or raster model grid from hydrology modeled by the 
-    Distributed Hydrology Soil Vegetation Model.
+    network model grid and/or raster model grid from hydrology modeled a distributed
+    hydrology model. 
     
-    This component takes the raw modeled flow and depth to soil water output 
-    from DHSVM. From the modeled flow, it parameterizes a probability distribution 
+    This component takes the raw modeled flow and depth from a distributed hydrlogy
+    model. From the modeled flow, it parameterizes a probability distribution 
     function (pdf) of flow rates at each link in a network model grid representation
     of the channel network. From the mapped depth to soil water file, it parameterizes
     a pdf of the depth to soil water at each node in the raster model grid 
@@ -40,7 +40,11 @@ class DHSVMtoLandlab(Component):
     soil-water condition at each link and/or grid cell is assumed uniform accross 
     the basin.
     
+    NOTE: untested changes on flow may not work, last working draft is dhsvm_to_landlab_g.py
     TO DO: remove network mapping functions, turn into a utility
+    TO DO: remove all functionality related to _load_dtw_different_grids
+    TO DO: need to change storm date maker so that the minimum duration between storms is a parameter
+    and if all created storms are within the parameter, it doesn't get stuck in the while loop
     author: Jeff Keck
     """
 
@@ -122,10 +126,10 @@ class DHSVMtoLandlab(Component):
                 self.f = DHSVM_dtw_mapping_dict['f']
             else:
                 self.grid_d = None
-                val = input("DHSVM grid matches landlab grid? (y/n):")
-                if val != 'y':
-                    raise ValueError("DHSVM mapping dictionary needed to convert"\
-                                     " DHSVM grid values to landlab grid values")    
+                # val = input("DHSVM grid matches landlab grid? (y/n):")
+                # if val != 'y':
+                #     raise ValueError("DHSVM mapping dictionary needed to convert"\
+                #                      " DHSVM grid values to landlab grid values")    
         else:
             val = input("depth to water table maps not provided, continue? (y/n):")
             if val != 'y':
@@ -231,7 +235,16 @@ class DHSVMtoLandlab(Component):
             self._time_idx = 0 # index
             self._time = self.storm_dates[0]  # duration of model run (hours, excludes time between time steps)
 
-
+        elif self._method == 'time_series':
+            self.storm_dates = self.map_dates
+            print('this method not implemented yet')
+            
+        elif self._method == 'mean_and_standard_deviation':
+            print('added mean and standard deviation fields to the grid')
+        else:
+            msg = ("'{}' not an accepted method").format(self._method)
+            
+            
                              
     def _prep_flow(self):
         """Prepare DHSVMtoLandlab for generating flow values at each link"""
@@ -281,20 +294,10 @@ class DHSVMtoLandlab(Component):
         # determine dhsvm network mg links that correspond to the landlab network mg
         # self._map_nmg1_links_to_nmg2_links()
         self.LinkMapper, self.LinkMapL = self.gtm.map_nmg1_links_to_nmg2_links(self.Lnodelist,self.xyDf_d)
-        
+
         # aggregate flow time series
-        if self.flow_metric == 'max':
-            self._streamflowonly_ag = self._streamflowonly.resample(self.tag).max().fillna(method='ffill') #convert sub  hourly obs to hourly
+        self._resample_flow()
 
-        elif self.flow_metric == 'mean':
-            self._streamflowonly_ag = self._streamflowonly.resample(self.tag).mean().fillna(method='ffill') #convert sub  hourly obs to hourly
-    
-        elif self.flow_metric == 'min':
-            self._streamflowonly_ag = self._streamflowonly.resample(self.tag).min().fillna(method='ffill') #convert sub  hourly obs to hourly
-
-        elif (type(metric) is float) or (type(metric) is int):
-            self._streamflowonly_ag = self._streamflowonly.groupby(pd.Grouper(freq='d')).quantile(metric,interpolation = 'nearest')
-                
         # create reduced size streamflow.only file with index according to nmg links
         self.streamflowonly_nmg()
         
@@ -312,6 +315,30 @@ class DHSVMtoLandlab(Component):
         # (used to represent basin average hydrologic condition)
         self._rep_reach_flow_at_link_cdf()
         
+    
+    def _resample_flow(self):
+        
+        if self.tag == 'water_year':
+            water_year = (self._streamflowonly_ag.index.month >= 10) + self._streamflowonly_ag.index.year
+            self._streamflowonly_ag['water_year'] = water_year
+            if self.flow_metric == 'max':
+                self._streamflowonly_ag.groupby('water_year').max()
+            if self.flow_metric == 'mean':
+                self._streamflowonly_ag.groupby('water_year').mean() 
+            if self.flow_metric == 'min':
+                self._streamflowonly_ag.groupby('water_year').min() 
+            # set water index to datetime
+            self._streamflowonly_ag.index = pd.to_datetime(dat2.index, format ='%Y')
+    
+        else:       
+            if self.flow_metric == 'max':
+                self._streamflowonly_ag = self._streamflowonly.resample(self.tag).max().fillna(method='ffill') #convert sub  hourly obs to hourly
+    
+            elif self.flow_metric == 'mean':
+                self._streamflowonly_ag = self._streamflowonly.resample(self.tag).mean().fillna(method='ffill') #convert sub  hourly obs to hourly
+        
+            elif self.flow_metric == 'min':
+                self._streamflowonly_ag = self._streamflowonly.resample(self.tag).min().fillna(method='ffill') #convert sub  hourly obs to hourly
 
     def _prep_depth_to_watertable(self):
         """Prepare DHSVMtoLandlab for generating depth to soil water values at
@@ -365,7 +392,9 @@ class DHSVMtoLandlab(Component):
     
     def _storm_date_maker(self):
         """Creates a date time index for the randomdly generated storm events
-        that can be used for tracking changes in sediment dynamics with time
+        that can be used for tracking changes in sediment dynamics with time.
+        only works if map_dates include the day and month of the event.
+        
         """
         
         # first determine the number of events in each year
@@ -395,6 +424,7 @@ class DHSVMtoLandlab(Component):
                             (YEAR[i]*365+jd))<30).all():
                     q_i = self.maker.uniform(0,1,1)
                     jd = int(self.intp(self.date_quantile, self.date_day, q_i))
+                    
      
             doy.append(jd)
             
@@ -423,7 +453,7 @@ class DHSVMtoLandlab(Component):
         
         self.storm_dates = Tx
                 # time
-
+                
        
     def _storm_dates_emperical_cdf(self):
         """creates emperical cdf from partial duration series of precipitation events

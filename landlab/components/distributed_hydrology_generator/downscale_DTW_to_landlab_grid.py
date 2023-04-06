@@ -72,43 +72,49 @@ class downscale_DTW_to_landlab_grid():
                   landlab_lambda,
                   landlab_soild,
                   appended_maps,
-                  map_dates):
+                  map_dates,
+                  resample = False):
 
         print('loading DHSVM and landlab grids')
         # dhsvm grid
         grid_d, z_d = read_esri_ascii(DHSVM_grid, name='topographic__elevation')
-        self.DHSVM_grid = self.grid_to_da(grid_d,'topographic__elevation')
+        self.DHSVM_grid = self._grid_to_da(grid_d,'topographic__elevation')
     
         # landlab grid
         grid, z = read_esri_ascii(landlab_grid, name='topographic__elevation')
-        self.landlab_grid = self.grid_to_da(grid,'topographic__elevation')
+        self.landlab_grid = self._grid_to_da(grid,'topographic__elevation')
         self.y1 = self.landlab_grid.y
         self.x1 = self.landlab_grid.x
+        
+        self.resample = resample
     
         # dhsvm wetness index
         g2, wi_d = read_esri_ascii(DHSVM_lambda, name='lambda')
-        self.DHSVM_lambda = self.grid_to_da(g2,'lambda')
+        self.DHSVM_lambda = self._grid_to_da(g2,'lambda')
             
         # landlab wetness index
         g2, wi_l = read_esri_ascii(landlab_lambda, name='lambda')
-        self.landlab_lambda = self.grid_to_da(g2,'lambda')
+        self.landlab_lambda = self._grid_to_da(g2,'lambda')
         
         # landlab soil depth
         g2, sd = read_esri_ascii(landlab_soild, name='soild')
-        self.landlab_soild = self.grid_to_da(g2,'soild')        
+        self.landlab_soild = self._grid_to_da(g2,'soild')        
         
         print('loading DHSVM DTW maps')
         self.dtw_maps = np.loadtxt(appended_maps)
         
         self.map_dates = map_dates
 
-        self.appended_maps_to_dataset()
+        self._appended_maps_to_dataset()
+        
+        if self.resample:
+            self._resample(by = self.resample['by'], metric = self.resample['metric'])
         
         print('interpolating DHSVM dtw maps to landlab grid')
-        self.interpolate_DHSVM_to_landlab()
+        self._interpolate_DHSVM_to_landlab()
 
 
-    def grid_to_da(self, grid, field):
+    def _grid_to_da(self, grid, field):
         """get a 2-d xarray data array, including coordinates, from a landlab 
         raster model grid"""
         r = grid.number_of_cell_rows+2; c =  grid.number_of_cell_columns+2 #2 more nodes than cells
@@ -119,9 +125,9 @@ class downscale_DTW_to_landlab_grid():
         return da
 
 
-    def appended_maps_to_dataset(self):
+    def _appended_maps_to_dataset(self):
         """split the large np array into individual arrays for each day"""
-        #get number of days
+        # get number of days
         num = len(self.map_dates)
         # split into list of arrays
         list_arrays = np.vsplit(self.dtw_maps, num)
@@ -131,14 +137,45 @@ class downscale_DTW_to_landlab_grid():
         separate_maps =  np.asarray(new_list_arrays)
         # create and xarray dataset (set of dataarrays)
         DHSVM_dwt = xr.Dataset(data_vars = {'wt': (('time', 'x', 'y'), separate_maps)})
-        #assign coordinates and plot again 
-        DHSVM_dwt['time'] = self.map_dates
+        # assign coordinates and plot again 
+        DHSVM_dwt['time'] = pd.to_datetime(self.map_dates)
         DHSVM_dwt['y'] = self.DHSVM_grid.y
         DHSVM_dwt['x'] = self.DHSVM_grid.x
         self.DHSVM_dwt = DHSVM_dwt
+        
+        
+    def _resample(self, by = 'water_year', metric = 'max'):
+        """aggregate values into water year or other duration. If duration is 
+        less than frequency of data, then values are filled using fillna and 
+        forward fill (i.e., if annual mean values are provided and the maps
+        are resampled to hourly data, then the annual mean value is listed 
+        for each hour"""
+        water_year = None
+        ds = self.DHSVM_dwt
+        if by == 'water_year':
+            # change time format to water year
+            print('resampling based on WATER YEAR')
+            water_year = (ds.time.dt.month >= 10) + ds.time.dt.year
+            ds.coords['time'] = pd.to_datetime(water_year, format = '%Y')
+            by = '1Y'
+        if metric == 'max':
+            ds = ds.resample(time=by).max()
+        elif metric == 'mean':
+            ds = ds.resample(time=by).mean() 
+        elif metric == 'min':
+            ds = ds.resample(time=by).min()    
+        else:
+            msg = "'{}' not a resampling option".format(metric)
+            raise ValueError(msg)
+        
+        if water_year is not None:
+            # for water year, year by beginning of year
+            ds.coords['time'] = pd.to_datetime(pd.to_datetime(ds.time.values).year, format = '%Y')
+                
+        self.DHSVM_dwt = ds
+                
 
-
-    def interpolate_DHSVM_to_landlab(self):
+    def _interpolate_DHSVM_to_landlab(self):
         """interpolate DHSVM grid values to finer landlab gridding 
         scheme using the Topmodel wetness index following Doten et al., 2006"""
     
@@ -170,7 +207,11 @@ class downscale_DTW_to_landlab_grid():
         
         landlab_dtw = xr.Dataset(data_vars = {'wt': (('time', 'x', 'y'), landlab_dtw_)})
         #assign coordinates and plot again 
-        landlab_dtw['time'] = self.map_dates
+        if not self.resample:
+            landlab_dtw['time'] = self.map_dates
+        else:
+            landlab_dtw['time'] = self.DHSVM_dwt.time
+            
         landlab_dtw['y'] = self.y1
         landlab_dtw['x'] = self.x1
         
