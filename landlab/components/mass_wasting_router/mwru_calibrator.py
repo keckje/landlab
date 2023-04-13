@@ -774,11 +774,11 @@ def profile_plot(mg, xsd, ef = 2, xlim = None, ylim = None, aspect = None, figsi
         plt.ylim([ylim])
 
 
-def view_profile_nodes(mg, xsd, field = 'dem_dif_o', clim = None):
+def view_profile_nodes(mg, xsd, field = 'dem_dif_o', clim = None, cmap = 'RdBu_r'):
     """function for plotting profile nodes in plan view, over any node field"""
 
     plt.figure(figsize = (5,5))
-    imshow_grid_at_node(mg, field,cmap = 'RdBu_r')
+    imshow_grid_at_node(mg, field,cmap = cmap)
     x_mn = mg.node_x[np.abs(mg.at_node['dem_dif_o']) > 0].min()
     x_mx = mg.node_x[np.abs(mg.at_node['dem_dif_o']) > 0].max()
     y_mn = mg.node_y[np.abs(mg.at_node['dem_dif_o']) > 0].min()
