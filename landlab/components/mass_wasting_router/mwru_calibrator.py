@@ -277,7 +277,6 @@ class MWRu_calibrator():
         return omegaT
 
 
-
     def _RMSEomegaT(self, metric = 'runout'):
         """ determines intersection, over estimated area and underestimated area of
         modeled debris flow deposition and the the calibration metric OmegaT following

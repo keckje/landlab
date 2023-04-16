@@ -75,7 +75,7 @@ class MassWastingRunoutProbability(Component):
         self._maker(seed)
         
         
-        # if external modeled input not already
+        # determine _method, if needed, load modeled landslides and associated fields
         if self._method == 'external_model':
             if 'mass__wasting_id' in modeled_input:
                 if modeled_input['mass__wasting_id'].shape[0] == len(self._grid.core_nodes):
