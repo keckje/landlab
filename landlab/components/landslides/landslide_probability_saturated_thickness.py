@@ -118,10 +118,10 @@ class LandslideProbabilitySaturatedThickness(LandslideProbabilityBase):
     def _prep_saturated_thickness(self, saturated__thickness_mean, saturated__thickness_standard_deviation):
         
         if self._saturated__thickness_distribution == "event":     
-            if (grid.at_node["saturated__thickness"]<0).any():
+            if (self._grid.at_node["saturated__thickness"]<0).any():
                 msg = "saturated__thickness cannot be negative"
                 raise ValueError(msg)
-            if len(grid.at_node["saturated__thickness"].shape) > 1:
+            if len(self._grid.at_node["saturated__thickness"].shape) > 1:
                 msg = "saturated__thickness should be a 1-d array"
                 raise ValueError(msg)
         elif self._saturated__thickness_distribution == "lognormal_spatial":

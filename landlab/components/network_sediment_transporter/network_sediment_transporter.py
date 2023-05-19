@@ -474,8 +474,10 @@ class NetworkSedimentTransporter(Component):
 
         grouped_by_element = xr.merge(
             (sel_parcels.element_id, sel_parcels.volume, d_weighted, rho_weighted)
-        ).groupby("element_id")
-
+        )
+        grouped_by_element = grouped_by_element.set_coords(['element_id'])
+        grouped_by_element = grouped_by_element.groupby("element_id")
+        
         d_avg = grouped_by_element.sum().d_weighted / grouped_by_element.sum().volume
         rho_avg = (
             grouped_by_element.sum().rho_weighted / grouped_by_element.sum().volume

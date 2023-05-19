@@ -107,9 +107,7 @@ class MassWastingRunout(Component):
             },
 
         }
-    
-    
-    
+       
     
     def __init__(
     self,
@@ -422,6 +420,7 @@ class MassWastingRunout(Component):
             self.sloshed = 0 # number of times model has sloshed
             
             while len(self.arn)>0 and c < self.itL:
+                print(c)
                 self.c = c
                 if self.d_it == 0:
                     self.SD_v = self.SD
@@ -702,6 +701,9 @@ class MassWastingRunout(Component):
             else:
                 qsi_ = qsi
             
+            # print(n)
+            # print(self.arn)
+            # print(self.arndn)
             dn = self.arndn[self.arn == n]
 
             # get adjacent nodes

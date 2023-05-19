@@ -952,7 +952,7 @@ class DHSVMtoLandlab(Component):
              # nmg_streamflow_dict[str(dhsvmLinkID)] = self._streamflowonly_ag[str(dhsvmLinkID)]
              nmg_streamflow_dict[Link] = self._streamflowonly_ag[str(dhsvmLinkID)]
          
-        self._streamflowonly_ag = pd.DataFrame.from_dict(nmg_streamflow_dict)
+        self._streamflowonly_ag = pd.DataFrame.from_dict(nmg_streamflow_dict) # only includes the columns associated with the nmg
     
     
     def get_flow_at_links(self, q_i):
@@ -1054,7 +1054,7 @@ class DHSVMtoLandlab(Component):
     def _run_one_step_DTW(self, ts = None, DTW_only = True):
         """updates the depth to soil water field of the raster model grid"""
         
-        # convert return interval to to an annual quantile value if 
+        # convert return interval to an annual quantile value if 
         # return interval > 1 yr. Note: sub-annual return intervals 
         # can not be converted to an annual quantile value
         if ts is None:

@@ -1,9 +1,8 @@
 """
-    TODO: split into two classes, both contained within channel_network_grid_tools
-
-    # add second network model grid input?
-    # make all functions use class variables, no input, user just runs the function
-    # look at shelby's "create_network" for coding style options '
+    TODO:
+    add second network model grid input?
+    make all functions use class variables, user just runs the function after class instantiation?
+    look at Shelby's "create_network" utility for coding style options
 """
 
 from landlab import Component, FieldError
@@ -68,7 +67,6 @@ class ChannelNetworkToolsBase():
                 raise FieldError(
                     'A topography is required as a component input!')
             
-            
             ### raster model grid attributes
             self.ncn = len(grid.core_nodes) # number core nodes
             self.gr = grid.shape[0] #number of rows
@@ -103,7 +101,7 @@ class ChannelNetworkToolsBase():
             self.nmgridy = nmgrid.y_of_node
             self.linklength = nmgrid.length_of_link 
             self.nmg_nodes = nmgrid.nodes
-            
+
         ### Channel extraction parameters
         self.Ct = Ct # Channel initiation threshold [m2]   
         self.POCbuffer = PartOfChannel_buffer # distance [m] from a channel cell that is considered part of the channel (used for determining distance between landslide and channel)
@@ -134,8 +132,8 @@ class ChannelNetworkToolsBase():
 
 class ChannelNetworkToolsInterpretor(ChannelNetworkToolsBase):
     """
-    A set of tools for interpreting the fluvial only and enitre channel
-    network (including the colluvial channels which end at the channel head) and
+    A set of tools for interpreting the fluvial and enitre channel
+    network (fluvial and colluvial channels, which end at the channel head) and
     determining distance from a particular node in the watershed to the network
 
 
@@ -163,9 +161,6 @@ class ChannelNetworkToolsInterpretor(ChannelNetworkToolsBase):
             
             author: Jeff Keck
     
-    
-    doc string
-    
     """
 
     
@@ -174,12 +169,10 @@ class ChannelNetworkToolsInterpretor(ChannelNetworkToolsBase):
         ChannelNetworkToolsBase.__init__(self, grid, **kwgs)
 
     def extract_terrace_nodes(self):
-        """MWR
-        determine which raster model grid nodes coincide with channel terraces,
+        """determine which raster model grid nodes coincide with channel terraces,
         which presently are asssumed to be a fixed width (number of nodes) from
         the channel nodes
         """
-     
         for i in range(self.TerraceWidth):
             if i == 0:
                 # diagonal adjacent nodes to channel nodes
@@ -191,7 +184,6 @@ class ChannelNetworkToolsInterpretor(ChannelNetworkToolsBase):
                 AdjDN = self._grid.diagonal_adjacent_nodes_at_node[TerraceNodes] 
                 # adjacent nodes to channel nodes
                 AdjN = self._grid.adjacent_nodes_at_node[TerraceNodes]            
-            
             # all adjacent nodes to channel nodes
             AllNodes = np.concatenate((AdjN,AdjDN))
             # unique adjacent nodes
@@ -207,18 +199,13 @@ class ChannelNetworkToolsInterpretor(ChannelNetworkToolsBase):
 
 
     def min_distance_to_network(self, cellid, ChType = 'debrisflow'):
-        """LM
-        determine the distance from a node to the nearest channel node
-                    
-            
+        """determine the distance from a node to the nearest channel node
             ChType = debrisflow: uses debris flow network
             ChType = nmg: uses network model grid network
         """
         def distance_to_network(row):
             """compute distance between nodes """
-
             return ((row['x']-self.gridx[cellid])**2+(row['y']-self.gridy[cellid])**2)**.5
-        
         if ChType == 'debrisflow':
             nmg_dist = self.xyDf_df.apply(distance_to_network,axis=1)
             offset = nmg_dist.min() # minimum distancce
@@ -227,14 +214,11 @@ class ChannelNetworkToolsInterpretor(ChannelNetworkToolsBase):
             nmg_dist = self.xyDf.apply(distance_to_network,axis=1)
             offset = nmg_dist.min() # minimum distancce
             mdn = self.xyDf[nmg_dist == offset] # minimum distance node and node x y    
-
         return offset, mdn        
 
 class ChannelNetworkToolsMapper(ChannelNetworkToolsBase): 
-        
     """map field values from network modelg grid nodes and links to raster model
     grid nodes and vice versa
-
     
     Parameters:
         grid
@@ -256,52 +240,35 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
             TerraceWidth: int
                 width from channel cells in number of cells considered terrace cells.
                 Defaul value is 1 (i.e. all cells directly adjacent to the channels
-                                   cells are considered terrace cells)
-            
+                                   cells are considered terrace cells)          
             author: Jeff Keck
-
-    doc string
-
         """
-
-
-
-
     
     def __init__(self,grid,**kwgs):
         """instatiate ChannelNetworkToolsMapper using the base class init"""
-    
         ChannelNetworkToolsBase.__init__(self, grid, **kwgs)
         
 
     def map_nmg_links_to_rmg_nodes(self, linknodes, active_links, nmgx, nmgy):
-        '''MWR, DtoL
-        convert network model grid links to coincident raster model grid nodes
-        for each nmg link, maps all coicident rmg nodes.
+        '''convert network model grid links to coincident raster model grid nodes.
         Output is a list of lists. order of lists is order of links
         '''
         Lnodelist = [] #list of lists of all nodes that coincide with each link
         Ldistlist = [] #list of lists of all nodes that coincide with each link
         xdDFlist = []
         Lxy= [] #list of all nodes the coincide with the network links
-         
         #loop through all links in network grid to determine raster grid cells that coincide with each link
         #and equivalent distance from upstream node on link
         for k,lk in enumerate(linknodes) : #for each link in network grid
-            
             linkID = active_links[k] #link id (indicie of link in nmg fields)
-            
             lknd = lk #link node numbers
-            
             x0 = nmgx[lknd[0]] #x and y of downstream link node
             y0 = nmgy[lknd[0]]
             x1 = nmgx[lknd[1]] #x and y of upstream link node
             y1 = nmgy[lknd[1]]
-            
             #create 1000 points along domain of link
             X = np.linspace(x0,x1,1000)
             Xs = X-x0 #change begin value to zero
-            
             #determine distance from upstream node to each point
             #y value of points
             if Xs.max() ==0: #if a vertical link (x is constant)
@@ -312,23 +279,15 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
                 vals = y0+(y1-y0)/(x1-x0)*(Xs)
                 dist = ((vals-y0)**2+Xs**2)**.5
                 dist = dist.max()-dist #distance from updtream to downstream
-            
             #match points along link (vals) with grid cells that coincide with link
-            
             nodelist = [] #list of nodes along link
             distlist = [] #list of distance along link corresponding to node
-            # print(vals)
             for i,v in enumerate(vals):
-                
                 x = X[i]
-                
-                mask = (self.ndyn>=v) & (self.ndys<=v) & (self.ndxe>=x) & (self.ndxw<=x)  #mask - use multiple boolian tests to find cell that contains point on link
-                
+                mask = (self.ndyn>=v) & (self.ndys<=v) & (self.ndxe>=x) & (self.ndxw<=x)  #mask - use multiple boolean tests to find cell that contains point on link
                 node = self.nodes[mask] #use mask to extract node value
-                # print(node)
                 if node.shape[0] > 1:
                     node = np.array([node[0]])
-                # print(node)
                 # create list of all nodes that coincide with linke
                 if node not in nodelist: #if node not already in list, append - many points will be in same cell; only need to list cell once
                     nodelist.append(node[0][0])  
@@ -347,21 +306,17 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
             
     def map_nmg1_links_to_nmg2_links(self,Lnodelist,xyDf_d):    
         
-        '''DtoL
-        map link ids from a finer detail network model grid to equivalent link ids on
+        """map link ids from a finer detail network model grid to equivalent link ids on
         a coarser scale network model grid 
         link to each link in the landlab nmg. Note, the landlab nmg id of the dhsmv
         network is used, not the DHSVM network id (arcID) To translate the nmg_d link
         id to the DHSVM network id: self.nmg_d.at_link['arcid'][i], where i is the nmg_d link id.
-        '''
-        
+        """
         #compute distance between deposit and all network cells
         def Distance(row):
             return ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5
-        
         # for each node equivalent of each nmg link, find the closest nmg_d node
         # and record the equivalent nmg_d link id 
-        
         LinkMapper ={}
         LinkMapL = {}
         for i, sublist in enumerate(Lnodelist):# for each list of link nodes
@@ -375,26 +330,18 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
             LinkMapL[i] = LinkL # list of all nm1 links matched to rmg nodes of nmg2 link
             LinkMapper[i] = np.argmax(np.bincount(np.array(LinkL))) # nm1 link with highest count is nm1 link matched to nm2 link
             print('nmg1 link '+ str(i)+' mapped to equivalent nmg2 link')
-            
         return (LinkMapper, LinkMapL)
-        # self.LinkMapper = LinkMapper
-        # self.LinkMapL = LinkMapL
 
 
-    # def DHSVM_network_to_RMG_Mapper(self,xyDf_d):
     def map_nmg_links_to_rmg_channel_nodes(self, xyDf_d):
-        """DtoL        
-        Determine the closest nmg link (assign a network model grid link) to each 
+        """ Determine the closest nmg link (assign a network model grid link) to each 
         rmg channel node. Output can be used to map between nmg link field values and
         rmg node field values
         """
-        
         #compute distance between deposit and all network cells
         def Distance(row):
             return ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5        
-
         # for each node in the channel node list record the equivalent nmg_d link id 
-
         NodeMapper ={}
         ncn = self.ChannelNodes.shape[0] # number of channel nodes
         for i, node in enumerate(self.ChannelNodes):# for each node in the rmg channel node list
@@ -405,42 +352,34 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
             NodeMapper[i] = mdn # dhsmve link for node i
             if i%20 == 0:
                 print(str(np.round((i/ncn)*100))+' % RMG nodes mapped to equivalent DHSVM link')
-            
         self.NodeMapper = NodeMapper       
 
 
     def map_rmg_nodes_to_nmg_nodes(self):
-        """MWR, DtoL
-        find rmg node that is closest to each nmg node (assign a raster model grid
+        """ find rmg node that is closest to each nmg node (assign a raster model grid
         node to each network model grid node)
         
         This function can be used to map changes in the rmg topographic__elevation 
         field to the nmg topographic__elevation field
         """
-            
         #compute distance between deposit and all network cells
         def Distance(row):
             return ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5        
-
         # for each node in the channel node list record the equivalent nmg_d link id 
-
         NodeMapper ={}
         for i, node in enumerate(self.nmg_nodes):# for each node network modelg grid
             XY = [self._nmgrid.node_x[i], self._nmgrid.node_y[i]] # get x and y coordinate of node
             nmg_node_dist = self.xyDf_df.apply(Distance,axis=1) # compute the distance to all channel nodes
             offset = nmg_node_dist.min() # find the minimum distance between node and channel nodes
             mdn = self.xyDf_df.index[(nmg_node_dist == offset).values][0]# index of minimum distance node
-            NodeMapper[i] = self.ChannelNodes[mdn] # rmg node mapped to nmg node i
-            
+            NodeMapper[i] = self.ChannelNodes[mdn] # rmg node mapped to nmg node i         
         self.NMGtoRMGnodeMapper = NodeMapper
 
 
     def transfer_rmg_node_field_to_nmg_node_field(self):
-        """MWR
-        update the topographic elevation field of nmg using th elevation of the
+        """update the topographic elevation field of nmg using th elevation of the
         equivalent raster model grid node
         """
-
         # update elevation
         for i, node in enumerate(self.nmg_nodes):
             RMG_node = self.NMGtoRMGnodeMapper[i]

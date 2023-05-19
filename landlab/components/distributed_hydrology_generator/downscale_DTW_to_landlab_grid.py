@@ -110,8 +110,9 @@ class downscale_DTW_to_landlab_grid():
         if self.resample:
             self._resample(by = self.resample['by'], metric = self.resample['metric'])
         
-        print('interpolating DHSVM dtw maps to landlab grid')
-        self._interpolate_DHSVM_to_landlab()
+        
+        #print('interpolating DHSVM dtw maps to landlab grid')
+        #self._interpolate_DHSVM_to_landlab()
 
 
     def _grid_to_da(self, grid, field):
@@ -182,6 +183,7 @@ class downscale_DTW_to_landlab_grid():
         # first linearly interpolate DHSVM grid values to landlab grid
         # lambda
         lambda_d_l = self.DHSVM_lambda.interp(y = self.y1, x = self.x1)   
+        
         # depth to water table maps
         dtw_d_l = self.DHSVM_dwt.interp(y = self.y1, x = self.x1)    
     
