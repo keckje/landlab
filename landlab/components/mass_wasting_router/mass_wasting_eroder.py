@@ -5,8 +5,8 @@ from collections import OrderedDict
 from landlab import Component, FieldError
 from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFinderAndRouter,FlowDirectorSteepest)
 from landlab import imshow_grid, imshow_grid_at_node
-from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
-
+# from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
+from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsInterpretor
 
 class MassWastingEroder(Component):
     
@@ -132,7 +132,7 @@ class MassWastingEroder(Component):
         if gt != None:
             self.gt = gt
         else:
-            self.gt = ChannelNetworkGridTools(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
+            self.gt = ChannelNetworkToolsInterpretor(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
 
             
         # self.gt = ChannelNetworkGridTools(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)

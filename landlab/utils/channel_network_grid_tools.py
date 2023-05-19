@@ -29,13 +29,6 @@ class ChannelNetworkToolsBase():
     BCt: float
         Contributing area threshold at which cascade channels begin, which is 
         assumed to be the upper limit of frequent bedload transport
-    MW_to_channel_threshold: float
-        A maximum distance, above which, cells downslope of a landslide do not
-        fail with the landslide. This threshold is set based on review of failure
-        behavoir in the basin
-    PartOfChannel_buffer: float
-        buffer distance from the centerline of the channel that is used to identify
-        nodes that are part of the channel network
     TerraceWidth: int
         width from channel cells in number of cells considered terrace cells.
         Defaul value is 1 (i.e. all cells directly adjacent to the channels
@@ -52,8 +45,6 @@ class ChannelNetworkToolsBase():
             nmgrid = None,
             Ct = 5000,
             BCt = 100000,
-            MW_to_channel_threshold = 50,
-            PartOfChannel_buffer = 10,
             TerraceWidth = 1,
             **kwds):
         
@@ -104,7 +95,6 @@ class ChannelNetworkToolsBase():
 
         ### Channel extraction parameters
         self.Ct = Ct # Channel initiation threshold [m2]   
-        self.POCbuffer = PartOfChannel_buffer # distance [m] from a channel cell that is considered part of the channel (used for determining distance between landslide and channel)
         self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
         self.TerraceWidth = TerraceWidth # distance from channel grid cells that are considered terrace grid cells [# cells]          
 
@@ -147,20 +137,10 @@ class ChannelNetworkToolsInterpretor(ChannelNetworkToolsBase):
             BCt: float
                 Contributing area threshold at which cascade channels begin, which is 
                 assumed to be the upper limit of frequent bedload transport
-            MW_to_channel_threshold: float
-                A maximum distance, above which, cells downslope of a landslide do not
-                fail with the landslide. This threshold is set based on review of failure
-                behavoir in the basin
-            PartOfChannel_buffer: float
-                buffer distance from the centerline of the channel that is used to identify
-                nodes that are part of the channel network
             TerraceWidth: int
                 width from channel cells in number of cells considered terrace cells.
                 Defaul value is 1 (i.e. all cells directly adjacent to the channels
                                    cells are considered terrace cells)
-            
-            author: Jeff Keck
-    
     """
 
     
@@ -223,26 +203,7 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
     Parameters:
         grid
         nmgrid
-        **kwgs include:
-
-            Ct: float
-                Contributing area threshold at which channel begin (colluvial channels)
-            BCt: float
-                Contributing area threshold at which cascade channels begin, which is 
-                assumed to be the upper limit of frequent bedload transport
-            MW_to_channel_threshold: float
-                A maximum distance, above which, cells downslope of a landslide do not
-                fail with the landslide. This threshold is set based on review of failure
-                behavoir in the basin
-            PartOfChannel_buffer: float
-                buffer distance from the centerline of the channel that is used to identify
-                nodes that are part of the channel network
-            TerraceWidth: int
-                width from channel cells in number of cells considered terrace cells.
-                Defaul value is 1 (i.e. all cells directly adjacent to the channels
-                                   cells are considered terrace cells)          
-            author: Jeff Keck
-        """
+    """
     
     def __init__(self,grid,**kwgs):
         """instatiate ChannelNetworkToolsMapper using the base class init"""
