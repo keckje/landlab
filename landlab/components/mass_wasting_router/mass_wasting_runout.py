@@ -126,7 +126,8 @@ class MassWastingRunout(Component):
     anti_sloshing = False,
     sloshing_check_frequency = 20,
     effective_qsi = False,
-    number_deposition_nodes = 3):
+    number_deposition_nodes = 3,
+    E_constraint = True):
         
         super().__init__(grid)
 
@@ -148,6 +149,7 @@ class MassWastingRunout(Component):
         self._check_frequency = sloshing_check_frequency
         self.effecitve_qsi = effective_qsi
         self.ndn = number_deposition_nodes
+        self._E_constraint = E_constraint
         if self.VaryDp:
             print(' running with spatially variable Dp ')
 
@@ -696,10 +698,17 @@ class MassWastingRunout(Component):
             downslope nodes and slopes"""            
 
             n = vq_r[0]; vin = vq_r[1]; qsi = vq_r[2]; 
+            
+            # maximum slope at node n
+            slpn = self._grid.at_node['topographic__steepest_slope'][n].max()
+            
+            # proportion of flow in steepest direction
+            pn = self._grid.at_node['flow__receiver_proportions'][n].max() 
+            
             if self.effecitve_qsi:
-                qsi_ = min(qsi,self.qsi_max)
+                qsi_ = min(qsi*pn,self.qsi_max)
             else:
-                qsi_ = qsi
+                qsi_ = qsi*pn
             
             # print(n)
             # print(self.arn)
@@ -710,10 +719,6 @@ class MassWastingRunout(Component):
             adj_n = np.hstack((self._grid.adjacent_nodes_at_node[n],
             self._grid.diagonal_adjacent_nodes_at_node[n]))
             
-            # maximum slope at node n
-            slpn = self._grid.at_node['topographic__steepest_slope'][n].max()           
-            # slpn = self._grid.at_node['topographic__steepest_slope'][adj_n].mean()
-
             
             # look up critical slope at node n
             if len(self.mw_dict['critical slope'])>1: # if option 1, critical slope is not constant but depends on location
@@ -743,7 +748,7 @@ class MassWastingRunout(Component):
 
                 
                 # MAY NOT NEED THIS, CHECK
-                if D > 0:#0.33*qsi: 
+                if D > 0 and self._E_constraint:#0.33*qsi: :#0.33*qsi: 
                     E = 0
                     pd_up = 0
                 else:
