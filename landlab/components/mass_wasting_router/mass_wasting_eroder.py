@@ -6,7 +6,7 @@ from landlab import Component, FieldError
 from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFinderAndRouter,FlowDirectorSteepest)
 from landlab import imshow_grid, imshow_grid_at_node
 # from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
-from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsInterpretor
+from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsInterpretor, ChannelNetworkToolsMapper
 
 class MassWastingEroder(Component):
     
@@ -68,7 +68,7 @@ class MassWastingEroder(Component):
             TerraceWidth = 1,
             FluvialErosionRate = [[1,1], [1,1]], # [[0.03,-0.43], [0.01,-0.43]], # Fluvial erosion rate parameters
             parcel_volume = 0.2, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
-            gt = None,
+            gti = None,
             **kwds):
 
         """
@@ -129,11 +129,12 @@ class MassWastingEroder(Component):
                 'A flow__receiver_node field is required as a component input!')  
 
         # instantiate channel network grid tools or use  provided instance
-        if gt != None:
-            self.gt = gt
+        if gti != None:
+            self.gti = gti
+            self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid)
         else:
-            self.gt = ChannelNetworkToolsInterpretor(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
-
+            self.gti = ChannelNetworkToolsInterpretor(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
+            self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid)
             
         # self.gt = ChannelNetworkGridTools(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
 
@@ -164,12 +165,12 @@ class MassWastingEroder(Component):
 
 
         #### these functions may have already been run
-        if not hasattr(gt,"ChannelNodes"):
-            self.gt.extract_channel_nodes(Ct,BCt)
-        if not hasattr(gt,"TerraceNodes"):
-            self.gt.extract_terrace_nodes()
-        if not hasattr(gt,"xyDf"):
-            out = self.gt.map_nmg_links_to_rmg_nodes(linknodes = self.linknodes,
+        if not hasattr(gti,"ChannelNodes"):
+            self.gti.extract_channel_nodes(Ct,BCt)
+        if not hasattr(gti,"TerraceNodes"):
+            self.gti.extract_terrace_nodes()
+        if not hasattr(gti,"xyDf"):
+            out = self.gtm.map_nmg_links_to_rmg_nodes(linknodes = self.linknodes,
                                     active_links = self._nmgrid.active_links,
                                     nmgx = self.nmgridx, nmgy = self.nmgridy)
     
@@ -215,9 +216,9 @@ class MassWastingEroder(Component):
 
 
         for i in self.rnodes:
-            if i in self.gt.TerraceNodes:
+            if i in self.gti.TerraceNodes:
                 coefL.append(np.array([self.T_a, self.T_b]))
-            elif i in self.gt.ChannelNodes:
+            elif i in self.gti.ChannelNodes:
                 coefL.append(np.array([self.C_a, self.C_b]))
             else:
                 coefL.append(np.array([0, 0]))

@@ -215,7 +215,7 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
         Output is a list of lists. order of lists is order of links
         '''
         Lnodelist = [] #list of lists of all nodes that coincide with each link
-        Ldistlist = [] #list of lists of all nodes that coincide with each link
+        Ldistlist = [] #list of lists of the distance on the link (measured from upstream link node) for all nodes that coincide with each link
         xdDFlist = []
         Lxy= [] #list of all nodes the coincide with the network links
         #loop through all links in network grid to determine raster grid cells that coincide with each link
