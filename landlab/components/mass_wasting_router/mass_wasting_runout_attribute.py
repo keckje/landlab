@@ -129,7 +129,8 @@ class MassWastingRunout(Component):
     sloshing_check_frequency = 20,
     effective_qsi = False,
     number_deposition_nodes = 3,
-    E_constraint = True):
+    E_constraint = True,
+    attributes = None):
         
         super().__init__(grid)
 
@@ -141,7 +142,7 @@ class MassWastingRunout(Component):
         self.routing_partition_method = 'slope'#'square_root_of_slope'  #
         self.routing_surface = routing_surface
         self.settle_deposit = settle_deposit
-        self.VaryDp = self._grid.has_field('node', 'particle__diameter')
+        self.VaryDp = self._grid.has_field('node', 'particle__diameter') ###### CHANGE to boolean input
         self.deposition_rule = deposition_rule
         self.veg_factor = veg_factor # increase SD by this factor for all undisturbed nodes
         self.dist_to_full_flux_constraint = dist_to_full_flux_constraint # make his larger than zero if material is stuck
@@ -152,8 +153,23 @@ class MassWastingRunout(Component):
         self.effecitve_qsi = effective_qsi
         self.ndn = number_deposition_nodes
         self._E_constraint = E_constraint
-        if self.VaryDp:
-            print(' running with spatially variable Dp ')
+        self._attributes = attributes
+        
+        
+        if attributes:
+            # check attributes are included in grid
+            for key in self._attributes:
+                if self._grid.has_field('node', key) == False:
+                    raise ValueError("{} not included as field in grid".format(key))
+                
+            # if using grain size dependent erosion, check 
+            # particle_diameter is included as an attribute
+            if self.VaryDp:
+                if 'particle__diameter' in self._attributes:
+                    print(' running with spatially variable Dp ')
+                else:
+                    raise ValueError("{} not included as field in grid and/or key in attributes".format(key))
+                    
 
         # release parameters for landslide
         self.nps = list(self.release_dict['number of pulses'])
@@ -214,7 +230,6 @@ class MassWastingRunout(Component):
         else:
             self.qsi_max = None
 
-
         # density of debris flow mixture
         self.rodf = self.vs*self.ros+(1-self.vs)*self.rof
         # distance equivalent iteration
@@ -231,10 +246,8 @@ class MassWastingRunout(Component):
         else: # otherwise define everthing as undisturbed
             self._grid.at_node['disturbance_map'] = np.full(self._grid.number_of_nodes, False)
     
-   
     """route an initial mass wasting volume through a watershed, determine Scour, 
     Entrainment and Depostion depths and update the DEM
-    
     
     Parameters
     ----------
@@ -368,7 +381,6 @@ class MassWastingRunout(Component):
             self.arv_r = {}
             self.arn_r = {}
             self.arpd_r = {}
-            
             
         # For each mass wasting event in list:
         for mw_i,inn in enumerate(innL):
@@ -606,6 +618,8 @@ class MassWastingRunout(Component):
         rni = np.array([])
         rvi = np.array([])
         rpdi = np.array([])
+        atti = dict.fromkeys(self._attributes, np.array([]))
+        # for each attribute, create empty array
         
         # order lowest to highest
         node_z = self._grid.at_node.dataset['topographic__elevation'][inn]
@@ -662,6 +676,8 @@ class MassWastingRunout(Component):
             rni = np.concatenate((rni,rn), axis = 0) 
             rvi = np.concatenate((rvi,rv), axis = 0) 
             rpdi = np.concatenate((rpdi,rpd), axis = 0) 
+            for key in atti:
+                np.concatenate((atti[key],rpd), axis = 0) 
             
 
         
