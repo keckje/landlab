@@ -424,7 +424,7 @@ class MassWastingRunout(Component):
             self.sloshed = 0 # number of times model has sloshed
             
             while len(self.arn)>0 and c < self.itL:
-                print(c)
+                # print(c)
                 self.c = c
                 if self.d_it == 0:
                     self.SD_v = self.SD
@@ -705,7 +705,7 @@ class MassWastingRunout(Component):
             slpn = self._grid.at_node['topographic__steepest_slope'][n].max()
             
             # proportion of flow in steepest direction
-            pn = self._grid.at_node['flow__receiver_proportions'][n].max() 
+            pn = !#self._grid.at_node['flow__receiver_proportions'][n].max() 
             
             if self.effecitve_qsi:
                 qsi_ = min(qsi*pn,self.qsi_max)
