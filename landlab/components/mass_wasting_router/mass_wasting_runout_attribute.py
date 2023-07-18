@@ -189,13 +189,8 @@ class MassWastingRunout(Component):
         if 'scour exponent' in self.mw_dict:
             self.eta = self.mw_dict['scour exponent']
         else:
-            self.eta = 0.2
-                
-        if 'effective particle diameter' in self.mw_dict: # specify Dp
-            self.Dp = self.mw_dict['effective particle diameter']
-        else:
-            self.Dp = 0.25   
-            
+            self.eta = 0.2               
+           
         if 'vol solids concentration' in self.mw_dict:
             self.vs = self.mw_dict['vol solids concentration']
         else:
@@ -667,8 +662,7 @@ class MassWastingRunout(Component):
             if self.VaryDp:
                 # get initial mass wasting particle diameter (out) of node ni
                 pd_out = self._grid.at_node.dataset['particle__diameter'].values[ni]
-            else:
-                pd_out = self.Dp
+
             # particle diameter to each recieving node
             rpd = np.ones(len(rv))*pd_out
        
@@ -1075,8 +1069,7 @@ class MassWastingRunout(Component):
         # particle size of scoured material
         if opt == 2:
             pd_up = self._grid.at_node['particle__diameter'][n]
-        else:
-            pd_up = self.Dp
+
         
         E = min(dmx, Ec) # convert Tb to kPa
 
@@ -1217,8 +1210,7 @@ class MassWastingRunout(Component):
             
             if self.VaryDp:
                 inpd = self._grid.at_node['particle__diameter'][n]
-            else:
-                inpd = self.Dp
+
             
             n_pd = (inpd* (self._grid.at_node['soil__thickness'][n]-E)+ 
             pd_in*D)/(D+self._grid.at_node['soil__thickness'][n]-E)
