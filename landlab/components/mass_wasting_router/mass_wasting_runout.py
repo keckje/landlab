@@ -19,7 +19,9 @@ class MassWastingRunout(Component):
     inferred from a landslide hazard map.
 
     TODO: change particle diameter to a function that is applied to all fields that will be tracked
-    change dictionary keys to aruguements in the call function
+    change pd variables to dictionaries, with key for each field to be tracked, and value for key
+    add additional input, that is the list of tracked variables
+
     probably don't need to separate user options into children classes
     use cython or try to restructure SEDU function so that it can be applied with 
     vector operations, the filter all changes to correct cells where computations should not have occurred
@@ -1211,7 +1213,6 @@ class MassWastingRunout(Component):
             
         if (n_pd <0) or (np.isnan(n_pd)) or (np.isinf(n_pd)):
             msg = "node particle diameter is negative, nan or inf"
-            # print("n_pd{}, pd_in{}, E{}, D{}, n{}".format(n_pd, pd_in, E, D, n))
             raise ValueError(msg)        
         return n_pd
 
