@@ -142,7 +142,7 @@ class MassWastingRunout(Component):
         self.routing_partition_method = 'slope'#'square_root_of_slope'  #
         self.routing_surface = routing_surface
         self.settle_deposit = settle_deposit
-        self.VaryDp = self._grid.has_field('node', 'particle__diameter') ###### CHANGE to boolean input
+        self.VaryDp = False ###### CHANGE to boolean input
         self.deposition_rule = deposition_rule
         self.veg_factor = veg_factor # increase SD by this factor for all undisturbed nodes
         self.dist_to_full_flux_constraint = dist_to_full_flux_constraint # make his larger than zero if material is stuck
@@ -157,6 +157,7 @@ class MassWastingRunout(Component):
         
         
         if attributes:
+            self.track_attributes = True
             # check attributes are included in grid
             for key in self._attributes:
                 if self._grid.has_field('node', key) == False:
@@ -169,7 +170,8 @@ class MassWastingRunout(Component):
                     print(' running with spatially variable Dp ')
                 else:
                     raise ValueError("{} not included as field in grid and/or key in attributes".format(key))
-                    
+        else:
+            self.track_attributes = False
 
         # release parameters for landslide
         self.nps = list(self.release_dict['number of pulses'])
@@ -393,14 +395,14 @@ class MassWastingRunout(Component):
                 self.df_evo_maps[mw_i] = {}
                 self.topo_evo_maps[mw_i] = {}
                 self.DEMdfD = {}
-                self.pd_r[mw_id] = []
+                self.pd_r[mw_id] = {} # this becomes the data container for each attribute
                 self.st_r[mw_id] = []
                 self.tss_r[mw_id] = []
                 self.frn_r[mw_id] = []
                 self.frp_r[mw_id] = []            
                 self.arv_r[mw_id] = []
                 self.arn_r[mw_id] = []
-                self.arpd_r[mw_id] = []   
+                self.arpd_r[mw_id] = {}   
                 
             
             # prepare initial mass wasting material (precipitons) for release 
@@ -412,8 +414,10 @@ class MassWastingRunout(Component):
                 self.df_evo_maps[mw_i][0] = self._grid.at_node['energy__elevation'].copy()
                 self.topo_evo_maps[mw_i][0] = self._grid.at_node['topographic__elevation'].copy()
                 self.DEMdfD[0] = {'DEMdf_r':0}            
-                if self.VaryDp:
-                    self.pd_r[mw_id].append(self._grid.at_node['particle__diameter'].copy())
+                if self.track_attributes:
+                    for key in self._attributes:
+                        self.pd_r[mw_id][key] = self._grid.at_node['particle__diameter'].copy()
+                        self.pd_r[mw_id][key] = self._grid.at_node[key]
                 self.st_r[mw_id].append(self._grid.at_node['soil__thickness'].copy())
                 self.tss_r[mw_id].append(self._grid.at_node['topographic__steepest_slope'].copy())
                 self.frn_r[mw_id].append(self._grid.at_node['flow__receiver_node'].copy())
@@ -445,13 +449,13 @@ class MassWastingRunout(Component):
                     
                 # for following iterations, add initial volume/nps every nid iterations
                 # until the volume has been added nps times
-                elif self.nps[mw_i]>1:
-                    if ((c)%self.nid[mw_i] == 0) & (c_dr<=self.nps[mw_i]-1):
-                        self.arn = np.concatenate((self.arn, self.rni))
-                        self.arv = np.concatenate((self.arv, self.rvi))
-                        self.arpd = np.concatenate((self.arpd, self.rpdi))
-                        # update pulse counter
-                        c_dr+=1        
+                # elif self.nps[mw_i]>1:
+                    # if ((c)%self.nid[mw_i] == 0) & (c_dr<=self.nps[mw_i]-1):
+                    #     self.arn = np.concatenate((self.arn, self.rni))
+                    #     self.arv = np.concatenate((self.arv, self.rvi))
+                    #     self.arpd = np.concatenate((self.arpd, self.rpdi))
+                    #     # update pulse counter
+                    #     c_dr+=1        
                 
                 # receiving node, volume and particle diameter temporary arrays
                 # that become the arrays for the next model step (iteration)
@@ -508,10 +512,11 @@ class MassWastingRunout(Component):
                 self.rp = self._grid.at_node['flow__receiver_proportions'].copy()
                 self.rn = self._grid.at_node['flow__receiver_node'].copy()
                 
-                ### update grid field: particle__diameter with the values in 
+                ### update attribute grid fields: particle__diameter with the values in 
                 # nudat
                 if self.VaryDp:
-                    self._update_channel_particle_diameter()
+                    for key in self._attributes:
+                        self._update_channel_particle_diameter()
                               
                 self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
                 
@@ -659,19 +664,22 @@ class MassWastingRunout(Component):
             # divide into proportion going to each receiving node
             rv = rp*vo
             
-            if self.VaryDp:
+            if self._attributes:
                 # get initial mass wasting particle diameter (out) of node ni
-                pd_out = self._grid.at_node.dataset['particle__diameter'].values[ni]
+                pd_out = {}
+                att_ar_out = {}
+                for key in self._attributes:
+                    att_val = self._grid.at_node.dataset[key].values[ni]
 
-            # particle diameter to each recieving node
-            rpd = np.ones(len(rv))*pd_out
+                    # particle diameter to each recieving node
+                    att_ar_out[key] = np.ones(len(rv))*att_val
        
             # append receiving node ids, volumes and particle diameters to initial lists
             rni = np.concatenate((rni,rn), axis = 0) 
             rvi = np.concatenate((rvi,rv), axis = 0) 
             rpdi = np.concatenate((rpdi,rpd), axis = 0) 
-            for key in atti:
-                np.concatenate((atti[key],rpd), axis = 0) 
+            for key in self._attributes
+                np.concatenate((atti[key],att_ar_out[key]), axis = 0) 
             
 
         
@@ -682,12 +690,12 @@ class MassWastingRunout(Component):
         # landslide release nodes, volumes and diameters - saved for incremental release
         self.rni = rni
         self.rvi = rvi
-        self.rpdi = rpdi
+        self.rpdi = atti
         
         self.arndn = np.ones([len(rni)])*np.nan # TODO: set this to node id
         self.arn = rni
         self.arv = rvi
-        self.arpd = rpdi
+        self.arpd = self.rpdi
 
         
     def _scour_entrain_deposit_updatePD(self):
