@@ -114,7 +114,6 @@ class MassWastingRunout(Component):
     def __init__(
     self,
     grid,
-    release_dict,
     mw_dict,
     save = False, 
     run_id = 0, 
@@ -135,7 +134,6 @@ class MassWastingRunout(Component):
         
         super().__init__(grid)
 
-        self.release_dict = release_dict
         self.mw_dict = mw_dict
         self.save = save
         self.run_id = run_id
@@ -173,11 +171,7 @@ class MassWastingRunout(Component):
                     raise ValueError("{} not included as field in grid and/or key in attributes".format(key))
         else:
             self.track_attributes = False
-
-        # release parameters for landslide
-        self.nps = list(self.release_dict['number of pulses'])
-        self.nid = list(self.release_dict['iteration delay'])
-       
+      
 
         if len(self.mw_dict['critical slope'])>1: # change this to check for list input if defined as func of CA
             self.a = self.mw_dict['critical slope'][0]
@@ -348,16 +342,7 @@ class MassWastingRunout(Component):
             ls_mask = self._grid.at_node['mass__wasting_id'] == mw_id
             # list of lists, node ids in each landslide
             innL.append(np.hstack(self._grid.nodes)[ls_mask])
-        
-        # if nps is a single value (rather than list of values for each mass wasting event)
-        # this still may work, can be set to 1 pulse, no delay for landslide area failures
-        if (len(self.nps) ==1) & (len(self.nps) < len(innL)):
-            self.nps = np.ones(len(innL))*self.nps
-        
-        # if nid is a single value (rather than list of values for each mass wasting event)            
-        if (len(self.nid) ==1) & (len(self.nid) < len(innL)):
-            self.nid = np.ones(len(innL))*self.nid
-        
+               
         
         # data containers for saving model images and behavior statistics    
         self.arndn_r = {}
@@ -433,7 +418,6 @@ class MassWastingRunout(Component):
             # determine next set of recieving nodes
             # repeat until no more receiving nodes (material deposits)                
             c = 0 # model iteration counter
-            c_dr = 0 # mass wasting event delayed-release counter
             self.sloshed = 0 # number of times model has sloshed
             
             while len(self.arn)>0 and c < self.itL:
@@ -445,19 +429,7 @@ class MassWastingRunout(Component):
                     self.SD_v = self.SD*(min(c/self.d_it,1))
                 # release the initial landslide volume
                 # if first iteration, receiving cell = initial receiving list
-                # initial volume = volume/nps
-                if c == 0: 
-                    c_dr+=1
-                    
-                # for following iterations, add initial volume/nps every nid iterations
-                # until the volume has been added nps times
-                # elif self.nps[mw_i]>1:
-                    # if ((c)%self.nid[mw_i] == 0) & (c_dr<=self.nps[mw_i]-1):
-                    #     self.arn = np.concatenate((self.arn, self.rni))
-                    #     self.arv = np.concatenate((self.arv, self.rvi))
-                    #     self.aratt = np.concatenate((self.aratt, self.rpdi))
-                    #     # update pulse counter
-                    #     c_dr+=1        
+                     
                 
                 # receiving node, volume and particle diameter temporary arrays
                 # that become the arrays for the next model step (iteration)
@@ -659,11 +631,9 @@ class MassWastingRunout(Component):
             # receiving proportion of qso from cell n to each downslope cell
             rp = self._grid.at_node.dataset['flow__receiver_proportions'].values[ni]
             rp = rp[np.where(rp > 0)] # only downslope cells considered
-            
 
-            
-            # initial mass wasting thickness, (total thickness/number of pulses)  
-            imw_t =s_t/self.nps[mw_i]
+            # initial mass wasting thickness
+            imw_t =s_t
             # get volume (out) of node ni   
             vo = imw_t*self._grid.dx*self._grid.dy# initial volume 
             # divide into proportion going to each receiving node
