@@ -130,7 +130,8 @@ class MassWastingRunout(Component):
     effective_qsi = False,
     number_deposition_nodes = 3,
     E_constraint = True,
-    attributes = None):
+    attributes = None,
+    VaryDp = False):
         
         super().__init__(grid)
 
@@ -142,7 +143,7 @@ class MassWastingRunout(Component):
         self.routing_partition_method = 'slope'#'square_root_of_slope'  #
         self.routing_surface = routing_surface
         self.settle_deposit = settle_deposit
-        self.VaryDp = False ###### CHANGE to boolean input
+        self.VaryDp = VaryDp ###### CHANGE to boolean input
         self.deposition_rule = deposition_rule
         self.veg_factor = veg_factor # increase SD by this factor for all undisturbed nodes
         self.dist_to_full_flux_constraint = dist_to_full_flux_constraint # make his larger than zero if material is stuck
@@ -165,7 +166,7 @@ class MassWastingRunout(Component):
                 
             # if using grain size dependent erosion, check 
             # particle_diameter is included as an attribute
-            if self.VaryDp:
+            if self.VaryDp == True:
                 if 'particle__diameter' in self._attributes:
                     print(' running with spatially variable Dp ')
                 else:
@@ -395,15 +396,16 @@ class MassWastingRunout(Component):
                 self.df_evo_maps[mw_i] = {}
                 self.topo_evo_maps[mw_i] = {}
                 self.DEMdfD = {}
-                self.pd_r[mw_id] = {} # this becomes the data container for each attribute
                 self.st_r[mw_id] = []
                 self.tss_r[mw_id] = []
                 self.frn_r[mw_id] = []
                 self.frp_r[mw_id] = []            
                 self.arv_r[mw_id] = []
                 self.arn_r[mw_id] = []
-                self.arpd_r[mw_id] = {}   
-                
+                if self.track_attributes:
+                    self.pd_r[mw_id] = dict.fromkeys(self._attributes, []) # this becomes the data container for each attribute
+                    self.arpd_r[mw_id] = dict.fromkeys(self._attributes, [])  
+                    
             
             # prepare initial mass wasting material (precipitons) for release 
             self._prep_initial_mass_wasting_material(inn, mw_i)
@@ -416,15 +418,15 @@ class MassWastingRunout(Component):
                 self.DEMdfD[0] = {'DEMdf_r':0}            
                 if self.track_attributes:
                     for key in self._attributes:
-                        self.pd_r[mw_id][key] = self._grid.at_node['particle__diameter'].copy()
-                        self.pd_r[mw_id][key] = self._grid.at_node[key]
+                        self.pd_r[mw_id][key].append(self._grid.at_node[key].copy()) # for each attribute, a copy of entire grid
+                        self.arpd_r[mw_id][key].append(self.arpd) # arriving attributes
                 self.st_r[mw_id].append(self._grid.at_node['soil__thickness'].copy())
                 self.tss_r[mw_id].append(self._grid.at_node['topographic__steepest_slope'].copy())
                 self.frn_r[mw_id].append(self._grid.at_node['flow__receiver_node'].copy())
                 self.frp_r[mw_id].append(self._grid.at_node['flow__receiver_proportions'].copy())
                 self.arv_r[mw_id].append(self.arv)
                 self.arn_r[mw_id].append(self.arn)
-                self.arpd_r[mw_id].append(self.arpd)
+                   
                 
         
             # now loop through each receiving node in list rni, 
@@ -462,12 +464,12 @@ class MassWastingRunout(Component):
                 self.arndn_ns = np.array([])
                 self.arn_ns = np.array([])
                 self.arv_ns = np.array([])
-                self.arpd_ns = np.array([])
-                
                 self.arnL = []
                 self.arvL = []
-                self.arpdL = []
                 self.arndnL = []
+                if self.track_attributes:
+                    self.arpd_ns = dict.fromkeys(self._attributes, np.array([]))
+                    self.arpdL = dict.fromkeys(self._attributes, [])
                 
                 # for each unique cell in receiving node list self.arn
                 arn_u = np.unique(self.arn).astype(int)  # unique arn list
@@ -514,9 +516,9 @@ class MassWastingRunout(Component):
                 
                 ### update attribute grid fields: particle__diameter with the values in 
                 # nudat
-                if self.VaryDp:
+                if self._attributes:
                     for key in self._attributes:
-                        self._update_channel_particle_diameter()
+                        self._update_channel_particle_diameter(key)
                               
                 self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
                 
@@ -537,8 +539,9 @@ class MassWastingRunout(Component):
                 # for next iteration
                 self.arndn = self.arndn_ns.astype(int)
                 self.arn = self.arn_ns.astype(int)
-                self.arv = self.arv_ns #   
-                self.arpd = self.arpd_ns
+                self.arv = self.arv_ns #
+                if self.track_attributes:
+                    self.arpd = self.arpd_ns
 
                 if self.save:
 
@@ -554,15 +557,16 @@ class MassWastingRunout(Component):
                     self.df_evo_maps[mw_i][c+1] = self._grid.at_node['energy__elevation'].copy()
                     self.topo_evo_maps[mw_i][c+1] = self._grid.at_node['topographic__elevation'].copy()
                     # data for tests
-                    if self.VaryDp:
-                        self.pd_r[mw_id].append(self._grid.at_node['particle__diameter'].copy())
+                    if self.track_attributes:
+                        for key in self._attributes:
+                            self.pd_r[mw_id][key].append(self._grid.at_node[key].copy())
+                            self.arpd_r[mw_id][key].append(self.arpdL) 
                     self.st_r[mw_id].append(self._grid.at_node['soil__thickness'].copy())
                     self.tss_r[mw_id].append(self._grid.at_node['topographic__steepest_slope'].copy())
                     self.frn_r[mw_id].append(self._grid.at_node['flow__receiver_node'].copy())
                     self.frp_r[mw_id].append(self._grid.at_node['flow__receiver_proportions'].copy())
                     self.arv_r[mw_id].append(self.arvL)
-                    self.arn_r[mw_id].append(self.arnL)
-                    self.arpd_r[mw_id].append(self.arpdL)     
+                    self.arn_r[mw_id].append(self.arnL)                          
                     self.arndn_r[mw_id].append(self.arndn)
 
                 
@@ -590,7 +594,7 @@ class MassWastingRunout(Component):
             difs = sumdif[:-1]-sumdif[1:]
         
             self.difsmn = np.abs((np.nanmean(difs)*self._grid.dx*self._grid.dy)/self._lsvol)
-            print('difsmn:{}'.format(self.difsmn))
+            # print('difsmn:{}'.format(self.difsmn))
             
             # check for repeat delivery nodes
             a1 = self.arndn_r[mw_id][-1]; a2 = self.arndn_r[mw_id][-5]
@@ -618,7 +622,8 @@ class MassWastingRunout(Component):
         rni = np.array([])
         rvi = np.array([])
         rpdi = np.array([])
-        atti = dict.fromkeys(self._attributes, np.array([]))
+        if self._attributes:
+           atti = dict.fromkeys(self._attributes, np.array([]))
         # for each attribute, create empty array
         
         # order lowest to highest
@@ -667,19 +672,22 @@ class MassWastingRunout(Component):
             if self._attributes:
                 # get initial mass wasting particle diameter (out) of node ni
                 pd_out = {}
-                att_ar_out = {}
+                self.att_ar_out = {}
                 for key in self._attributes:
                     att_val = self._grid.at_node.dataset[key].values[ni]
+                    # print('att_val:{}'.format(att_val))
 
                     # particle diameter to each recieving node
-                    att_ar_out[key] = np.ones(len(rv))*att_val
+                    self.att_ar_out[key] = np.ones(len(rv))*att_val
+
+                # for key in self._attributes:
+                    atti[key] = np.concatenate((atti[key],self.att_ar_out[key]), axis = 0) 
        
             # append receiving node ids, volumes and particle diameters to initial lists
             rni = np.concatenate((rni,rn), axis = 0) 
             rvi = np.concatenate((rvi,rv), axis = 0) 
-            rpdi = np.concatenate((rpdi,rpd), axis = 0) 
-            for key in self._attributes
-                np.concatenate((atti[key],att_ar_out[key]), axis = 0) 
+            # rpdi = np.concatenate((rpdi,rpd), axis = 0) 
+
             
 
         
@@ -687,15 +695,16 @@ class MassWastingRunout(Component):
         self.rp = self._grid.at_node['flow__receiver_proportions'].copy()
         self.rn = self._grid.at_node['flow__receiver_node'].copy()
 
-        # landslide release nodes, volumes and diameters - saved for incremental release
-        self.rni = rni
-        self.rvi = rvi
-        self.rpdi = atti
+        # # landslide release nodes, volumes and diameters - saved for incremental release
+        # self.rni = rni
+        # self.rvi = rvi
+        # self.rpdi = atti
         
         self.arndn = np.ones([len(rni)])*np.nan # TODO: set this to node id
         self.arn = rni
         self.arv = rvi
-        self.arpd = self.rpdi
+        if self._attributes:
+            self.arpd = atti
 
         
     def _scour_entrain_deposit_updatePD(self):
@@ -743,41 +752,52 @@ class MassWastingRunout(Component):
             # look up critical slope at node n
             if len(self.mw_dict['critical slope'])>1: # if option 1, critical slope is not constant but depends on location
                 self.slpc = self.a*self._grid.at_node['drainage_area'][n]**self.b                      
+            
             # incoming particle diameter (weighted average)
-            pd_in = self._particle_diameter_in(n,vin) # move
-
+            if self._attributes:
+                pd_in = self._particle_diameter_in(n,vin)
+            else:
+                pd_in = None 
            
             # rn_g: receiver nodes based on the pre-flow underlying topographic slope at node n
             rn_g = self._grid.at_node.dataset['flow__receiver_node'].values[n]
             rn_g = rn_g[np.where(rn_g != -1)]
-            # rn_g = rn_g[~np.isin(rn_g,dn)]
+
             # if qsi less than the vegetation SD in an undisturbed cell
             if (qsi <=(self.SD_v*self.veg_factor)):# and (self._grid.at_node['disturbance_map'][n] == False)):# or ((len(rn) == 1) and ([n] == [rn])):
                 D = qsi 
                 qso = 0
                 E = 0 
                 deta = D 
-                pd_up = 0
+                # pd_up = 0
+                if self._attributes:
+                    pd_up = dict.fromkeys(self._attributes, 0)
+                else:
+                    pd_up = None
                 Tbs = 0
                 u = 0
  
             else:
                 D = min(qsi, self._deposit(qsi_, slpn, n)) # function of qsi and topographic elevation before settle/scour by qsi                
-                # print('it:{}, DEPOSTION:{}'.format(self.c, D))
-                # scour a function of steepes topographic slope at node, determined before settle/scour by qsi
 
+                # scour a function of steepes topographic slope at node, determined before settle/scour by qsi
                 
                 # MAY NOT NEED THIS, CHECK
-                if D > 0 and self._E_constraint:#0.33*qsi: :#0.33*qsi: 
+                if D > 0 and self._E_constraint:
                     E = 0
-                    pd_up = 0
+                    # pd_up = 0
+                    if self._attributes:
+                        pd_up = dict.fromkeys(self._attributes, 0)
+                    else:
+                        pd_up = None
+                    
                 else:
                     if self.VaryDp:   
                         opt = 2
                     else:
                         opt = 1
                         
-                    E, pd_up, Tbs, u = self._scour(n, qsi_, slpn, opt = opt, pd_in = pd_in)   
+                    E, pd_up, Tbs, u = self._scour(n, qsi_, slpn, pd_in = pd_in)   
                     # model behavior tracking
                     if self.save:
                         self.TdfL.append(Tbs)
@@ -808,12 +828,16 @@ class MassWastingRunout(Component):
             # print('it:{}, node:{}, rn:{}, slope:{}, depostion:{}, entrainment:{}, outflow:{}'.format(self.c, n, rn, slpn, D, E, qso))
 
             # updated node particle diameter (weighted average)
-            n_pd = self._particle_diameter_node(n,pd_in,E,D)
+            if self._attributes:
+                n_pd = self._particle_diameter_node(n,pd_in,E,D)
+            else:
+                n_pd = None
             
             # list of deposition depths at cells in iteration 
-            self.D_L.append(D)            
-
-            return deta, qso, n_pd, pd_up, pd_in, qsi, E, D
+            self.D_L.append(D)
+            
+            # n_pd, pd_up, pd_in are dictionaries of values of each attribute (keys of dictionary)            
+            return deta, qso, qsi, E, D, n_pd, pd_up, pd_in
     
         
         # apply SEDU function to all unique nodes in arn (arn_u)
@@ -833,9 +857,10 @@ class MassWastingRunout(Component):
         paritioned volume"""
         
         def rn_rp(nudat_r):
-            n = nudat_r[0]; qso = nudat_r[2]; pd_up = nudat_r[4]; pd_in = nudat_r[5]
-            qsi = nudat_r[6]; E = nudat_r[7]; D = nudat_r[8]
+            n = nudat_r[0]; qso = nudat_r[2];
+            qsi = nudat_r[3]; E = nudat_r[4]; D = nudat_r[5]
             
+            pd_up = nudat_r[7]; pd_in = nudat_r[8]
             # nodes that sent material to node n
             dn = self.arndn[self.arn == n]
             
@@ -867,20 +892,28 @@ class MassWastingRunout(Component):
                 rndn = (np.ones(len(rn))*n).astype(int) # receiving node delivery node (list of node n, length eqaul to number of proportions of qso sent to receiving cells)
 
                 # particle diameter out (weighted average)
-                pd_out = self._particle_diameter_out(pd_up,pd_in,qsi,E,D)    
-                rpd = np.ones(len(rv))*pd_out
-
+                if self._attributes:
+                    pd_out = self._particle_diameter_out(pd_up,pd_in,qsi,E,D) 
+                    
+                    rpd_ns = {}
+                    for key_n, key in enumerate(self._attributes):
+                        rpd = np.ones(len(rv))*pd_out[key]
+                        # print('rpd:{}'.format(rpd))
+                        self.arpd_ns[key] = np.concatenate((self.arpd_ns[key], rpd), axis = 0) # next step receiving node incoming particle diameter list
+                        self.arpdL[key].append(rpd)
                 # store receiving nodes and volumes in temporary arrays
                 self.arndn_ns = np.concatenate((self.arndn_ns, rndn), axis = 0) # next step delivery nodes
                 self.arn_ns = np.concatenate((self.arn_ns, rn), axis = 0) # next step receiving node list
                 self.arv_ns = np.concatenate((self.arv_ns, rv), axis = 0) # next step receiving node incoming volume list
-                self.arpd_ns = np.concatenate((self.arpd_ns, rpd), axis = 0) # next step receiving node incoming particle diameter list
+                
 
    
                 self.arnL.append(rn)
                 self.arvL.append(rv)
-                self.arpdL.append(rpd)
+            
                 self.arndnL.append(rndn)
+                
+                
 
         nudat_ = self.nudat[self.nudat[:,2]>0] # only run on nodes with qso>0
         ll = np.array([rn_rp(r) for r in self.nudat],dtype=object)
@@ -942,17 +975,20 @@ class MassWastingRunout(Component):
         fd.run_one_step()
 
     
-    def _update_channel_particle_diameter(self):
+    def _update_channel_particle_diameter(self, key):
         """ for each unique node in receiving node list, update the grain size
         using the grain size determined in _scour_entrain_deposit
         """
-
-        n = self.nudat[:,0].astype(int); new_node_pd = self.nudat[:,3]
+        
+        n = self.nudat[:,0].astype(int); 
+        
+        new_node_pd = np.array([d[key] for d in  self.nudat[:,6]]) # change this to read column based on order of field name in _attributes
+        # print('new_node_pd:{}'.format(new_node_pd))
         if np.isnan(np.sum(new_node_pd)):
-            raise ValueError("particle diameter is {}".format(new_node_pd))
+            raise ValueError("{} is {}".format(key, new_node_pd))
         
             
-        self._grid.at_node['particle__diameter'][n] = new_node_pd 
+        self._grid.at_node[key][n] = new_node_pd 
                 
          
     def _settle(self, arn_u):
@@ -1028,15 +1064,15 @@ class MassWastingRunout(Component):
                     self._grid.at_node['soil__thickness'][n] = self._grid.at_node['soil__thickness'][n]-qso_s
                     self._grid.at_node['soil__thickness'][rn] = self._grid.at_node['soil__thickness'][rn]+qso_s_i
                     
-                    # update properties, try to vectorize this, will loop
-                    # for each property...right now just for pd                   
-                    pd_ = self._grid.at_node['particle__diameter'][n]                    
-                    for v, n_ in enumerate(rn):
-                        D = qso_s_i[v]
-                        self._grid.at_node['particle__diameter'][n_] = self._particle_diameter_node(n_,pd_,0,D)
+                    # update properties
+                    for key in self._attributes:
+                        pd_ = self._grid.at_node[key][n]                    
+                        for v, n_ in enumerate(rn):
+                            D = qso_s_i[v]
+                            self._grid.at_node[key][n_] = self._particle_diameter_node(n_,pd_,0,D)
     
 
-    def _scour(self, n, depth, slope, opt = 1, pd_in = None):
+    def _scour(self, n, depth, slope, pd_in = None):
         """determines the scour depth based on user selected method
         check for required inputs at beginning of class
         """
@@ -1045,17 +1081,18 @@ class MassWastingRunout(Component):
         # depth-slope product approximation of hydrostaic/quasi-static 
         # shear stress on channel bed [Pa]
         theta = np.arctan(slope) # convert tan(theta) to theta
-        Dp = pd_in # mass wasting particle diameter is Dp
+        # particle size of scoured material
+        # pd_up = self._grid.at_node['particle__diameter'][n]
+        if self._attributes:
+            pd_up = {}
+            for key in self._attributes:
+                pd_up[key] = self._grid.at_node[key][n]
+        else:
+            pd_up = None
+
         
-        if opt ==1:
-            # following Frank et al., 2015, approximate erosion depth as a linear
-            # function of total stress under uniform flow conditions
-            
-            # erosion depth,:
-            Tbs = self.rodf*self.g*depth*(np.sin(theta))
-            Ec = self.cs*(Tbs)**self.eta
-            u = 5
-        if opt == 2:
+        if self.VaryDp:
+            Dp = pd_in['particle__diameter']
             if depth < Dp: # grain size dependent erosion breaks if depth<Dp
                 Dp = depth*.99
             # shear stress apprixmated as a power functino of inertial shear stress
@@ -1070,13 +1107,19 @@ class MassWastingRunout(Component):
             Tcn = np.cos(theta)*self.vs*self.ros*(Dp**2)*(dudz**2)
             Tbs = Tcn*np.tan(phi)
 
-            Ec = (self.cs*Tbs**self.eta)        
-       
+            Ec = (self.cs*Tbs**self.eta)      
+
+        else:
+            # following Frank et al., 2015, approximate erosion depth as a linear
+            # function of total stress under uniform flow conditions
+            
+            # erosion depth,:
+            Tbs = self.rodf*self.g*depth*(np.sin(theta))
+            Ec = self.cs*(Tbs)**self.eta
+            u = 5
+        
         dmx = self._grid.at_node['soil__thickness'][n]
         
-        # particle size of scoured material
-        if opt == 2:
-            pd_up = self._grid.at_node['particle__diameter'][n]
 
         
         E = min(dmx, Ec) # convert Tb to kPa
@@ -1201,48 +1244,62 @@ class MassWastingRunout(Component):
         """determine the weighted average particle diameter of the incoming
         flow"""       
         if (vin == 0):
-            pd_in = 0
+            # pd_in = 0
+            pd_in = dict.fromkeys(self._attributes, 0)
         elif (np.isnan(vin)) or (np.isinf(vin)):
             msg = "in-flowing volume is nan or inf"
             raise ValueError(msg)
-        else:           
-            pd_in = np.sum((self.arpd[self.arn == n])*(self.arv[self.arn == n])/vin)        
+        else:
+            pd_in = {}
+            for key in self._attributes:
+                # print('arpd.key:{}'.format(self.arpd[key]))
+                # print('self.arn == n:{}'.format(self.arn == n))
+                pd_in[key] = np.sum((self.arpd[key][self.arn == n])*(self.arv[self.arn == n])/vin)        
         return pd_in
 
 
     def _particle_diameter_node(self,n,pd_in,E,D):
         """determine the weighted average particle diameter of deposited +
-        in-situ deposit"""
-
-        if (D+self._grid.at_node['soil__thickness'][n]-E > 0):
-            
-            if self.VaryDp:
-                inpd = self._grid.at_node['particle__diameter'][n]
-
-            
-            n_pd = (inpd* (self._grid.at_node['soil__thickness'][n]-E)+ 
-            pd_in*D)/(D+self._grid.at_node['soil__thickness'][n]-E)
+        in-situ deposit
         
-        else:
-        
-            n_pd = 0
+        pd_in: dictionary 
+        """
+        def weighted_avg_at_node(key):
+            if (D+self._grid.at_node['soil__thickness'][n]-E > 0):
+                
+                inpd = self._grid.at_node[key][n] # attribute value at node
+                
+                n_pd = (inpd* (self._grid.at_node['soil__thickness'][n]-E)+ 
+                pd_in[key]*D)/(D+self._grid.at_node['soil__thickness'][n]-E)
             
-        if (n_pd <0) or (np.isnan(n_pd)) or (np.isinf(n_pd)):
-            msg = "node particle diameter is negative, nan or inf"
-            raise ValueError(msg)        
-        return n_pd
+            else:
+            
+                n_pd = 0
+                
+            if (n_pd <0) or (np.isnan(n_pd)) or (np.isinf(n_pd)):
+                msg = "node particle diameter is negative, nan or inf"
+                raise ValueError(msg)      
+                
+            return n_pd
+ 
+        n_pd_d = {}
+        for key in self._attributes:
+            n_pd_d[key] = weighted_avg_at_node(key)
+        
+        return n_pd_d
 
 
-    @staticmethod
-    def _particle_diameter_out(pd_up,pd_in,qsi,E,D):
+    # @staticmethod
+    def _particle_diameter_out(self,pd_up,pd_in,qsi,E,D):
         """determine the weighted average particle diameter of the outgoing
         flow"""
-        
-        pd_out = np.sum((pd_up*E+pd_in*(qsi-D))/(qsi-D+E))
-                
-        if (pd_out <=0) or (np.isnan(pd_out)) or (np.isinf(pd_out)):
-            msg = "out-flowing particle diameter is zero, negative, nan or inf"
-            print("pd_up{}, pd_in{}, qsi{}, E{}, D{}".format(pd_up, pd_in, qsi, E, D))
-            raise ValueError(msg)
+        pd_out = {}
+        for key in self._attributes:
+            pd_out[key] = np.sum((pd_up[key]*E+pd_in[key]*(qsi-D))/(qsi-D+E))
+            check_val = pd_out[key]    
+            if (check_val <=0) or (np.isnan(check_val)) or (np.isinf(check_val)):
+                msg = "out-flowing particle {} is zero, negative, nan or inf".format(key)
+                # print("pd_up{}, pd_in{}, qsi{}, E{}, D{}".format(pd_up[key], pd_in[key], qsi, E, D))
+                raise ValueError(msg)
         
         return pd_out
