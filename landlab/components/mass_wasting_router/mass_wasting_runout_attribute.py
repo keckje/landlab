@@ -454,17 +454,6 @@ class MassWastingRunout(Component):
                 # the thickness of the debris flow is tracked for plotting
                 self._update_E_dem()
                 
-                if self.routing_surface == "energy__elevation":                              
-                    # if considering the energy surface in flow routing, 
-                    # update the receiving nodes (self.rn) to represent the 
-                    # the flow surface
-                    self._update_energy_slope()   
-                    self.rp = self._grid.at_node['flow__receiver_proportions'].copy() # not using self.rp, only need rn for constraint
-                    self.rn = self._grid.at_node['flow__receiver_node'].copy()
-                    # scour function uses the underlying topography. Grid fields need to
-                    # be updated for before deposition or scour caused by material 
-                    # after it enters node n
-                    self._update_topographic_slope()
 
                 # determine scour, entrain, deposition and outflow depths and
                 # the outflowing particle diameter, arranged in array nudat
@@ -482,10 +471,7 @@ class MassWastingRunout(Component):
                 # settling will occur - move this innto settle_deposit
                                
                 self._update_topographic_slope()  
-                # set receiving nodes (self.rn) and proportions (self.rp) based on underlying topography                 
-                self.rp = self._grid.at_node['flow__receiver_proportions'].copy()
-                self.rn = self._grid.at_node['flow__receiver_node'].copy()
-                
+
                 ### update attribute grid fields: particle__diameter with the values in 
                 # nudat
                 if self._attributes:
@@ -500,8 +486,6 @@ class MassWastingRunout(Component):
                     ### settle unrealistically tall mounds in the deposit                    
                     self._settle(arn_u)
                     self._update_topographic_slope()
-                    self.rp = self._grid.at_node['flow__receiver_proportions'].copy()
-                    self.rn = self._grid.at_node['flow__receiver_node'].copy()
 
                 # self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
                 self._update_disturbance_map()  
@@ -658,12 +642,7 @@ class MassWastingRunout(Component):
             rvi = np.concatenate((rvi,rv), axis = 0) 
             # rpdi = np.concatenate((rpdi,ratt), axis = 0) 
 
-            
 
-        
-        # set receiving nodes (self.rn) and proportions (self.rp) based on underlying topography                 
-        self.rp = self._grid.at_node['flow__receiver_proportions'].copy()
-        self.rn = self._grid.at_node['flow__receiver_node'].copy()
 
         # # landslide release nodes, volumes and diameters - saved for incremental release
         # self.rni = rni
@@ -833,9 +812,6 @@ class MassWastingRunout(Component):
             pd_up = nudat_r[7]; pd_in = nudat_r[8]
             # nodes that sent material to node n
             dn = self.arndn[self.arn == n]
-            
-            # nodes that receive material from node n
-            # rn = self.rn[n]
 
             rn = self._grid.at_node.dataset['flow__receiver_node'].values[n] #   #  defining rn from the energy elevation causes flow to slosh
             rn_ = rn.copy()
