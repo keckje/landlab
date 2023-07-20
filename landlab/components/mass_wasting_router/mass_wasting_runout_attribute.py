@@ -131,7 +131,7 @@ class MassWastingRunout(Component):
     number_deposition_nodes = 3,
     E_constraint = True,
     attributes = None,
-    VaryDp = False):
+    grain_shear = False):
         
         super().__init__(grid)
 
@@ -143,7 +143,7 @@ class MassWastingRunout(Component):
         self.routing_partition_method = 'slope'#'square_root_of_slope'  #
         self.routing_surface = routing_surface
         self.settle_deposit = settle_deposit
-        self.VaryDp = VaryDp ###### CHANGE to boolean input
+        self.grain_shear = grain_shear ###### CHANGE to boolean input
         self.deposition_rule = deposition_rule
         self.veg_factor = veg_factor # increase SD by this factor for all undisturbed nodes
         self.dist_to_full_flux_constraint = dist_to_full_flux_constraint # make his larger than zero if material is stuck
@@ -166,7 +166,7 @@ class MassWastingRunout(Component):
                 
             # if using grain size dependent erosion, check 
             # particle_diameter is included as an attribute
-            if self.VaryDp == True:
+            if self.grain_shear == True:
                 if 'particle__diameter' in self._attributes:
                     print(' running with spatially variable Dp ')
                 else:
@@ -363,7 +363,7 @@ class MassWastingRunout(Component):
         self.arndn_r = {}
         if self.save:
             cL = {} 
-            self.df_evo_maps = {} # copy of dem after each routing iteration
+            self.df_evo_maps = {} # copy of dem, over the entire model domain, for each routing iteration
             self.topo_evo_maps = {}
             self.enL = [] # entrainment depth / regolith depth
             self.DpL = [] # deposition depth
@@ -371,14 +371,14 @@ class MassWastingRunout(Component):
             self.TdfL = [] # basal shear stress 
             self.slopeL = [] # slope
             self.velocityL = [] # velocity (if any)
-            self.pd_r = {}
+            self.att_r = {} # copy of each attribute, over the entire model domain, for each routing iteration
             self.st_r = {}
             self.tss_r ={}
             self.frn_r = {}
             self.frp_r = {}
             self.arv_r = {}
             self.arn_r = {}
-            self.arpd_r = {}
+            self.aratt_r = {} # list of arriving attributes
             
         # For each mass wasting event in list:
         for mw_i,inn in enumerate(innL):
@@ -403,8 +403,8 @@ class MassWastingRunout(Component):
                 self.arv_r[mw_id] = []
                 self.arn_r[mw_id] = []
                 if self.track_attributes:
-                    self.pd_r[mw_id] = dict.fromkeys(self._attributes, []) # this becomes the data container for each attribute
-                    self.arpd_r[mw_id] = dict.fromkeys(self._attributes, [])  
+                    self.att_r[mw_id] = dict.fromkeys(self._attributes, []) # this becomes the data container for each attribute
+                    self.aratt_r[mw_id] = dict.fromkeys(self._attributes, [])  
                     
             
             # prepare initial mass wasting material (precipitons) for release 
@@ -418,8 +418,8 @@ class MassWastingRunout(Component):
                 self.DEMdfD[0] = {'DEMdf_r':0}            
                 if self.track_attributes:
                     for key in self._attributes:
-                        self.pd_r[mw_id][key].append(self._grid.at_node[key].copy()) # for each attribute, a copy of entire grid
-                        self.arpd_r[mw_id][key].append(self.arpd) # arriving attributes
+                        self.att_r[mw_id][key].append(self._grid.at_node[key].copy()) # for each attribute, a copy of entire grid
+                        self.aratt_r[mw_id][key].append(self.aratt) 
                 self.st_r[mw_id].append(self._grid.at_node['soil__thickness'].copy())
                 self.tss_r[mw_id].append(self._grid.at_node['topographic__steepest_slope'].copy())
                 self.frn_r[mw_id].append(self._grid.at_node['flow__receiver_node'].copy())
@@ -455,7 +455,7 @@ class MassWastingRunout(Component):
                     # if ((c)%self.nid[mw_i] == 0) & (c_dr<=self.nps[mw_i]-1):
                     #     self.arn = np.concatenate((self.arn, self.rni))
                     #     self.arv = np.concatenate((self.arv, self.rvi))
-                    #     self.arpd = np.concatenate((self.arpd, self.rpdi))
+                    #     self.aratt = np.concatenate((self.aratt, self.rpdi))
                     #     # update pulse counter
                     #     c_dr+=1        
                 
@@ -468,8 +468,8 @@ class MassWastingRunout(Component):
                 self.arvL = []
                 self.arndnL = []
                 if self.track_attributes:
-                    self.arpd_ns = dict.fromkeys(self._attributes, np.array([]))
-                    self.arpdL = dict.fromkeys(self._attributes, [])
+                    self.aratt_ns = dict.fromkeys(self._attributes, np.array([])) #
+                    self.arattL = dict.fromkeys(self._attributes, [])
                 
                 # for each unique cell in receiving node list self.arn
                 arn_u = np.unique(self.arn).astype(int)  # unique arn list
@@ -541,7 +541,7 @@ class MassWastingRunout(Component):
                 self.arn = self.arn_ns.astype(int)
                 self.arv = self.arv_ns #
                 if self.track_attributes:
-                    self.arpd = self.arpd_ns
+                    self.aratt = self.aratt_ns
 
                 if self.save:
 
@@ -559,8 +559,8 @@ class MassWastingRunout(Component):
                     # data for tests
                     if self.track_attributes:
                         for key in self._attributes:
-                            self.pd_r[mw_id][key].append(self._grid.at_node[key].copy())
-                            self.arpd_r[mw_id][key].append(self.arpdL) 
+                            self.att_r[mw_id][key].append(self._grid.at_node[key].copy())
+                            self.aratt_r[mw_id][key].append(self.arattL) 
                     self.st_r[mw_id].append(self._grid.at_node['soil__thickness'].copy())
                     self.tss_r[mw_id].append(self._grid.at_node['topographic__steepest_slope'].copy())
                     self.frn_r[mw_id].append(self._grid.at_node['flow__receiver_node'].copy())
@@ -686,7 +686,7 @@ class MassWastingRunout(Component):
             # append receiving node ids, volumes and particle diameters to initial lists
             rni = np.concatenate((rni,rn), axis = 0) 
             rvi = np.concatenate((rvi,rv), axis = 0) 
-            # rpdi = np.concatenate((rpdi,rpd), axis = 0) 
+            # rpdi = np.concatenate((rpdi,ratt), axis = 0) 
 
             
 
@@ -704,7 +704,7 @@ class MassWastingRunout(Component):
         self.arn = rni
         self.arv = rvi
         if self._attributes:
-            self.arpd = atti
+            self.aratt = atti
 
         
     def _scour_entrain_deposit_updatePD(self):
@@ -792,7 +792,7 @@ class MassWastingRunout(Component):
                         pd_up = None
                     
                 else:
-                    if self.VaryDp:   
+                    if self.grain_shear:   
                         opt = 2
                     else:
                         opt = 1
@@ -897,10 +897,10 @@ class MassWastingRunout(Component):
                     
                     rpd_ns = {}
                     for key_n, key in enumerate(self._attributes):
-                        rpd = np.ones(len(rv))*pd_out[key]
-                        # print('rpd:{}'.format(rpd))
-                        self.arpd_ns[key] = np.concatenate((self.arpd_ns[key], rpd), axis = 0) # next step receiving node incoming particle diameter list
-                        self.arpdL[key].append(rpd)
+                        ratt = np.ones(len(rv))*pd_out[key]
+                        # print('ratt:{}'.format(ratt))
+                        self.aratt_ns[key] = np.concatenate((self.aratt_ns[key], ratt), axis = 0) # next step receiving node incoming particle diameter list
+                        self.arattL[key].append(ratt)
                 # store receiving nodes and volumes in temporary arrays
                 self.arndn_ns = np.concatenate((self.arndn_ns, rndn), axis = 0) # next step delivery nodes
                 self.arn_ns = np.concatenate((self.arn_ns, rn), axis = 0) # next step receiving node list
@@ -1091,7 +1091,7 @@ class MassWastingRunout(Component):
             pd_up = None
 
         
-        if self.VaryDp:
+        if self.grain_shear:
             Dp = pd_in['particle__diameter']
             if depth < Dp: # grain size dependent erosion breaks if depth<Dp
                 Dp = depth*.99
@@ -1252,9 +1252,9 @@ class MassWastingRunout(Component):
         else:
             pd_in = {}
             for key in self._attributes:
-                # print('arpd.key:{}'.format(self.arpd[key]))
+                # print('arpd.key:{}'.format(self.aratt[key]))
                 # print('self.arn == n:{}'.format(self.arn == n))
-                pd_in[key] = np.sum((self.arpd[key][self.arn == n])*(self.arv[self.arn == n])/vin)        
+                pd_in[key] = np.sum((self.aratt[key][self.arn == n])*(self.arv[self.arn == n])/vin)        
         return pd_in
 
 
