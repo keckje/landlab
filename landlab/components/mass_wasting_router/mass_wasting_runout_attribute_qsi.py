@@ -13,10 +13,12 @@ from landlab.components import(FlowDirectorD8,
 class MassWastingRunout(Component):
     
     '''a cellular automata mass wasting model that routes an initial mass wasting  
-    volume (e.g., a landslide) through a watershed, determines Scour, Entrainment
-    and Depostion depths, tracks grain size and updates the DEM. This model is
+    body (e.g., a landslide) through a watershed, determines erosion, aggradation
+    depths, tracks attributes of the regolith and updates the DEM. This model is
     intended for modeling the runout of individually mapped landslides and landslides
     inferred from a landslide hazard map.
+    
+    See Keck et al., 2023 for details.
 
     author: Jeff Keck
     '''
@@ -235,9 +237,9 @@ class MassWastingRunout(Component):
                                         
                 threshold flux: float
                     minimum volumetric flux per unit contour width, i.e., 
-                    volume/(grid.dx*grid.dx) per iteration, (L)/i.
+                    volume/(grid.dx*grid.dx)/iteration per iteration, [L/iteration].
                     flux below this threshold stops at the cell as a deposit
-                scour coefficient: float [L/((M*L*T^-2)/L^2)]
+                erosion coefficient: float [L/((M*L*T^-2)/L^2)]
                     coefficient that converts the depth-slope approximation of
                     total shear stress (kPa from the debris flow to a 
                     scour depth [m]
@@ -268,7 +270,7 @@ class MassWastingRunout(Component):
     """
     
     def run_one_step(self, dt):
-        """route a list of mass wasting volumes through a DEM and update
+        """route a list of debritons through a DEM and update
         the DEM based on the scour, entrainment and depostion depths at each 
         cell        
         ----------
@@ -315,7 +317,7 @@ class MassWastingRunout(Component):
             self.tss_r ={}
             self.frn_r = {}
             self.frp_r = {}
-            self.arv_r = {}
+            self.arqso_r = {}
             self.arn_r = {}
             self.aratt_r = {} # list of arriving attributes
             
@@ -339,7 +341,7 @@ class MassWastingRunout(Component):
                 self.tss_r[mw_id] = []
                 self.frn_r[mw_id] = []
                 self.frp_r[mw_id] = []            
-                self.arv_r[mw_id] = []
+                self.arqso_r[mw_id] = []
                 self.arn_r[mw_id] = []
                 if self.track_attributes:
                     self.att_r[mw_id] = dict.fromkeys(self._tracked_attributes, []) # this becomes the data container for each attribute
@@ -363,7 +365,7 @@ class MassWastingRunout(Component):
                 self.tss_r[mw_id].append(self._grid.at_node['topographic__steepest_slope'].copy())
                 self.frn_r[mw_id].append(self._grid.at_node['flow__receiver_node'].copy())
                 self.frp_r[mw_id].append(self._grid.at_node['flow__receiver_proportions'].copy())
-                self.arv_r[mw_id].append(self.arqso)
+                self.arqso_r[mw_id].append(self.arqso)
                 self.arn_r[mw_id].append(self.arn)
                    
                 
@@ -380,17 +382,17 @@ class MassWastingRunout(Component):
                     self.qsc_v = self.qsc
                 else:
                     self.qsc_v = self.qsc*(min(c/self.d_it,1))
-                # release the initial landslide volume
+                # release the landslide
                 # if first iteration, receiving cell = initial receiving list
                      
                 
-                # receiving node, volume and particle diameter temporary arrays
-                # that become the arrays for the next model step (iteration)
+                # temporary data containers for storing receiving node, flux and attributes
+                # these become the input for the next iteration
                 self.arndn_ns = np.array([])
                 self.arn_ns = np.array([])
                 self.arv_ns = np.array([])
                 self.arnL = []
-                self.arvL = []
+                self.arqsoL = []
                 self.arndnL = []
                 if self.track_attributes:
                     self.aratt_ns = dict.fromkeys(self._tracked_attributes, np.array([])) #
@@ -399,7 +401,7 @@ class MassWastingRunout(Component):
                 # for each unique cell in receiving node list self.arn
                 arn_u = np.unique(self.arn).astype(int)  # unique arn list
                 
-                # determine the incoming volume and depth to each node in arn_u
+                # determine the incoming flux to each node in arn_u
                 self.qsi_dat = self._determine_qsi(arn_u) ##
                 
                 # update energy elevation as node elevation plus incoming flow thickness
@@ -410,10 +412,10 @@ class MassWastingRunout(Component):
 
                 # determine scour, entrain, deposition and outflow depths and
                 # the outflowing particle diameter, arranged in array nudat
-                self.nudat = self._scour_entrain_deposit_updatePD()                
+                self.nudat = self._E_A_qso_update_attributes()                
 
-                # determine the receiving nodes, volumes and grain size
-                self._determine_rnp_attributes()                               
+                # determine the receiving nodes, fluxes and grain size
+                self._determine_rn_proportions_attributes()                               
                 
                 # update grid field: topographic__elevation with the values in 
                 # nudat. Do this after directing flow, because assume deposition 
@@ -437,7 +439,7 @@ class MassWastingRunout(Component):
                     self._update_topographic_slope()
 
                 # once all cells in iteration have been evaluated, temporary receiving
-                # node, node volume and node particle diameter arrays become arrays 
+                # temporary node, node flux and node attributes stored for
                 # for next iteration
                 self.arndn = self.arndn_ns.astype(int)
                 self.arn = self.arn_ns.astype(int)
@@ -467,7 +469,7 @@ class MassWastingRunout(Component):
                     self.tss_r[mw_id].append(self._grid.at_node['topographic__steepest_slope'].copy())
                     self.frn_r[mw_id].append(self._grid.at_node['flow__receiver_node'].copy())
                     self.frp_r[mw_id].append(self._grid.at_node['flow__receiver_proportions'].copy())
-                    self.arv_r[mw_id].append(self.arvL)
+                    self.arqso_r[mw_id].append(self.arqsoL)
                     self.arn_r[mw_id].append(self.arnL)                          
                     self.arndn_r[mw_id].append(self.arndn)
 
@@ -482,7 +484,7 @@ class MassWastingRunout(Component):
                                             
     def _prep_initial_mass_wasting_material(self, inn, mw_i):
         """from an initial source area (landslide) prepare the initial lists 
-        of receiving nodes and incoming volumes and particle diameters per precipiton,
+        of receiving nodes and incoming fluxes and attributes per debriton,
         remove the source material from the topographic elevation dem"""
         
         # lists of initial recieving node, outgoing flux and at attributes
@@ -529,9 +531,9 @@ class MassWastingRunout(Component):
 
             # initial mass wasting thickness
             imw_t =s_t
-            # get volume (out) of node ni   
-            qso = imw_t#*self._grid.dx*self._grid.dy# initial volume 
-            # divide into proportion going to each receiving node
+            # get flux out of node ni   
+            qso = imw_t
+            # divide into proportions going to each receiving node
             rqso = rp*qso
             
             if self._tracked_attributes:
@@ -546,7 +548,7 @@ class MassWastingRunout(Component):
 
                     att[key] = np.concatenate((att[key],self.att_ar_out[key]), axis = 0) 
        
-            # append receiving node ids, volumes and particle diameters to initial lists
+            # append receiving node ids, fluxes and attributes to initial lists
             rni = np.concatenate((rni,rn), axis = 0) 
             rqsoi = np.concatenate((rqsoi,rqso), axis = 0) 
 
@@ -558,16 +560,12 @@ class MassWastingRunout(Component):
             self.aratt = att
 
         
-    def _scour_entrain_deposit_updatePD(self):
-        """ mass conservation at a grid cell: determines the erosion, deposition
-        change in topographic elevation and flow out of a cell as a function of
-        debris flow friction angle, particle diameter and the underlying DEM
-        slope
-        
-        
-        slpn needs to be topographic__elevation determined
-        rn can be either topographic__elevation or energy__elevation
-        rp can be either topographic__elevation or energy__elevation
+    def _E_A_qso_update_attributes(self):
+        """ Algorithm 2 - mass conservation at a grid cell: determines the erosion, 
+        deposition, change in topographic elevation and flux out of a cell as a 
+        function of debris flow friction angle, particle diameter and the underlying 
+        slope of the DEM
+
         """
         
         # list of deposition depths, used in settlement algorithm
@@ -693,13 +691,11 @@ class MassWastingRunout(Component):
         return nudat # qso, rn not used
 
 
-    def _determine_rnp_attributes(self):
-        """ after mass conservation at the cell determined use pre-deposition/scour
-        slope (before results of mass conservation applied to dem) to determine
-        how outgoing volume is partioned to downslope cells and attributes of each
-        paritioned volume"""
+    def _determine_rn_proportions_attributes(self):
+        """ determine how outgoing flux is partioned to downslope cells and 
+        attributes of each parition"""
         
-        def rn_rp(nudat_r):
+        def rn_proportions_attributes(nudat_r):
             n = nudat_r[0]; qso = nudat_r[2];
             qsi = nudat_r[3]; E = nudat_r[4]; A = nudat_r[5]
             
@@ -716,7 +712,7 @@ class MassWastingRunout(Component):
             
             if qso>0 and n not in self._grid.boundary_nodes: 
                 # move this out of funciton, need to determine rn and rp after material is in cell, not before
-                # vo = qso*self._grid.dx*self._grid.dy # convert qso to volume
+
                 # receiving proportion of qso from cell n to each downslope cell
                 if len(rn_)<1:
                     rp = np.array([1])
@@ -741,25 +737,25 @@ class MassWastingRunout(Component):
                         ratt = np.ones(len(rqso))*att_out[key]
                         self.aratt_ns[key] = np.concatenate((self.aratt_ns[key], ratt), axis = 0) # next step receiving node incoming particle diameter list
                         self.arattL[key].append(ratt)
-                # store receiving nodes and volumes in temporary arrays
+                # store receiving nodes and fluxes in temporary arrays
                 self.arndn_ns = np.concatenate((self.arndn_ns, rndn), axis = 0) # next iteration delivery nodes
                 self.arn_ns = np.concatenate((self.arn_ns, rn), axis = 0) # next iteration receiving nodes
                 self.arv_ns = np.concatenate((self.arv_ns, rqso), axis = 0) # next iteration qsi
                 self.arnL.append(rn)
-                self.arvL.append(rqso)           
+                self.arqsoL.append(rqso)           
                 self.arndnL.append(rndn)
 
         nudat_ = self.nudat[self.nudat[:,2]>0] # only run on nodes with qso>0
-        ll = np.array([rn_rp(r) for r in self.nudat],dtype=object)
+        ll = np.array([rn_proportions_attributes(r) for r in self.nudat],dtype=object)
 
 
     def _determine_qsi(self,arn_u):
-        """determine volume and depth of incoming material
+        """determine flux of incoming material (qsi)
         returns qsi_dat: np array of receiving nodes [column 0], 
         and qsi [column 1]"""
 
         def VQ(n):           
-            # total incoming volume
+            # total incoming flux
             qsi = np.sum(self.arqso[self.arn == n])
             return qsi
 
