@@ -323,6 +323,7 @@ class MassWastingRunout(Component):
         for mw_i,inn in enumerate(innL):
                          
             mw_id = self.mw_ids[mw_i]
+            self._lsvol = self._grid.at_node['soil__thickness'][inn].sum()*self._grid.dx*self._grid.dy
             
             if self.qsi_max == None:
                 self.qsi_max = self._grid.at_node['soil__thickness'][inn].max()
@@ -362,7 +363,7 @@ class MassWastingRunout(Component):
                 self.tss_r[mw_id].append(self._grid.at_node['topographic__steepest_slope'].copy())
                 self.frn_r[mw_id].append(self._grid.at_node['flow__receiver_node'].copy())
                 self.frp_r[mw_id].append(self._grid.at_node['flow__receiver_proportions'].copy())
-                self.arv_r[mw_id].append(self.arv)
+                self.arv_r[mw_id].append(self.arqso)
                 self.arn_r[mw_id].append(self.arn)
                    
                 
@@ -399,7 +400,7 @@ class MassWastingRunout(Component):
                 arn_u = np.unique(self.arn).astype(int)  # unique arn list
                 
                 # determine the incoming volume and depth to each node in arn_u
-                self.vqdat = self._vin_qsi(arn_u) ##
+                self.qsi_dat = self._determine_qsi(arn_u) ##
                 
                 # update energy elevation as node elevation plus incoming flow thickness
                 # this happens even if using topographic__elevation to route so that 
@@ -440,7 +441,7 @@ class MassWastingRunout(Component):
                 # for next iteration
                 self.arndn = self.arndn_ns.astype(int)
                 self.arn = self.arn_ns.astype(int)
-                self.arv = self.arv_ns #
+                self.arqso = self.arv_ns #
                 if self.track_attributes:
                     self.aratt = self.aratt_ns
 
@@ -484,9 +485,9 @@ class MassWastingRunout(Component):
         of receiving nodes and incoming volumes and particle diameters per precipiton,
         remove the source material from the topographic elevation dem"""
         
-        # lists of initial recieving node, volume and particle diameter
+        # lists of initial recieving node, outgoing flux and at attributes
         rni = np.array([])
-        rvi = np.array([])
+        rqsoi = np.array([])
         rpdi = np.array([])
         if self._tracked_attributes:
            att = dict.fromkeys(self._tracked_attributes, np.array([]))
@@ -529,9 +530,9 @@ class MassWastingRunout(Component):
             # initial mass wasting thickness
             imw_t =s_t
             # get volume (out) of node ni   
-            vo = imw_t*self._grid.dx*self._grid.dy# initial volume 
+            qso = imw_t#*self._grid.dx*self._grid.dy# initial volume 
             # divide into proportion going to each receiving node
-            rv = rp*vo
+            rqso = rp*qso
             
             if self._tracked_attributes:
                 # get initial mass wasting particle diameter (out) of node ni
@@ -541,18 +542,18 @@ class MassWastingRunout(Component):
                     att_val = self._grid.at_node.dataset[key].values[ni]
 
                     # particle diameter to each recieving node
-                    self.att_ar_out[key] = np.ones(len(rv))*att_val
+                    self.att_ar_out[key] = np.ones(len(rqso))*att_val
 
                     att[key] = np.concatenate((att[key],self.att_ar_out[key]), axis = 0) 
        
             # append receiving node ids, volumes and particle diameters to initial lists
             rni = np.concatenate((rni,rn), axis = 0) 
-            rvi = np.concatenate((rvi,rv), axis = 0) 
+            rqsoi = np.concatenate((rqsoi,rqso), axis = 0) 
 
         
         self.arndn = np.ones([len(rni)])*np.nan # TODO: set this to node id
         self.arn = rni
-        self.arv = rvi
+        self.arqso = rqsoi
         if self._tracked_attributes:
             self.aratt = att
 
@@ -583,7 +584,7 @@ class MassWastingRunout(Component):
 
             """            
 
-            n = vq_r[0]; vin = vq_r[1]; qsi = vq_r[2]; 
+            n = vq_r[0]; qsi = vq_r[1]; 
             
             # maximum slope at node n
             slpn = self._grid.at_node['topographic__steepest_slope'][n].max()
@@ -612,7 +613,7 @@ class MassWastingRunout(Component):
             
             # incoming particle diameter (weighted average)
             if self._tracked_attributes:
-                att_in = self._particle_diameter_in(n,vin)
+                att_in = self._particle_diameter_in(n,qsi)
             else:
                 att_in = None 
            
@@ -685,8 +686,8 @@ class MassWastingRunout(Component):
         # apply SEDU function to all unique nodes in arn (arn_u)
         # create nudat, an np.array of data for updating fields at each node
         # that can be applied using vector operations
-        ll=np.array([SEDU(r) for r in self.vqdat],dtype=object)     
-        arn_ur = np.reshape(self.vqdat[:,0],(-1,1))
+        ll=np.array([SEDU(r) for r in self.qsi_dat],dtype=object)     
+        arn_ur = np.reshape(self.qsi_dat[:,0],(-1,1))
         nudat = np.concatenate((arn_ur,ll),axis=1)
         # print(nudat)
         return nudat # qso, rn not used
@@ -703,7 +704,8 @@ class MassWastingRunout(Component):
             qsi = nudat_r[3]; E = nudat_r[4]; A = nudat_r[5]
             
             att_up = nudat_r[7]; att_in = nudat_r[8]
-            # nodes that sent material to node n
+            
+            # get donor node ids
             dn = self.arndn[self.arn == n]
 
             rn = self._grid.at_node.dataset['flow__receiver_node'].values[n]
@@ -714,18 +716,18 @@ class MassWastingRunout(Component):
             
             if qso>0 and n not in self._grid.boundary_nodes: 
                 # move this out of funciton, need to determine rn and rp after material is in cell, not before
-                vo = qso*self._grid.dx*self._grid.dy # convert qso to volume
+                # vo = qso*self._grid.dx*self._grid.dy # convert qso to volume
                 # receiving proportion of qso from cell n to each downslope cell
                 if len(rn_)<1:
                     rp = np.array([1])
                     rn = np.array([n])
-                    rv = rp*vo
+                    rqso = rp*qso
                 else:
                     rp = self._grid.at_node.dataset['flow__receiver_proportions'].values[n]
                     rp = rp[np.isin(rn,rn_)]
                     rp = rp/rp.sum()
                     rn = rn_
-                    rv = rp*vo
+                    rqso = rp*qso
 
                 # delivery node to the receiver nodes (length equal to number of receiver nodes)
                 rndn = (np.ones(len(rn))*n).astype(int) 
@@ -736,42 +738,41 @@ class MassWastingRunout(Component):
                     
                     rpd_ns = {}
                     for key_n, key in enumerate(self._tracked_attributes):
-                        ratt = np.ones(len(rv))*att_out[key]
+                        ratt = np.ones(len(rqso))*att_out[key]
                         self.aratt_ns[key] = np.concatenate((self.aratt_ns[key], ratt), axis = 0) # next step receiving node incoming particle diameter list
                         self.arattL[key].append(ratt)
                 # store receiving nodes and volumes in temporary arrays
                 self.arndn_ns = np.concatenate((self.arndn_ns, rndn), axis = 0) # next iteration delivery nodes
                 self.arn_ns = np.concatenate((self.arn_ns, rn), axis = 0) # next iteration receiving nodes
-                self.arv_ns = np.concatenate((self.arv_ns, rv), axis = 0) # next iteration qsi
+                self.arv_ns = np.concatenate((self.arv_ns, rqso), axis = 0) # next iteration qsi
                 self.arnL.append(rn)
-                self.arvL.append(rv)           
+                self.arvL.append(rqso)           
                 self.arndnL.append(rndn)
 
         nudat_ = self.nudat[self.nudat[:,2]>0] # only run on nodes with qso>0
         ll = np.array([rn_rp(r) for r in self.nudat],dtype=object)
 
 
-    def _vin_qsi(self,arn_u):
+    def _determine_qsi(self,arn_u):
         """determine volume and depth of incoming material
-        returns vqdat: np array of receiving nodes [column 0], 
-        vin [column 1] and qsi [column 2]"""
+        returns qsi_dat: np array of receiving nodes [column 0], 
+        and qsi [column 1]"""
 
         def VQ(n):           
             # total incoming volume
-            vin = np.sum(self.arv[self.arn == n])
-            # convert to flux/cell width
-            qsi = vin/(self._grid.dx*self._grid.dx)
-            return vin, qsi
+            qsi = np.sum(self.arqso[self.arn == n])
+            return qsi
 
-        ll=np.array([VQ(n) for n in arn_u], dtype=object)     
+        ll=np.array([VQ(n) for n in arn_u], dtype=object)
+        ll = np.reshape(ll,(-1,1))
         arn_ur = np.reshape(arn_u,(-1,1))
-        vqdat = np.concatenate((arn_ur,ll),axis=1)
+        qsi_dat = np.concatenate((arn_ur,ll),axis=1)
     
-        return vqdat
+        return qsi_dat
     
     def _update_E_dem(self):
         """update energy__elevation"""
-        n = self.vqdat[:,0].astype(int); qsi = self.vqdat[:,2];         
+        n = self.qsi_dat[:,0].astype(int); qsi = self.qsi_dat[:,1];         
         # energy elevation is equal to the topographic elevation plus qsi
         self._grid.at_node['energy__elevation'] = self._grid.at_node['topographic__elevation'].copy()
 
@@ -1033,21 +1034,21 @@ class MassWastingRunout(Component):
         return(Af)
 
         
-    def _particle_diameter_in(self,n,vin):
+    def _particle_diameter_in(self,n,qsi):
         """determine the weighted average particle diameter of the incoming
         flow"""       
-        if (vin == 0):
+        if (qsi == 0):
 
             att_in = dict.fromkeys(self._tracked_attributes, 0)
-        elif (np.isnan(vin)) or (np.isinf(vin)):
-            msg = "in-flowing volume is nan or inf"
+        elif (np.isnan(qsi)) or (np.isinf(qsi)):
+            msg = "in-flowing flux is nan or inf"
             raise ValueError(msg)
         else:
             att_in = {}
             for key in self._tracked_attributes:
                 # print('arpd.key:{}'.format(self.aratt[key]))
                 # print('self.arn == n:{}'.format(self.arn == n))
-                att_in[key] = np.sum((self.aratt[key][self.arn == n])*(self.arv[self.arn == n])/vin)        
+                att_in[key] = np.sum((self.aratt[key][self.arn == n])*(self.arqso[self.arn == n])/qsi)        
         return att_in
 
 
