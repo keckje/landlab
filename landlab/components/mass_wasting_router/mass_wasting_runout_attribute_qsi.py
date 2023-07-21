@@ -12,15 +12,22 @@ from landlab.components import(FlowDirectorD8,
 
 class MassWastingRunout(Component):
     
-    '''a cellular automata mass wasting model that routes an initial mass wasting  
-    body (e.g., a landslide) through a watershed, determines erosion, aggradation
-    depths, tracks attributes of the regolith and updates the DEM. This model is
-    intended for modeling the runout of individually mapped landslides and landslides
-    inferred from a landslide hazard map.
+    '''a cellular automata mass wasting runout model that routes an initial mass 
+    wasting body (e.g., a landslide) through a watershed, determines erosion and 
+    aggradation depths, evolves the terrain and regolith and tracks attributes of 
+    the regolith. This model is intended for modeling the runout extent, topographic
+    change and sediment transport caused by a mapped landslide(s) or landslides 
+    inferred from a landslide hazard map. 
     
-    See Keck et al., 2023 for details.
+    
+    Examples
+    ----------
 
-    author: Jeff Keck
+    
+    References
+    ----------
+    Keck et al., (2023), submitted to Earth Surface Dynamics.
+    
     '''
     
     
@@ -39,7 +46,6 @@ class MassWastingRunout(Component):
             "doc": "interger or float id of each mass wasting area is assigned \
                 to all nodes representing the mass wasting area."
             },
-        
         
         'topographic__elevation': {            
             "dtype": float,
@@ -119,6 +125,114 @@ class MassWastingRunout(Component):
     run_id = 0
     ):
         
+        """
+        
+        Parameters
+        ----------
+        grid : landlab raster model grid
+        
+        mw_dict : dictionary
+            a dictionary of parameters that control the behavoir of the model.
+            The dicitonary must include the following keys: 'critical slope', 
+            'threshold flux' and 'scour coefficient'.
+            
+               
+                where: 
+                    critical slope: list of floats
+                        critical slope (angle of repose if no cohesion) of mass wasting material , L/L
+                                list of length 1 for a basin uniform Sc value
+                                list of length 2 for hydraulic geometry defined Sc
+                                coefficient and exponent of a user defined function for mass wasting 
+                                crictical slope. e.g., [0.146,0.051] sets Sc<=0.1 at 
+                                contributing area > ~1100 m2
+                                            
+                    threshold flux: float
+                        minimum volumetric flux per unit contour width, i.e., 
+                        volume/(grid.dx*grid.dx)/iteration per iteration, [L/iteration].
+                        flux below this threshold stops at the cell as a deposit
+                    erosion coefficient: float [L/((M*L*T^-2)/L^2)]
+                        coefficient that converts the depth-slope approximation of
+                        total shear stress (kPa from the debris flow to a 
+                        scour depth [m]
+                        
+                 The dictionary can also include the following keys. Values listed next
+                 to the key are default values.
+                         mw_dict = {'critical slope': user_input,
+                          'threshold flux': user_input,
+                          'scour coefficient': user_input,
+                          'scour exponent, m': 0.5,
+                          'effective particle diameter': 0.984,
+                          'vol solids concentration': 0.6,
+                          'density solids': 2650,
+                          'typical flow thickness, scour': 3,
+                          'typical slope, scour': 0.4,
+                          'max observed flow depth': 4}
+        
+                         
+        tracked_attributes : list or None
+            A list of the attributes that will be tracked by the runout model. 
+            Attributes in tracked_attributes must also be a field on the model grid
+            and names in list must match the grid field names. Default is None.
+         
+        deposition_rule : str
+            Can be either "critical_slope", "L_metric" or "both". 
+            "critical_slope" is deposition rule describe in Keck et al. 2023.
+            "L_metric" is varation of rule described by Cartier et al., 2016 and 
+            Campforts et al. 2020.
+            "both" uses the minimum value of both rules.
+            
+            All results in Keck et al. 2023 use "critical_slope". Default value is 
+            "critical_slope".
+            
+        dist_to_full_qsc_constraint : float
+            distance in meters at which qsc is applied to runout. If the landslide
+            initiates on relatively flat terrain, it may be difficult to identify
+            a qsc value that allows the model start and deposit in a way that matches
+            the observed. In Keck et al. 2023, dist_to_full_qsc_constraint = 0, but
+            other landslides may need dist_to_full_qsc_constraint = 20 to 50 meters.
+         
+        itL : int
+            maximum number of iterations the model runs before it
+            is forced to stop. The default is 1000. Ideally, if properly parameterized,
+            the model should stop on its own. All modeled runout in Keck et al. 2023
+            stopped on its own.
+         
+        grain_shear : boolean
+            indicate whether to define shear stress at the base of the runout material
+            as a function of grain size (Equation 13, True) or the depth-slope 
+            approximation (Equation 12, False)
+            
+        effective_qsi : boolean
+            indicate wheter to limit the flux appled to erosion and aggradation rules
+            to the maximum observed flow depth (i.e., the effective qsi). All results in
+            Keck et al. 2023 use this constraint. Default is True.
+            
+        settle_deposit : boolean
+            indicate whether to allow deposits to settle before the next model iteration
+            is implemented. Settlement is determined the critical slope as evaluated from 
+            the lowest adjacent node to the deposit. This is not used in Keck et al. 2023
+            but tends to allow model to better reproduce smooth, evenly sloped deposits.
+            Default is false.
+         
+        E_constraint : boolean
+             indicate if erosion can occur simultaneously with aggradation. If True, if 
+             aggradation > 0, then erosion = 0. This is True in Keck et al., 2023. 
+             Default is True.
+         
+        save : boolean
+            Save topographic elevation of watershed after each model iteration? 
+            The default is False.
+         
+        run_id : float, int or str 
+            label for landslide run, can be the time or some other identifier. This
+            can be updated each time model is implemnted with "run_one_step"
+        
+        Returns
+        -------
+        None.
+        
+        """
+
         super().__init__(grid)
 
         self.mw_dict = mw_dict
@@ -126,17 +240,18 @@ class MassWastingRunout(Component):
         self.itL = itL
         self.settle_deposit = settle_deposit
         self.grain_shear = grain_shear 
-        self.deposition_rule = deposition_rule # pick the depostion rule
-        self.dist_to_full_qsc_constraint = dist_to_full_qsc_constraint # make his larger than zero if material is stuck
-        self.effecitve_qsi = effective_qsi # limit max flux applied to erosion and aggradation rules to max observed flow depth
-        self._E_constraint = E_constraint # if aggradation, no erosion
-        self._tracked_attributes = tracked_attributes # list of attribute names (must be fields on grid)
+        self.deposition_rule = deposition_rule 
+        self.dist_to_full_qsc_constraint = dist_to_full_qsc_constraint 
+        self.effecitve_qsi = effective_qsi 
+        self.E_constraint = E_constraint 
+        self._tracked_attributes = tracked_attributes 
         self.save = save
-        self.routing_partition_method = 'slope' #'square_root_of_slope'       
-        self._print_model_iteration_frequency = 20
+        self.routing_partition_method = 'slope' # 'square_root_of_slope', see flow director       
+        self.print_model_iteration_frequency = 20 # how often to pring to screen
         
         if tracked_attributes:
             self.track_attributes = True
+            
             # check attributes are included in grid
             for key in self._tracked_attributes:
                 if self._grid.has_field('node', key) == False:
@@ -210,73 +325,14 @@ class MassWastingRunout(Component):
         self._grid.at_node['energy__elevation'] = self._grid.at_node['topographic__elevation'].copy()
         self._grid.at_node['topographic__initial_elevation'] = self._grid.at_node['topographic__elevation'].copy()
         
-    
-    """route an initial mass wasting volume through a watershed, determine Scour, 
-    Entrainment and Depostion depths and update the DEM
-    
-    Parameters
-    ----------
-    grid : landlab raster model grid
-        raster model grid 
-    
-    mw_dict : dictionary
-        a dictionary of parameters that control the behavoir of the cellular-automata 
-        debris flow model formatted as follows:
-                mw_dict = {
-                    'critical slope':0.05, 'minimum flux':0.1,
-                    'scour coefficient':0.03}
-            
-            where: 
-                critical slope: list of floats
-                    critical slope (angle of repose if no cohesion) of mass wasting material , L/L
-                            list of length 1 for a basin uniform Sc value
-                            list of length 2 for hydraulic geometry defined Sc
-                            coefficient and exponent of a user defined function for mass wasting 
-                            crictical slope. e.g., [0.146,0.051] sets Sc<=0.1 at 
-                            contributing area > ~1100 m2
-                                        
-                threshold flux: float
-                    minimum volumetric flux per unit contour width, i.e., 
-                    volume/(grid.dx*grid.dx)/iteration per iteration, [L/iteration].
-                    flux below this threshold stops at the cell as a deposit
-                erosion coefficient: float [L/((M*L*T^-2)/L^2)]
-                    coefficient that converts the depth-slope approximation of
-                    total shear stress (kPa from the debris flow to a 
-                    scour depth [m]
-                        
-    save : boolean
-        Save topographic elevation of watershed after each model iteration? 
-        The default is False.
-    itL : int
-        maximum number of iterations the cellular-automata model runs before it
-        is forced to stop. The default is 1000.
-    
-  
-    routing_surface: str
-        "energy__elevation" to use the potential energy surface of the landscape to route
-        "topographic__elevation" use the ground surface of the landscape to route
-
-    
-    
-    settle_deposit: boolean
-         Allow settling after deposition during runout? Settling is applied each
-         iteration of the model run after outflow from all cells have been computed
-         default is False
-
-    Returns
-    -------
-    None.
-    
-    """
-    
-    def run_one_step(self, dt):
+       
+    def run_one_step(self, run_id):
         """route a list of debritons through a DEM and update
         the DEM based on the scour, entrainment and depostion depths at each 
         cell        
         ----------
         Parameters
-        dt : foat
-            duration of storm, in seconds
+        run_id : label for landslide run, can be the time or some other identifier
 
         Returns
         -------
@@ -284,7 +340,7 @@ class MassWastingRunout(Component):
 
         """
         # set instance time stamp
-        self.run_id = dt
+        self.run_id = run_id
                    
         # mass wasting cells coded according to id
         mask = self._grid.at_node['mass__wasting_id'] > 0
@@ -330,7 +386,7 @@ class MassWastingRunout(Component):
             if self.qsi_max == None:
                 self.qsi_max = self._grid.at_node['soil__thickness'][inn].max()
             
-            # prep data containers
+            # prep data containers for landslide mw_id
             self.arndn_r[mw_id] = []
             if self.save:
                 cL[mw_i] = []
@@ -368,11 +424,10 @@ class MassWastingRunout(Component):
                 self.arqso_r[mw_id].append(self.arqso)
                 self.arn_r[mw_id].append(self.arn)
                    
-                
-        
+
             # now loop through each receiving node in list rni, 
             # determine next set of recieving nodes
-            # repeat until no more receiving nodes (material deposits)                
+            # repeat until no more receiving nodes (material deposits)             
             c = 0 # model iteration counter
             
             while len(self.arn)>0 and c < self.itL:
@@ -382,10 +437,7 @@ class MassWastingRunout(Component):
                     self.qsc_v = self.qsc
                 else:
                     self.qsc_v = self.qsc*(min(c/self.d_it,1))
-                # release the landslide
-                # if first iteration, receiving cell = initial receiving list
-                     
-                
+
                 # temporary data containers for storing receiving node, flux and attributes
                 # these become the input for the next iteration
                 self.arndn_ns = np.array([])
@@ -409,7 +461,6 @@ class MassWastingRunout(Component):
                 # the thickness of the debris flow is tracked for plotting
                 self._update_E_dem()
                 
-
                 # determine scour, entrain, deposition and outflow depths and
                 # the outflowing particle diameter, arranged in array nudat
                 self.nudat = self._E_A_qso_update_attributes()                
@@ -473,13 +524,10 @@ class MassWastingRunout(Component):
                     self.arn_r[mw_id].append(self.arnL)                          
                     self.arndn_r[mw_id].append(self.arndn)
 
-                
-                
-                
                 # update iteration counter
                 c+=1
                 
-                if c%self._print_model_iteration_frequency == 0:
+                if c%self.print_model_iteration_frequency == 0:
                     print(c)  
                                             
     def _prep_initial_mass_wasting_material(self, inn, mw_i):
@@ -630,7 +678,7 @@ class MassWastingRunout(Component):
                 # erosion a function of steepes topographic slope at node, determined before settle/scour by qsi
                 
                 
-                if A > 0 and self._E_constraint:
+                if A > 0 and self.E_constraint:
                     E = 0
                     if self._tracked_attributes:
                         att_up = dict.fromkeys(self._tracked_attributes, 0)
@@ -757,6 +805,7 @@ class MassWastingRunout(Component):
         arn_ur = np.reshape(arn_u,(-1,1))
         qsi_dat = np.concatenate((arn_ur,ll),axis=1)
         return qsi_dat
+    
     
     def _update_E_dem(self):
         """update energy__elevation"""
@@ -969,6 +1018,7 @@ class MassWastingRunout(Component):
             zo = zi 
         return zo
 
+
     def _deposit_L_metric(self, qsi, slpn):
         """
         determine the L metric similar to Campforts et al. (2020)
@@ -1074,5 +1124,4 @@ class MassWastingRunout(Component):
             if (check_val <=0) or (np.isnan(check_val)) or (np.isinf(check_val)):
                 msg = "out-flowing particle {} is zero, negative, nan or inf".format(key)
                 raise ValueError(msg)
-        
         return att_out
