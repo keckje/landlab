@@ -323,10 +323,11 @@ class MassWastingRunout(Component):
     def run_one_step(self, run_id):
         """route a list of debritons through a DEM and update
         the DEM based on the scour, entrainment and depostion depths at each 
-        cell        
-        ----------
+        cell    
+        
         Parameters
-        run_id : label for landslide run, can be the time or some other identifier
+        ----------
+        run_id : label for landslide run, can be a time stamp or some other identifier
 
         Returns
         -------
@@ -444,7 +445,7 @@ class MassWastingRunout(Component):
                     self.aratt_ns = dict.fromkeys(self._tracked_attributes, np.array([])) #
                     self.arattL = dict.fromkeys(self._tracked_attributes, [])
                 
-                # for each unique cell in receiving node list self.arn
+                # for each unique node in receiving node list self.arn
                 arn_u = np.unique(self.arn).astype(int)  # unique arn list
                 
                 # determine the incoming flux to each node in arn_u
@@ -527,7 +528,18 @@ class MassWastingRunout(Component):
     def _prep_initial_mass_wasting_material(self, inn, mw_i):
         """ Algorithm 1 - from an initial source area (landslide), prepare the 
         initial lists of receiving nodes and incoming fluxes and attributes 
-        and remove the source material from the topographic DEM"""
+        and remove the source material from the topographic DEM
+        
+        Parameters
+        ----------
+        inn: np.array 
+             node id's that make up the area of the initial mass wasting area
+        mw_i: int
+            index of the initial mass wasting area (e.g., if there are two landslides
+                                                    the first landslide will be mw_i = 0,
+                                                    the second will be mw_i = 0)
+        """
+        
         
         # data containers for initial recieving node, outgoing flux and attributes
         rni = np.array([])
@@ -784,7 +796,11 @@ class MassWastingRunout(Component):
     def _determine_qsi(self,arn_u):
         """determine flux of incoming material (qsi)
         returns qsi_dat: np array of receiving nodes [column 0], 
-        and qsi [column 1]"""
+        and qsi [column 1]
+        
+        arn_u: np.array
+            unique nodes in receiving node list self.arn
+        """
 
         def _qsi(n):           
             # total incoming flux
@@ -1014,6 +1030,8 @@ class MassWastingRunout(Component):
     def _deposit_L_metric(self, qsi, slpn):
         """
         determine the L metric similar to Campforts et al. (2020)
+        
+        Parameters
         ----------
         qsi : float
             in coming flux per unit contour width
