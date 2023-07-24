@@ -1,3 +1,4 @@
+from .area_slope_transporter import AreaSlopeTransporter
 from .bedrock_landslider import BedrockLandslider
 from .carbonate import CarbonateProducer
 from .chi_index import ChiFinder
@@ -39,6 +40,7 @@ from .mass_wasting_router import (
     )
 from .network_sediment_transporter import NetworkSedimentTransporter
 from .network_sediment_transporter.bed_parcel_initializers import (
+<<<<<<< HEAD
     BedParcelInitializerDischarge,
     BedParcelInitializerDepth,
     BedParcelInitializerArea,
@@ -49,6 +51,16 @@ from .network_sediment_transporter.bed_parcel_initializers import (
     calc_d50_discharge,
     calc_d50_depth,
     calc_d50_dArea_scaling,
+=======
+    BedParcelInitializerArea,
+    BedParcelInitializerDepth,
+    BedParcelInitializerDischarge,
+    BedParcelInitializerUserD50,
+)
+from .network_sediment_transporter.sediment_pulser_at_links import SedimentPulserAtLinks
+from .network_sediment_transporter.sediment_pulser_each_parcel import (
+    SedimentPulserEachParcel,
+>>>>>>> master
 )
 from .nonlinear_diffusion import PerronNLDiffuse
 from .normal_fault import NormalFault
@@ -88,6 +100,7 @@ from .vegetation_dynamics import Vegetation
 from .weathering import ExponentialWeatherer, ExponentialWeathererIntegrated
 
 COMPONENTS = [
+    AreaSlopeTransporter,
     BedrockLandslider,
     CarbonateProducer,
     ChannelProfiler,
@@ -142,6 +155,8 @@ COMPONENTS = [
     Profiler,
     Radiation,
     SedDepEroder,
+    SedimentPulserAtLinks,
+    SedimentPulserEachParcel,
     SimpleSubmarineDiffuser,
     SinkFiller,
     SinkFillerBarnes,
@@ -154,6 +169,10 @@ COMPONENTS = [
     SteepnessFinder,
     StreamPowerEroder,
     StreamPowerSmoothThresholdEroder,
+    BedParcelInitializerDischarge,
+    BedParcelInitializerDepth,
+    BedParcelInitializerArea,
+    BedParcelInitializerUserD50,
     TaylorNonLinearDiffuser,
     TidalFlowCalculator,
     TransportLengthHillslopeDiffuser,
