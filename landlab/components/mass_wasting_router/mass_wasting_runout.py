@@ -161,8 +161,20 @@ class MassWastingRunout(Component):
                                    'typical flow thickness, scour': 3,
                                    'typical slope, scour': 0.4,
                                    'max observed flow depth': 4}
-        
-                         
+                        
+                        where: 
+                            - scour exponent: the exponent of equation 11.
+                            - vol solids concentration: the ratio of the volume of
+                            the solids to the total volume of the flow mixture.
+                            - density solids: the denisty of the solids [kg/m3]
+                            - typical flow thickness, scour: field estimated flow
+                            thickness in the scour reaches of the runout path [m]
+                            - typical slope, scour: field or remote sensing estimated
+                            slope in the scour dominated reach of the runout path [L/L]
+                            - max observed flow depth: maximum observed flow depth over
+                            the entire runout path [m], use for h_max constraint, equation 24.
+                            
+                                 
         tracked_attributes : list or None
             A list of the attributes that will be tracked by the runout model. 
             Attributes in tracked_attributes must also be a field on the model grid
@@ -260,7 +272,7 @@ class MassWastingRunout(Component):
                     raise ValueError("{} not included as field in grid and/or key in tracked_attributes".format(key))
         else:
             self.track_attributes = False
-      
+                   
         if len(self.mw_dict['critical slope'])>1: # change this to check for list input if defined as func of CA
             self.a = self.mw_dict['critical slope'][0]
             self.b = self.mw_dict['critical slope'][1]
@@ -309,6 +321,8 @@ class MassWastingRunout(Component):
             self.qsi_max = self.mw_dict['max observed flow depth']
         else:
             self.qsi_max = None
+            if self.effecitve_qsi == True:
+                    raise ValueError("Need to define the 'max observed flow depth' in mw_dict")
 
         # density of runout mixture
         self.ro_mw = self.vs*self.ros+(1-self.vs)*self.rof
@@ -321,9 +335,9 @@ class MassWastingRunout(Component):
         
        
     def run_one_step(self, run_id):
-        """route a list of debritons through a DEM and update
-        the DEM based on the scour, entrainment and depostion depths at each 
-        cell    
+        """for each mass wasting event that occurs during time/instance ""run_id",
+        implement Algorithm 1 and Algorithm 2.
+        
         
         Parameters
         ----------
@@ -334,27 +348,22 @@ class MassWastingRunout(Component):
         None.
 
         """
-        # set instance time stamp
+        # set run_id
         self.run_id = run_id
                    
-        # mass wasting cells coded according to id
+        # get all nodes that define the mass wasting events
         mask = self._grid.at_node['mass__wasting_id'] > 0
 
-        # list of unique mw_id
+        # separate the mass wasting event nodes into individual events
         self.mw_ids = np.unique(self._grid.at_node['mass__wasting_id'][mask])
-        
-        # innL is list of lists of nodes in each landslide
-        innL = []
+        innL = [] # innL is list of lists of nodes in each mass wasting event
         for mw_id in self.mw_ids:
             ls_mask = self._grid.at_node['mass__wasting_id'] == mw_id
-            # list of lists, node ids in each landslide
             innL.append(np.hstack(self._grid.nodes)[ls_mask])
                
-        
-        # data containers for saving model images and behavior statistics    
+        # prepare data containers for saving model images and behavior statistics    
         self.arndn_r = {}
         if self.save:
-            cL = {} 
             # lists and dictionaries that save values computed for the variables 
             # listed below, useful for checking model behavior
             self.EL = [] # entrainment depth / regolith depth
@@ -366,7 +375,6 @@ class MassWastingRunout(Component):
             self.arqso_r = {} # flux out
             self.arn_r = {} # receiver nodes
             self.aratt_r = {} #  arriving attributes
-            
             # dictionaries, that save the entire model grid field, for all fields listed below
             # usefull for creating movies of how the flow and terrain evolve or checking
             # model behavior
@@ -378,8 +386,6 @@ class MassWastingRunout(Component):
             self.frn_r = {} # flow__receiver_node
             self.frp_r = {} # 'flow__receiver_proportions'
             self.arqso_r = {} # flux out
-            self.arn_r = {} # receiver nodes
-            self.aratt_r = {} #  arriving attributes
             
         # For each mass wasting event in list:
         for mw_i,inn in enumerate(innL):
@@ -390,10 +396,9 @@ class MassWastingRunout(Component):
             if self.qsi_max == None:
                 self.qsi_max = self._grid.at_node['soil__thickness'][inn].max()
             
-            # prep data containers for landslide mw_id
+            # prepare temporary data containers for each mass wasting event mw_i
             self.arndn_r[mw_id] = []
             if self.save:
-                cL[mw_i] = []
                 self.runout_evo_maps[mw_i] = {}
                 self.topo_evo_maps[mw_i] = {}
                 self.DEMdfD = {}
@@ -408,12 +413,12 @@ class MassWastingRunout(Component):
                     self.aratt_r[mw_id] = dict.fromkeys(self._tracked_attributes, [])  
                     
             
-            # prepare initial mass wasting material (precipitons) for release 
+            # Algorithm 1, prepare initial mass wasting material (debritons) for release 
             self._prep_initial_mass_wasting_material(inn, mw_i)
 
             self.arndn_r[mw_id].append(self.arndn)
             if self.save:
-                # save first set of data
+                # save first set of data to reflect scar created by landslide
                 self.runout_evo_maps[mw_i][0] = self._grid.at_node['energy__elevation'].copy()
                 self.topo_evo_maps[mw_i][0] = self._grid.at_node['topographic__elevation'].copy()
                 self.DEMdfD[0] = {'DEMdf_r':0}            
@@ -429,11 +434,10 @@ class MassWastingRunout(Component):
                 self.arn_r[mw_id].append(self.arn)
                    
 
-            # now loop through each receiving node in list rni, 
-            # determine next set of recieving nodes
+            # Algorith 2, now loop through each receiving nodes, 
+            # determine next set of recieving nodes,
             # repeat until no more receiving nodes (material deposits)             
             c = 0 # model iteration counter
-            
             while len(self.arn)>0 and c < self.itL:
 
                 self.c = c
@@ -442,8 +446,9 @@ class MassWastingRunout(Component):
                 else:
                     self.qsc_v = self.qsc*(min(c/self.d_it,1))
 
-                # temporary data containers for storing receiving node, flux and attributes
-                # these become the input for the next iteration
+                # temporary data containers for each iteration of the while loop, 
+                # that store receiving node, flux and attributes to become the 
+                # input for the next iteration
                 self.arndn_ns = np.array([]) # next iteration donor nodes
                 self.arn_ns = np.array([]) # next iteration receiver nodes
                 self.arqso_ns = np.array([]) # next iteration flux to receiver nodes
@@ -460,7 +465,7 @@ class MassWastingRunout(Component):
                 # determine the incoming flux to each node in self.arn_u
                 self.qsi_dat = self._determine_qsi() ##
                 
-                # update energy elevation as node elevation plus incoming flow thickness
+                # update node elevation plus incoming flow thickness
                 # this happens even if using topographic__elevation to route so that 
                 # the thickness of the debris flow is tracked for plotting
                 self._update_E_dem()
@@ -493,9 +498,10 @@ class MassWastingRunout(Component):
                     self._settle()
                     self._update_topographic_slope()
 
-                # once all cells in iteration have been evaluated, temporary receiving
-                # temporary node, node flux and node attributes stored for
-                # for next iteration
+                # once all nodes this iteration have been processed, the lists of new receiving
+                # nodes (arn_ns), donor nodes (recieving nodes of this step, arndn_ns), 
+                # outgoing node flux (arqso) and node attributes (artt) are updated 
+                # for the next iteration
                 self.arndn = self.arndn_ns.astype(int)
                 self.arn = self.arn_ns.astype(int)
                 self.arqso = self.arqso_ns #
@@ -503,19 +509,12 @@ class MassWastingRunout(Component):
                     self.aratt = self.aratt_ns
 
                 if self.save:
-
-                    cL[mw_i].append(c)
-                    
-                    DEMf = self._grid.at_node['topographic__elevation'].copy()
-                    
-                    DEMdf_r = DEMf-self._grid.at_node['topographic__initial_elevation']
-            
+                    DEMf = self._grid.at_node['topographic__elevation'].copy()                    
+                    DEMdf_r = DEMf-self._grid.at_node['topographic__initial_elevation']            
                     self.DEMdfD[c+1] = {'DEMdf_r':DEMdf_r.sum()*self._grid.dx*self._grid.dy}     
                     self.runout_evo_maps[mw_i][c+1] = self._grid.at_node['energy__elevation'].copy()
-                    ### save maps for video
                     self.runout_evo_maps[mw_i][c+1] = self._grid.at_node['energy__elevation'].copy()
                     self.topo_evo_maps[mw_i][c+1] = self._grid.at_node['topographic__elevation'].copy()
-                    # data for tests
                     if self.track_attributes:
                         for key in self._tracked_attributes:
                             self.att_r[mw_id][key].append(self._grid.at_node[key].copy())
