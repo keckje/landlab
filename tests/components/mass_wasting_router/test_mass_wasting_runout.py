@@ -9,73 +9,93 @@ from landlab.components.mass_wasting_router import MassWastingRunout
 
 class Test__prep_initial_mass_wasting_material(object):
         
-        def test_single_node(self, example_square_MWRu):
-            """test receiving nodes and volumes from initial mass wasting cells
-            are correct, one initial mass wasting node"""
-            example_square_MWRu.itL = 0
-            example_square_MWRu.run_one_step(dt = 0)
-            rn = example_square_MWRu.arn
-            rv = example_square_MWRu.arv
-            rn_e = np.array([31, 30, 32])
-            rv_e = np.array([65.3453,  11.5515,  23.1030])
-            np.testing.assert_allclose(rn, rn_e, rtol = 1e-4)
-            np.testing.assert_allclose(rv, rv_e, rtol = 1e-4)
-       
-        def test_two_nodes(self, example_square_mg):
-            """test receiving nodes and volumes from initial mass wasting cells
-            are correct, two initial mass wasting nodes"""
-            example_square_mg.at_node['mass__wasting_id'][np.array([31, 38])] = \
-            np.array([1,1])
-            npu = [1] 
-            nid = [1] 
-            slpc = [0.03]   
-            SD = 0.01
-            cs = 0.02
+    @staticmethod
+    def test_single_node(example_square_MWRu):
+        """test receiving nodes and volumes from initial mass wasting cells
+        are correct, one initial mass wasting node"""
+        example_square_MWRu.itL = 0
+        example_square_MWRu.run_one_step(run_id = 0)
+        rn = example_square_MWRu.arn
+        rqso = example_square_MWRu.arqso
+        rn_e = np.array([31, 30, 32]) 
+        rqso_e = np.array([0.653453,  0.115515,  0.231030])
+        np.testing.assert_allclose(rn, rn_e, rtol = 1e-4)
+        np.testing.assert_allclose(rqso, rqso_e, rtol = 1e-4)
         
-            mw_dict = {'critical slope':slpc, 'minimum flux':SD,
-                        'scour coefficient':cs}
+    @staticmethod
+    def test_two_nodes(example_square_mg):
+        """test receiving nodes and volumes from initial mass wasting cells
+        are correct, two initial mass wasting nodes"""
+        example_square_mg.at_node['mass__wasting_id'][np.array([31, 38])] = \
+        np.array([1,1])
+        slpc = [0.03]   
+        SD = 0.01
+        cs = 0.02
+    
+        mw_dict = {'critical slope':slpc, 'threshold flux':SD,
+                    'scour coefficient':cs}
             
-            release_dict = {'number of pulses':npu, 'iteration delay':nid }
-                
-            example_square_MWRu = MassWastingRunout(example_square_mg,
-                                                    release_dict,mw_dict, 
-                                                    save = True,
-                                                    routing_surface = "energy__elevation", 
-                                                    settle_deposit = True)
-            
-            example_square_MWRu.itL = 0
-            example_square_MWRu.run_one_step(dt = 0)
-            rn = example_square_MWRu.arn
-            rv = example_square_MWRu.arv
-            rn_e = np.array([ 24,  23,  25,  31,  30,  32,])
-            rv_e = np.array([ 58.578644, 20.710678, 20.710678, 54.681075, 18.771714,
-                             26.547212])
-            np.testing.assert_allclose(rn, rn_e, rtol = 1e-4)
-            np.testing.assert_allclose(rv, rv_e, rtol = 1e-4)            
+        example_square_MWRu = MassWastingRunout(example_square_mg,
+                                                mw_dict, 
+                                                save = True,
+                                                effective_qsi = False,
+                                                grain_shear = False)
+        
+        example_square_MWRu.itL = 0
+        example_square_MWRu.run_one_step(run_id = 0)
+        rn = example_square_MWRu.arn
+        rqso = example_square_MWRu.arqso
+        rn_e = np.array([ 24.,  23.,  25.,  31.])
+        rqso_e = np.array([ 0.58578644, 0.20710678, 0.20710678,  1.])
+        np.testing.assert_allclose(rn, rn_e, rtol = 1e-4)
+        np.testing.assert_allclose(rqso, rqso_e, rtol = 1e-4)            
 
 
-class Test_scour_entrain_deposit_updatePD(object):
+class Test_E_A_qso_determine_attributes(object):
     def test_normal_1(self, example_square_MWRu):
-        """Test that the output of scour_entrain_deposit_updatePD 
+        """Test that the output of _E_A_qso_determine_attributes 
         are correct and stored in the class variable nudat as expected"""
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(dt = 0)      
+        example_square_MWRu.run_one_step(run_id = 0)      
         nodes = example_square_MWRu.nudat[:,0].astype(float)
         deta = example_square_MWRu.nudat[:,1].astype(float)
-        qso = example_square_MWRu.nudat[:,2] .astype(float)
-        rn = np.hstack(example_square_MWRu.nudat[:,3]).astype(float)
-        n_pd = example_square_MWRu.nudat[:,4].astype(float)
+        qso = example_square_MWRu.nudat[:,2].astype(float)
+        qsi = example_square_MWRu.nudat[:,3].astype(float)
+        E = example_square_MWRu.nudat[:,4].astype(float)
+        A = example_square_MWRu.nudat[:,5].astype(float)
+
+        key = 'particle__diameter'
+        pd_n = np.array([d[key] for d in  example_square_MWRu.nudat[:,6]]).astype(float)
+        pd_up = np.array([d[key] for d in  example_square_MWRu.nudat[:,7]]).astype(float)
+        pd_in = np.array([d[key] for d in  example_square_MWRu.nudat[:,8]]).astype(float)
+        key = 'organic__content'
+        oc_n = np.array([d[key] for d in  example_square_MWRu.nudat[:,6]]).astype(float)
+        oc_up = np.array([d[key] for d in  example_square_MWRu.nudat[:,7]]).astype(float)
+        oc_in = np.array([d[key] for d in  example_square_MWRu.nudat[:,8]]).astype(float)
+                
         nodes_e = np.array([30,31,32])
-        deta_e = np.array([-0.036031, -0.042085, -0.029911])
-        qso_e = np.array([0.151547, 0.695539, 0.260941])
-        rn_e = np.array([31, 23, 38, 24, 24, 23, 25, 31, 25, 24])
-        n_pd_e = np.array([0.090969, 0.148153, 0.124476])
+        deta_e = np.array([-0.01225359, -0.06877944, -0.04888238])
+        qso_e = np.array([ 0.127769, 0.72223323, 0.27991319])
+        qsi_e = np.array([ 0.1155154, 0.65345379, 0.2310308])
+        E_e = np.array([ 0.01225359, 0.06877944, 0.04888238])
+        A_e = np.array([0, 0, 0])
+        pd_n_e = np.array([ 0.09096982, 0.14815318, 0.12447694])
+        pd_up_e = np.array([ 0.09096982, 0.14815318, 0.12447694])
+        pd_in_e = np.array([ 0.16452507, 0.16452507, 0.16452507])
+        oc_n_e = np.array([0.0370377, 0.02489513, 0.04734116])
+        oc_up_e = np.array([0.0370377, 0.02489513, 0.04734116])
+        oc_in_e = np.array([0.08003922, 0.08003922, 0.08003922])
         
         np.testing.assert_array_almost_equal(nodes, nodes_e) 
         np.testing.assert_array_almost_equal(deta, deta_e)
         np.testing.assert_array_almost_equal(qso, qso_e)
-        np.testing.assert_array_almost_equal(rn, rn_e)
-        np.testing.assert_array_almost_equal(n_pd, n_pd_e)
+        np.testing.assert_array_almost_equal(qsi, qsi_e)
+        np.testing.assert_array_almost_equal(pd_n, pd_n_e)
+        np.testing.assert_array_almost_equal(pd_up, pd_up_e)
+        np.testing.assert_array_almost_equal(pd_in, pd_in_e)
+        np.testing.assert_array_almost_equal(oc_n, oc_n_e)
+        np.testing.assert_array_almost_equal(oc_up, oc_up_e)
+        np.testing.assert_array_almost_equal(oc_in, oc_in_e)
         
     def test_special_1(self, example_square_MWRu):
         """Test that the output of function _scour_entrain_deposit_updatePD 
@@ -85,17 +105,35 @@ class Test_scour_entrain_deposit_updatePD(object):
         nn = example_square_MWRu._grid.number_of_nodes
         example_square_MWRu._grid.at_node['soil__thickness'] = np.ones(nn)*0.01
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(dt = 0)      
+        example_square_MWRu.run_one_step(run_id = 0)      
         nodes = example_square_MWRu.nudat[:,0].astype(float)
         deta = example_square_MWRu.nudat[:,1].astype(float)
         qso = example_square_MWRu.nudat[:,2] .astype(float)
-        rn = np.hstack(example_square_MWRu.nudat[:,3]).astype(float)
-        n_pd = example_square_MWRu.nudat[:,4].astype(float)
-        nodes_e = np.array([30,31,32])
-        deta_e = np.array([0.001155,  0.006535,  0.00231])
+        qsi = example_square_MWRu.nudat[:,3].astype(float)
+        E = example_square_MWRu.nudat[:,4].astype(float)
+        A = example_square_MWRu.nudat[:,5].astype(float)
+
+        key = 'particle__diameter'
+        pd_n = np.array([d[key] for d in  example_square_MWRu.nudat[:,6]]).astype(float)
+        pd_up = np.array([d[key] for d in  example_square_MWRu.nudat[:,7]]).astype(float)
+        pd_in = np.array([d[key] for d in  example_square_MWRu.nudat[:,8]]).astype(float)
+        key = 'organic__content'
+        oc_n = np.array([d[key] for d in  example_square_MWRu.nudat[:,6]]).astype(float)
+        oc_up = np.array([d[key] for d in  example_square_MWRu.nudat[:,7]]).astype(float)
+        oc_in = np.array([d[key] for d in  example_square_MWRu.nudat[:,8]]).astype(float)
+                
+        nodes_e = np.array([30, 31, 32])
+        deta_e = np.array([0.00115515, 0.00653454, 0.00231031])
         qso_e = np.array([0, 0, 0])
-        rn_e = np.array([31, 23, 24, 24, 23, 25, 31, 25, 24])
-        n_pd_e = np.array([0.098587,  0.154623,  0.131993])
+        qsi_e = np.array([0.00115515, 0.00653454, 0.00231031])
+        E_e = np.array([0, 0, 0])
+        A_e = np.array([0.00115515, 0.00653454, 0.00231031])
+        pd_n_e = np.array([0.09858671, 0.15462344, 0.13199288])
+        pd_up_e = np.array([ 0, 0, 0])
+        pd_in_e = np.array([0.16452507, 0.16452507, 0.16452507])
+        oc_n_e = np.array([0.04149065, 0.04668837, 0.05347769])
+        oc_up_e = np.array([0, 0, 0])
+        oc_in_e = np.array([0.08003922, 0.08003922, 0.08003922])
         
         np.testing.assert_array_almost_equal(nodes, nodes_e) 
         np.testing.assert_array_almost_equal(deta, deta_e)
@@ -104,24 +142,19 @@ class Test_scour_entrain_deposit_updatePD(object):
         np.testing.assert_array_almost_equal(n_pd, n_pd_e) 
     
 
-class Test_vin_qsi(object):
+class Test_determine_qsi(object):
     def test_normal_1(self, example_square_MWRu):
-        """test ouput of function  _vin_qsi is correct and stored
+        """test ouput of function  _determine_qsi is correct and stored
         in class variable vqdat as expected"""
         example_square_MWRu.itL = 2       
-        example_square_MWRu.run_one_step(dt = 0)      
+        example_square_MWRu.run_one_step(run_id = 0)      
         n = 25
-        v_to_nodes = np.hstack(example_square_MWRu.arv_r[1][1])
-        q_to_nodes = v_to_nodes/(example_square_MWRu._grid.dx**2) 
+        qs_to_nodes = np.hstack(example_square_MWRu.arqso_r[1][1])
         nodes = np.hstack(example_square_MWRu.arn_r[1][1])
-        v_e = np.sum(v_to_nodes[nodes==n])
-        q_e = np.sum(q_to_nodes[nodes==n])
-
-        v = example_square_MWRu.vqdat[2,1]
-        q = example_square_MWRu.vqdat[2,2]
-        
-        np.testing.assert_allclose(v_e, v, rtol = 1e-4)   
-        np.testing.assert_allclose(q_e, q, rtol = 1e-4)
+        qsi_e = np.sum(qs_to_nodes[nodes==n])
+        qsi = example_square_MWRu.qsi_dat[2,1]
+  
+        np.testing.assert_allclose(qsi_e, qsi, rtol = 1e-4)
 
 class Test_update_E_dem(object):
     def test_normal_1(self, example_square_MWRu):
