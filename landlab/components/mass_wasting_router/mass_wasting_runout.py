@@ -1042,11 +1042,12 @@ class MassWastingRunout(Component):
                     self._grid.at_node['soil__thickness'][rn] = self._grid.at_node['soil__thickness'][rn]+qso_s_i
                     
                     # update tracked attributes for sediment movement during settlement
-                    for key in self._tracked_attributes:
-                        pd_ = self._grid.at_node[key][n]                    
-                        for v, n_ in enumerate(rn):
-                            A = qso_s_i[v]
-                            self._grid.at_node[key][n_] = self._attributes_node(n_,pd_,0,A)
+                    if self._tracked_attributes:
+                        for key in self._tracked_attributes:
+                            pd_ = self._grid.at_node[key][n]                    
+                            for v, n_ in enumerate(rn):
+                                A = qso_s_i[v]
+                                self._grid.at_node[key][n_] = self._attributes_node(n_,pd_,0,A)
     
 
     def _erosion(self, n, depth, slpn, att_in = None):
