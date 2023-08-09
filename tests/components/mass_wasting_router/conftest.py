@@ -177,16 +177,14 @@ def example_square_MWRu(example_square_mg):
                'threshold flux':SD,
                'scour coefficient':cs,
                'max observed flow depth':mofd}
-    
-    save = True
-    
+
     tracked_attributes = ['particle__diameter','organic__content']
         
     example_square_MWRu = MassWastingRunout(example_square_mg,
                                             mw_dict, 
                                             save = True,                                    
                                             tracked_attributes = tracked_attributes)
-    return(example_MWRu)
+    return(example_square_MWRu)
 
 
 
