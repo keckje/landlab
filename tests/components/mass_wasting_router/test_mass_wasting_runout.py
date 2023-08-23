@@ -7,6 +7,8 @@ from landlab.components import FlowDirectorMFD
 from landlab.components.mass_wasting_router import MassWastingRunout
 
 
+# add tests for mass conservation
+
 class Test__prep_initial_mass_wasting_material(object):
 
     
@@ -303,22 +305,22 @@ class Test_determine_qsi(object):
 
 class Test_update_E_dem(object):
     def test_normal_1(self, example_square_MWRu):
-        """run one iteration, check energy dem matches notes"""
+        """run one iteration, check qsi+initial dem matches energy__elevation"""
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(dt = 0)
+        example_square_MWRu.run_one_step(run_id = 0)
         n = 30
-        el = example_square_MWRu._grid.at_node['topographic__elevation'][n]
-        qsi = example_square_MWRu.vqdat[0][2]
+        el = example_square_MWRu.topo_evo_maps[0][0][n] # elevation of initial topo
+        qsi = example_square_MWRu.qsi_dat[0][1]
         E_e = el+qsi
         E = example_square_MWRu._grid.at_node['energy__elevation'][n]
         np.testing.assert_allclose(E_e, E, rtol = 1e-4)    
 
-@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
+#@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
 class Test_update_dem(object):
     def test_normal_1(self, example_square_MWRu):
         """test topographic dem updated correctly"""
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(dt = 0)
+        example_square_MWRu.run_one_step(run_id = 0)
         n = 30
         eli = example_square_MWRu._grid.at_node['topographic__initial_elevation'][n]
         deta = example_square_MWRu.nudat[0][1]
@@ -327,26 +329,26 @@ class Test_update_dem(object):
         np.testing.assert_allclose(el_e, el, rtol = 1e-4)
 
 
-@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
+#@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
 class Test_update_channel_particle_diameter(object):
     def test_normal_1(self, example_square_MWRu):
         """test particle diameter updated correctly"""
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(dt = 0)
+        example_square_MWRu.run_one_step(run_id = 0)
         n = 30
         pd = example_square_MWRu._grid.at_node['particle__diameter'][n]
         pd_e = 0.09096981
         np.testing.assert_allclose(pd_e, pd, rtol = 1e-4)
 
 
-@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
+#@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
 class Test_settle(object):
     def test_normal_1(self, example_flat_mg):
         """test topographic__elevation and soil__thickness change correctly"""
         mg = example_flat_mg
         n = 12
         mg.at_node['topographic__elevation'][12] = 20
-        fd = FlowDirectorMFD(mg, diagonals=True, partition_method = 'slope')
+        fd = FlowDirectorMFD(mg, diagonals=True, partition_method = 'slope') # why are flow proportions not equal? diagonals are slightly further from centralnode and have smaller slope
         fd.run_one_step()
         rn = mg.at_node.dataset['flow__receiver_node'].values[n]
         npu = [1] 
@@ -354,21 +356,27 @@ class Test_settle(object):
         slpc = [0.03]   
         SD = 0.01
         cs = 0.02
+        mofd = 4
         
-        mw_dict = {'critical slope':slpc, 'minimum flux':SD, 'scour coefficient':cs}        
-        release_dict = {'number of pulses':npu, 'iteration delay':nid }        
-        example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,
-                                          routing_surface = "energy__elevation", settle_deposit = True)
-
-        example_MWRu.D_L = [19] # deposition depth
-        example_MWRu._settle([n])
+        
+        
+        mw_dict = {'critical slope':slpc, 'threshold flux':SD,
+                   'scour coefficient':cs, 
+                   'max observed flow depth':mofd}               
+        example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
+                                           settle_deposit = True)
+        example_MWRu.arn_u = np.array([n])# np.unique(rn) # set the array of unique receiver nodes
+        example_MWRu.D_L = [19] # deposition depth at node 
+        
+        example_MWRu._settle() # run the settle function
         rn_e = mg.at_node['topographic__elevation'][rn]
         n_e = mg.at_node['topographic__elevation'][n]
-        expected_r_ne = np.array([2.36927701,2.369277016,2.369277016,2.369277016,
+        
+        expected_rn_e = np.array([2.36927701,2.369277016,2.369277016,2.369277016,
                                   1.968222984,1.968222984,1.968222984,1.968222984])
-        expected_ne = 10.65
-        np.testing.assert_allclose(rn_e, expected_r_ne, rtol = 1e-4)
-        np.testing.assert_allclose(n_e, expected_ne, rtol = 1e-4)
+        expected_n_e = 10.65
+        np.testing.assert_allclose(rn_e, expected_rn_e, rtol = 1e-4)
+        np.testing.assert_allclose(n_e, expected_n_e, rtol = 1e-4)
         
     
 
@@ -386,14 +394,19 @@ class Test_settle(object):
         slpc = [0.03]   
         SD = 0.01
         cs = 0.02
+        mofd = 4
         
-        mw_dict = {'critical slope':slpc, 'minimum flux':SD, 'scour coefficient':cs}        
-        release_dict = {'number of pulses':npu, 'iteration delay':nid }        
-        example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,
-                                          routing_surface = "energy__elevation", settle_deposit = True)
+        mw_dict = {'critical slope':slpc, 'threshold flux':SD,
+                   'scour coefficient':cs, 
+                   'max observed flow depth':mofd}               
+        example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
+                                           settle_deposit = True)
 
-        example_MWRu.D_L = [5] # deposition depth
-        example_MWRu._settle([n])
+        example_MWRu.arn_u = np.array([n])# np.unique(rn) # set the array of unique receiver nodes
+        example_MWRu.D_L = [5] # deposition depth at node 
+        example_MWRu._settle() # run the settle function
+        # example_MWRu.D_L = [5] # deposition depth
+        # example_MWRu._settle([n])
         rn_e = mg.at_node['topographic__elevation'][rn]
         n_e = mg.at_node['topographic__elevation'][n]
         expected_r_ne = np.array([1.732233698, 1.732233698, 1.732233698, 1.732233698, 1.517766302, 1.517766302, 1.517766302, 1.517766302])
@@ -415,14 +428,17 @@ class Test_settle(object):
         slpc = [0.03]   
         SD = 0.01
         cs = 0.02
+        mofd = 4
         
-        mw_dict = {'critical slope':slpc, 'minimum flux':SD, 'scour coefficient':cs}        
-        release_dict = {'number of pulses':npu, 'iteration delay':nid }        
-        example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,
-                                          routing_surface = "energy__elevation", settle_deposit = True)
+        mw_dict = {'critical slope':slpc, 'threshold flux':SD,
+                   'scour coefficient':cs, 
+                   'max observed flow depth':mofd}               
+        example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
+                                           settle_deposit = True)
 
-        example_MWRu.D_L = [0.3] # deposition depth
-        example_MWRu._settle([n])
+        example_MWRu.arn_u = np.array([n])# np.unique(rn) # set the array of unique receiver nodes
+        example_MWRu.D_L = [0.3] # deposition depth at node 
+        example_MWRu._settle() # run the settle function
         rn_e = mg.at_node['topographic__elevation'][rn]
         n_e = mg.at_node['topographic__elevation'][n]
         expected_r_ne = np.array([1, 1, 1, 1, 1, 1, 1, 1])
@@ -444,18 +460,22 @@ class Test_settle(object):
         slpc = [0.03]   
         SD = 0.01
         cs = 0.02
+        mofd = 4
         
-        mw_dict = {'critical slope':slpc, 'minimum flux':SD, 'scour coefficient':cs}        
-        release_dict = {'number of pulses':npu, 'iteration delay':nid }        
-        example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,
-                                          routing_surface = "energy__elevation", settle_deposit = True)
+        mw_dict = {'critical slope':slpc, 'threshold flux':SD,
+                   'scour coefficient':cs, 
+                   'max observed flow depth':mofd}               
+        example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
+                                           settle_deposit = True)
 
-        example_MWRu.D_L = [19] # deposition depth
-        example_MWRu._settle([n])
+        example_MWRu.arn_u = np.array([n])# np.unique(rn) # set the array of unique receiver nodes
+        example_MWRu.D_L = [19] # deposition depth at node 
+        example_MWRu._settle() # run the settle function
         rn_e = mg.at_node['topographic__elevation'][rn]
         n_e = mg.at_node['topographic__elevation'][n]
-        expected_r_ne = np.array([7.922500926, 8.851539316, 6.064424145, 3.277308974, 11.45159692, 9.55195179, 3.853016403, 5.75266153])
-        expected_ne = 13.275
+        expected_r_ne = np.array([8.2139975, 9.12061308, 6.40076635, 3.68091962,
+                11.59429483, 9.72636035, 4.1225569, 5.99049138])
+        expected_ne = 11.15
         np.testing.assert_allclose(rn_e, expected_r_ne, rtol = 1e-4)
         np.testing.assert_allclose(n_e, expected_ne, rtol = 1e-4)
 
@@ -469,30 +489,31 @@ class Test_settle(object):
         fd = FlowDirectorMFD(mg, diagonals=True, partition_method = 'slope')
         fd.run_one_step()
         rn = mg.at_node.dataset['flow__receiver_node'].values[n]
-        npu = [1] 
-        nid = [1] 
         slpc = [0.03]   
         SD = 0.01
         cs = 0.02
+        mofd = 4
         
-        mw_dict = {'critical slope':slpc, 'minimum flux':SD, 'scour coefficient':cs}        
-        release_dict = {'number of pulses':npu, 'iteration delay':nid }        
-        example_MWRu = MassWastingRunout(mg,release_dict,mw_dict, save = True,
-                                          routing_surface = "energy__elevation", settle_deposit = True)
+        mw_dict = {'critical slope':slpc, 'threshold flux':SD,
+                   'scour coefficient':cs, 
+                   'max observed flow depth':mofd}               
+        example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
+                                           settle_deposit = True)
 
-        example_MWRu.D_L = [3] # deposition depth
-        example_MWRu._settle([n])
+        example_MWRu.arn_u = np.array([n])# np.unique(rn) # set the array of unique receiver nodes
+        example_MWRu.D_L = [3] # deposition depth at node 
+        example_MWRu._settle() # run the settle function
         rn_e = mg.at_node['topographic__elevation'][rn]
         n_e = mg.at_node['topographic__elevation'][n]
-        expected_r_ne = np.array([ 7.227742,  8.151828,  5.379571,  2.607313,  1.,  9.053679,3.375756,  5.268397])
-        expected_ne = 7.9357
+        expected_r_ne = np.array([ 7.33097686, 8.220651243, 5.551628106, 2.88260497, 1, 9.078000214, 3.546078728, 5.390059875])
+        expected_ne = 7
         np.testing.assert_allclose(rn_e, expected_r_ne, rtol = 1e-4)
         np.testing.assert_allclose(n_e, expected_ne, rtol = 1e-4)
 
-@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
-class Test_scour(object):
+#@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
+class Test_erosion(object):
 
-    def test_opt1_normal_1(self, example_square_MWRu):
+    def test_quasi_normal_1(self, example_square_MWRu):
         """""" 
         n = 24
         qsi = 2
@@ -500,13 +521,14 @@ class Test_scour(object):
         opt = 1
         depth = qsi
         example_square_MWRu.itL = 0
-        example_square_MWRu.run_one_step(dt = 0)       
-        E = example_square_MWRu._scour(n, depth, slope, opt = opt)
+        example_square_MWRu.grain_shear = False
+        example_square_MWRu.run_one_step(run_id = 0)       
+        E = example_square_MWRu._erosion(n, depth, slope)
         expected_E = 0.1017184
         np.testing.assert_allclose(E[0], expected_E, rtol = 1e-4)
 
 
-    def test_opt1_normal_2(self, example_square_MWRu):
+    def test_quasi_normal_1(self, example_square_MWRu):
         """"""
         n = 24
         qsi = 2
@@ -515,63 +537,61 @@ class Test_scour(object):
         opt = 1
         depth = qsi    
         example_square_MWRu.itL = 0
-        example_square_MWRu.run_one_step(dt = 0)       
-        E = example_square_MWRu._scour(n, depth, slope, opt = opt)
+        example_square_MWRu.grain_shear = False
+        example_square_MWRu.run_one_step(run_id = 0)      
+        E = example_square_MWRu._erosion(n, depth, slope)
         expected_E = 0.144256
         np.testing.assert_allclose(E[0], expected_E, rtol = 1e-4)
         
-    def test_opt2_normal_1(self, example_square_MWRu):
+    def test_inertial_normal_1(self, example_square_MWRu):
         """"""
         n = 24
         qsi = 2
         slope = 0.087489
         example_square_MWRu.slpc = 0.01
-        opt = 2
-        pd_in = 0.25
         depth = qsi
         example_square_MWRu.itL = 0
-        example_square_MWRu.run_one_step(dt = 0)               
-        E = example_square_MWRu._scour(n, depth, slope, opt = opt,pd_in = pd_in)
-        expected_E = 0.031997
+        example_square_MWRu.run_one_step(run_id = 0)
+        att_in = {'particle__diameter': 0.25}               
+        E = example_square_MWRu._erosion(n, depth, slope, att_in = att_in)
+        expected_E = 0.065142
         np.testing.assert_allclose(E[0], expected_E, rtol = 1e-4)
 
-    def test_opt2_normal_2(self, example_square_MWRu):
+    def test_inertial_normal_2(self, example_square_MWRu):
         """"""
         n = 24
         qsi = 2
         slope = 0.087489
         example_square_MWRu.slpc = 0.1
-        opt = 2
-        pd_in = 0.25
         depth = qsi
         example_square_MWRu.itL = 0
-        example_square_MWRu.run_one_step(dt = 0)               
-        E = example_square_MWRu._scour(n, depth, slope, opt = opt,pd_in = pd_in)
-        expected_E = 0.050712
+        example_square_MWRu.run_one_step(run_id = 0)
+        att_in = {'particle__diameter': 0.25}                
+        E = example_square_MWRu._erosion(n, depth, slope, att_in = att_in)
+        expected_E = 0.065142
         np.testing.assert_allclose(E[0], expected_E, rtol = 1e-4)
 
-    def test_opt2_boundary_1(self, example_square_MWRu):
+    def test_inertial_boundary_1(self, example_square_MWRu):
         """"""
         n = 24
         qsi = 2
         slope = 0.05
         example_square_MWRu.slpc = 0.05
-        opt = 2
-        pd_in = 0.25
         depth = qsi
         example_square_MWRu.itL = 0
-        example_square_MWRu.run_one_step(dt = 0)               
-        E = example_square_MWRu._scour(n, depth, slope, opt = opt,pd_in = pd_in)
-        expected_E = 0.039494
+        example_square_MWRu.run_one_step(run_id = 0)
+        att_in = {'particle__diameter': 0.25}                
+        E = example_square_MWRu._erosion(n, depth, slope, att_in = att_in)
+        expected_E = 0.058276
         np.testing.assert_allclose(E[0], expected_E, rtol = 1e-4)
 
-@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
+# @pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
 class Test_deposit(object):
     
     def test_deposit_L_normal_1(self, example_square_MWRu):
         qsi = 2
         slpn = 0.02
-        D = example_square_MWRu._deposit_L_metric( qsi, slpn)
+        D = example_square_MWRu._deposit_L_metric(qsi, slpn)
         expected_D = 1.1111
         np.testing.assert_allclose(D, expected_D,rtol = 1e-4)
         
@@ -598,64 +618,77 @@ class Test_deposit(object):
 
 
     def test_deposit_friction_angle_normal_1(self, example_square_MWRu):
+        n = 24
         qsi = 2
         zi = 50
         zo = 50.1
-        D = example_square_MWRu._deposit_friction_angle(qsi,zi,zo)
-        expected_D = 1.2
+        flat_dem = np.ones(example_square_MWRu._grid.number_of_nodes)*zo
+        example_square_MWRu._grid.at_node['topographic__elevation'] = flat_dem
+        example_square_MWRu._grid.at_node['topographic__elevation'][n] = zi
+        D = example_square_MWRu._deposit_friction_angle(qsi, n)
+        expected_D = 1.066667
         np.testing.assert_allclose(D, expected_D,rtol = 1e-4)  
         
     def test_deposit_friction_angle_normal_2(self, example_square_MWRu):
+        n = 24
         qsi = 2
         zi = 50
         zo = 49.9
-        D = example_square_MWRu._deposit_friction_angle(qsi,zi,zo)
-        expected_D = 1.1
+        flat_dem = np.ones(example_square_MWRu._grid.number_of_nodes)*zo
+        example_square_MWRu._grid.at_node['topographic__elevation'] = flat_dem
+        example_square_MWRu._grid.at_node['topographic__elevation'][n] = zi
+        D = example_square_MWRu._deposit_friction_angle(qsi, n)
+        expected_D = 0.8
         np.testing.assert_allclose(D, expected_D,rtol = 1e-4)  
 
     def test_deposit_friction_angle_boundary_1(self, example_square_MWRu):
+        n = 24
         qsi = 2
         zi = 50
         zo = 50
-        D = example_square_MWRu._deposit_friction_angle(qsi,zi,zo)
-        expected_D = 1.15
+        flat_dem = np.ones(example_square_MWRu._grid.number_of_nodes)*zo
+        example_square_MWRu._grid.at_node['topographic__elevation'] = flat_dem
+        example_square_MWRu._grid.at_node['topographic__elevation'][n] = zi
+        D = example_square_MWRu._deposit_friction_angle(qsi, n)
+        expected_D = 0.95
         np.testing.assert_allclose(D, expected_D,rtol = 1e-4)  
-
     
     def test_deposit_friction_angle_special_1(self, example_square_MWRu):
+        n = 24
         qsi = 2
         zi = 50
         zo = 47
-        D = example_square_MWRu._deposit_friction_angle(qsi,zi,zo)
+        flat_dem = np.ones(example_square_MWRu._grid.number_of_nodes)*zo
+        example_square_MWRu._grid.at_node['topographic__elevation'] = flat_dem
+        example_square_MWRu._grid.at_node['topographic__elevation'][n] = zi
+        D = example_square_MWRu._deposit_friction_angle(qsi, n)
         expected_D = 0
         np.testing.assert_allclose(D, expected_D,rtol = 1e-4)  
 
     def test_determine_zo_normal_1(self, example_square_MWRu):
         example_square_MWRu.itL = 1
-        example_square_MWRu.run_one_step(dt = 0)
-        
+        example_square_MWRu.run_one_step(run_id = 0)        
         n = 24
         qsi = 0.2
         zi = example_square_MWRu._grid.at_node['topographic__elevation'][n]
         zo = example_square_MWRu._determine_zo(n, zi, qsi)
-        expected_zo = 5.5
+        expected_zo = 5
         np.testing.assert_allclose(zo, expected_zo,rtol = 1e-4) 
-
 
     def test_determine_zo_normal_2(self, example_square_MWRu):
         example_square_MWRu.itL = 1
-        example_square_MWRu.run_one_step(dt = 0)
+        example_square_MWRu.run_one_step(run_id = 0)
         
         n = 24
         qsi = 2
         zi = example_square_MWRu._grid.at_node['topographic__elevation'][n]
         zo = example_square_MWRu._determine_zo(n, zi, qsi)
-        expected_zo = 6.3
+        expected_zo = 5
         np.testing.assert_allclose(zo, expected_zo,rtol = 1e-4) 
 
     def test_determine_zo_boundary_1(self, example_square_MWRu):
         example_square_MWRu.itL = 1
-        example_square_MWRu.run_one_step(dt = 0)
+        example_square_MWRu.run_one_step(run_id = 0)
         
         n = 24
         qsi = 0
@@ -669,7 +702,7 @@ class Test_deposit(object):
         example_square_MWRu.routing_surface = "energy__elevation"
         example_square_MWRu.itL = 1
         example_square_MWRu.settle_deposit = True
-        example_square_MWRu.run_one_step(dt = 0)
+        example_square_MWRu.run_one_step(run_id = 0)
         
         # make node 24 a pit
         example_square_MWRu._grid.at_node['topographic__elevation'][24] = 3
@@ -680,50 +713,6 @@ class Test_deposit(object):
         expected_zo = None
         assert(zo, expected_zo)            
 
-    def test_deposit_normal_1(self, example_square_MWRu):
-        """use default iteration limit (1000), look at deposition near outlet"""
-
-        example_square_MWRu.run_one_step(dt = 0)
-                
-        n = 9    
-        qsi = 2
-        slpn = example_square_MWRu._grid.at_node['topographic__steepest_slope'][n].max()
-        D = example_square_MWRu._deposit(qsi,slpn,n)
-        expected_D = 1.38982
-        
-        np.testing.assert_allclose(D, expected_D,rtol = 1e-4)
-    
-        
-    def test_deposit_boundary(self, example_square_MWRu):
-        """use default iteration limit (1000), look at deposition near outlet"""
-        example_square_MWRu.run_one_step(dt = 0)
-                
-        n = 10    
-        qsi = 2
-        # slope here happens to be zero
-        slpn = example_square_MWRu._grid.at_node['topographic__steepest_slope'][n].max()
-        D = example_square_MWRu._deposit(qsi,slpn,n)
-        expected_D = 1.344888
-        
-        np.testing.assert_allclose(D, expected_D,rtol = 1e-4)
-
-
-    def test_deposit_special(self, example_square_MWRu):
-        """use default iteration limit (1000), look at deposition near outlet,
-        routing_surface = topographic__elevation, which should use L_deposit"""
-        
-        example_square_MWRu.routing_surface = "topographic__elevation"
-        example_square_MWRu.run_one_step(dt = 0)
-                
-        n = 10    
-        qsi = 2
-        # slope here happens to be zero
-        slpn = 0 
-        D = example_square_MWRu._deposit(qsi,slpn,n)
-        expected_D = 2
-        
-        np.testing.assert_allclose(D, expected_D,rtol = 1e-4)
-  
 
 @pytest.mark.xfail(reason = "TDD, test class is not yet implemented")         
 class Test_particle_diameter_in(object):

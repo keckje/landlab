@@ -1012,19 +1012,20 @@ class MassWastingRunout(Component):
                     sslp = sum(slpn)
                     pp = slpn/sslp
                     
-                    # determine the total flux / unit width sent to S > Sc downslope cells
+                    # determine the total flux sent to S > Sc downslope cells
                     # mean/min downslope cell elevation
                     zo = self._grid.at_node['topographic__elevation'][rn].min()
                     
                     # node n elevation
                     zi = self._grid.at_node['topographic__elevation'][n]
                     
-                    # height of node n using Sc*dx above mean downslope elevation
+                    # height of node n using Sc*dx above min downslope elevation
                     slp_h = self.slpc*self._grid.dx             
-                
-                    qso_s = (zi - (zo+slp_h))/2 # out going sediment depth
                     
-                    if qso_s < 0: # no negative 
+                    # out going sediment depth, determined as half the depth above the critical slope
+                    qso_s = (zi - (zo+slp_h))/2
+                    
+                    if qso_s < 0: # no negative (this shouldn't be needed because only nodes greater than slpc considered)
                         # print("negative outlflow settling, n, {}, rn, {}, qso_s, {}".format(n,rn,qso_s))
                         qso_s = 0
                     
@@ -1088,11 +1089,11 @@ class MassWastingRunout(Component):
 
         
         if self.grain_shear:
+            # shear stress approximated as a power function of inertial shear stress
             Dp = att_in['particle__diameter']
             if depth < Dp: # grain size dependent erosion breaks if depth<Dp
                 Dp = depth*.99
-            # shear stress apprixmated as a power functino of inertial shear stress
-            # phi = np.arctan(self.slpc) # approximate phi [radians] from criticle slope [L/L]
+            
             phi = np.arctan(0.32)
             
             # inertial stresses
@@ -1106,6 +1107,7 @@ class MassWastingRunout(Component):
             Ec = (self.cs*Tau**self.eta)      
 
         else:
+            # quasi-static approximation
             Tau = self.ro_mw*self.g*depth*(np.sin(theta))
             Ec = self.cs*(Tau)**self.eta
             u = np.nan
@@ -1230,7 +1232,7 @@ class MassWastingRunout(Component):
         """         
         slp_h = self.slpc*self._grid.dx
         zi = self._grid.at_node['topographic__elevation'][n]       
-        zo = self._determine_zo(n, zi, qsi )
+        zo = self._determine_zo(n, zi, qsi)
         rule = ((zi-zo)<=(slp_h))
         def eq(qsi, zo, zi, slp_h):
             dx = self._grid.dx
@@ -1243,7 +1245,7 @@ class MassWastingRunout(Component):
             c = -qsi
             N1 = -b+(((b**2)-4*a*c)**0.5)/(2*a)
             N2 = -b-(((b**2)-4*a*c)**0.5)/(2*a)
-            ndn = np.round(max([N1,N2,1]))
+            ndn = np.round(max([N1,N2,1])) # aggradation on at least one node
             A = min((1/ndn)*qsi+((ndn-1)/2)*dx*sd, qsi)
             return A 
 

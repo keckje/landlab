@@ -15,7 +15,7 @@ import pytest
 os.chdir('C:/Users/keckje/Documents/GitHub/landlab/tests/components/mass_wasting_router/')
 
 
-!pytest test_mass_wasting_runout.py
+# !pytest test_mass_wasting_runout.py
 
 
 
@@ -75,3 +75,46 @@ def example_square_MWRu(example_square_mg):
     return(example_square_MWRu)
 
 example_square_MWRu = example_square_MWRu(example_square_mg)
+
+#%%
+
+def example_flat_mg():
+    "small, flat surface"
+    dem = np.ones(25)
+    mg = RasterModelGrid((5,5),10)
+    _ = mg.add_field('topographic__elevation',
+                        dem,
+                        at='node')
+    
+    
+    mg.set_closed_boundaries_at_grid_edges(True, True, True, True) #close all boundaries
+    mg.set_watershed_boundary_condition_outlet_id(3,dem)   
+    mg.at_node['node_id'] = np.hstack(mg.nodes)
+    nn = mg.number_of_nodes
+    mg.at_node['mass__wasting_id'] = np.zeros(mg.number_of_nodes).astype(int)
+    depth = np.ones(nn)*1
+    mg.add_field('node', 'soil__thickness',depth)    
+    return(mg)
+
+example_flat_mg = example_flat_mg()
+
+#%%
+
+def example_bumpy_mg():
+    """sloped, irregular surface"""
+    dem = np.ones(25)
+    mg = RasterModelGrid((5,5),10)
+    _ = mg.add_field('topographic__elevation',
+                        dem,
+                        at='node')        
+    mg.set_closed_boundaries_at_grid_edges(True, True, True, True) #close all boundaries
+    mg.set_watershed_boundary_condition_outlet_id(3,dem)   
+    mg.at_node['node_id'] = np.hstack(mg.nodes)
+    mg.at_node['topographic__elevation'][np.array([6,7,8,11,13,16,17,18])] = np.array([3,2,5,5,7,9,8,11])   
+    nn = mg.number_of_nodes
+    mg.at_node['mass__wasting_id'] = np.zeros(mg.number_of_nodes).astype(int)
+    depth = np.ones(nn)*1
+    mg.add_field('node', 'soil__thickness',depth)    
+    return(mg)
+
+example_bumpy_mg = example_bumpy_mg()
