@@ -841,7 +841,8 @@ class MassWastingRunout(Component):
             self.D_L.append(A)
             
             # n_att, att_up, att_in are dictionaries of values of each attribute at
-            # the node, in the eroded material and incoming material in qsi respectively            
+            # the node after erosion and deposition, in the eroded material before depostion 
+            # and incoming material in qsi respectively            
             return deta, qso, qsi, E, A, n_att, att_up, att_in
         
         # apply EAqA function to all unique nodes in arn (arn_u)
