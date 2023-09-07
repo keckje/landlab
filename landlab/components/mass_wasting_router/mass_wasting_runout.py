@@ -1359,6 +1359,6 @@ class MassWastingRunout(Component):
             att_out[key] = np.sum((att_up[key]*E+att_in[key]*(qsi-A))/(qsi-A+E))
             check_val = att_out[key]    
             if (check_val <=0) or (np.isnan(check_val)) or (np.isinf(check_val)):
-                msg = "out-flowing particle {} is zero, negative, nan or inf".format(key)
+                msg = "out-flowing {} is zero, negative, nan or inf".format(key)
                 raise ValueError(msg)
         return att_out

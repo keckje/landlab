@@ -7,10 +7,62 @@ from landlab.components import FlowDirectorMFD
 from landlab.components.mass_wasting_router import MassWastingRunout
 
 
-# add tests for mass conservation
+class Test__virtual_laboratory_smoke_tests():
+    
+    def test_pile_runout(self, example_pile_MWRu):
+        """smoke test using a pile of debris. Check that profile of final
+        topographic surface doesn't change and that mass is always conserved"""
+        MWRu = example_pile_MWRu
+        MWRu.run_one_step(run_id = 0)
+        c = np.array(list(MWRu.runout_evo_maps[0].keys())).max()
+        # profile check
+        pf = MWRu.topo_evo_maps[0][c][MWRu.pf]
+        pf_e = nparray([1.        ,  1.        ,  1.        ,  1.        ,  1.,
+                1.        ,  1.        ,  1.        ,  1.        ,  1.        ,
+                1.00689131,  1.15535961,  1.19989349,  1.21732111,  1.30154153,
+                1.3445694 ,  1.34283688,  1.48417702,  1.58725816,  1.73725816,
+                1.7912149 ,  1.78716792,  1.90855312,  2.03704731,  2.04748121,
+                2.49346051,  2.11886755,  2.08088422,  2.02381708,  1.85815936,
+                1.61798616,  1.60479334,  1.6049865 ,  1.42619691,  1.37090398,
+                1.3102595 ,  1.28800606,  1.30505667,  1.19631867,  1.11827782,
+                1.08073868,  1.        ,  1.        ,  1.        ,  1.        ,
+                1.        ,  1.        ,  1.        ,  1.        ,  1.        ,
+                1.        ])
+        # mass conservation check
+        DEMi = MWRu._grid.at_node['topographic__initial_elevation']
+        DEMf = MWRu._grid.at_node['topographic__elevation']
+        DEMdf = DEMf-DEMi
+        
+        np.testing.assert_allclose(pf, pf_e, atol = 1e-4)
+        np.testing.assert_allclose(0, DEMdf.sum(), atol = 1e-4)
+        
+    #def test_narrow_flume_runout():
+        
+    #def test_wide_flume_runout():
+        
+class Test__mass_conserved():
+        
+    def test_full_runout(self, example_square_MWRu):
+        """check that cumulative topographic change at end of model run (len(rn) = 0) 
+        equals zero"""
+        example_square_MWRu.run_one_step(run_id = 0)
+        mg = example_square_MWRu._grid
+        diff = mg.at_node['topographic__elevation'] - mg.at_node['topographic__initial_elevation']
+        np.testing.assert_allclose(0, diff.sum(), atol = 1e-4)
+        
+    def test_pause_at_middle_of_runout(self, example_square_MWRu):
+        """pause model in the middle of modeled runout and check that cumulative 
+        topographic change plus flux equals zero"""
+        example_square_MWRu.itL = 3
+        example_square_MWRu.run_one_step(run_id = 0)
+        mg = example_square_MWRu._grid
+        # cumulative topographic change [L]
+        diff = mg.at_node['topographic__elevation'] - mg.at_node['topographic__initial_elevation']
+        # cumulative flux [L]
+        qs = example_square_MWRu.arqso.sum()
+        np.testing.assert_allclose(0, diff.sum()+qs, atol = 1e-4)        
 
-class Test__prep_initial_mass_wasting_material(object):
-
+class Test__prep_initial_mass_wasting_material():
     
     def test_single_node_positive(self, example_square_MWRu):
         """Test correct number of receiving nodes and volumes from 
@@ -107,7 +159,7 @@ class Test__prep_initial_mass_wasting_material(object):
         np.testing.assert_allclose(rqso, rqso_e, rtol = 1e-4)            
 
 
-class Test_E_A_qso_determine_attributes(object):
+class Test_E_A_qso_determine_attributes():
 
     
     def test_normal_1(self, example_square_MWRu):
@@ -747,7 +799,7 @@ class Test_aggradation(object):
         assert(zo, expected_zo)            
 
 
-@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")         
+# @pytest.mark.xfail(reason = "TDD, test class is not yet implemented")         
 class Test_attributes_in(object):
 
     def test_normal_values_1(self, example_square_MWRu):
@@ -763,7 +815,7 @@ class Test_attributes_in(object):
         expected_oc_in = 0.074791
         
         np.testing.assert_allclose(att_in['particle__diameter'], expected_pd_in,rtol = 1e-4)
-        np.testing.assert_allclose(att_in['organic__content'], expected_pd_in,rtol = 1e-4)
+        np.testing.assert_allclose(att_in['organic__content'], expected_oc_in,rtol = 1e-4)
         
     def test_normal_values_2(self, example_square_MWRu):
         """"""
@@ -772,14 +824,14 @@ class Test_attributes_in(object):
         example_square_MWRu.run_one_step(run_id = 0)
 
         n = 31
-        qsi = np.sum(example_square_MWRu.arv[example_square_MWRu.arn == n])
-        att_in = example_square_MWRu._particle_diameter_in(n,qsi)
+        qsi = np.sum(example_square_MWRu.arqso[example_square_MWRu.arn == n])
+        att_in = example_square_MWRu._attributes_in(n,qsi)
 
-        expected_pd_in = 0.161414
+        expected_pd_in = 0.15751
         expected_oc_in = 0.074886
         
         np.testing.assert_allclose(att_in['particle__diameter'], expected_pd_in,rtol = 1e-4)
-        np.testing.assert_allclose(att_in['organic__content'], expected_pd_in,rtol = 1e-4)
+        np.testing.assert_allclose(att_in['organic__content'], expected_oc_in,rtol = 1e-4)
         
         
     def test_special_values_1(self, example_square_MWRu):
@@ -788,14 +840,14 @@ class Test_attributes_in(object):
         example_square_MWRu.run_one_step(run_id = 0)        
         
         n = 24
-        qsi = np.sum(example_square_MWRu.arv[example_square_MWRu.arn == n])
-        att_in = example_square_MWRu._particle_diameter_in(n,qsi)
+        qsi = np.sum(example_square_MWRu.arqso[example_square_MWRu.arn == n])
+        att_in = example_square_MWRu._attributes_in(n,qsi)
 
         expected_pd_in = 0
         expected_oc_in = 0
         
         np.testing.assert_allclose(att_in['particle__diameter'], expected_pd_in,rtol = 1e-4)
-        np.testing.assert_allclose(att_in['organic__content'], expected_pd_in,rtol = 1e-4)
+        np.testing.assert_allclose(att_in['organic__content'], expected_oc_in,rtol = 1e-4)
         
 
     def test_bad_values_1(self, example_square_MWRu):
@@ -806,9 +858,9 @@ class Test_attributes_in(object):
         with pytest.raises(ValueError) as exc_info:
             n = 24
             qsi = np.nan
-            pd_in = example_square_MWRu._particle_diameter_in(n,qsi)
+            att_in = example_square_MWRu._attributes_in(n,qsi)
 
-        assert exc_info.match("in-flowing volume is nan or inf")    
+        assert exc_info.match("in-flowing flux is nan or inf")    
         
         
 #@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")         
@@ -850,12 +902,6 @@ class Test_attribute_out(object):
         
     def test_bad_values_1(self, example_square_MWRu):        
         with pytest.raises(ValueError) as exc_info:
-            # pd_up = 0.001
-            # pd_in = np.nan
-            # qsi = 3
-            # E = 0.5
-            # D = 0.3
-            
             qsi = 3
             E = 2
             A = 1
@@ -863,75 +909,73 @@ class Test_attribute_out(object):
             att_in = {'particle__diameter': np.nan, 'organic__content': 0.2}
                
             att_out = example_square_MWRu._attribute_out(att_up,att_in,qsi,E,A)           
- 
-        # assert exc_info.match("out-flowing particle diameter is zero, negative, nan or inf")
+
         assert exc_info.match("out-flowing {} is zero, negative, nan or inf".format('particle__diameter'))        
         
 
     def test_bad_values_2(self,example_square_MWRu):        
         with pytest.raises(ValueError) as exc_info:
-            pd_up = 0.001
-            pd_in = -.05
             qsi = 3
-            E = 0.5
-            D = 0.3
+            E = 2
+            A = 1
+            att_up = {'particle__diameter': 0.5, 'organic__content': np.nan}
+            att_in = {'particle__diameter': 0.25, 'organic__content': 0.2}
                
-            pd_out = example_square_MWRu._particle_diameter_out(pd_up,pd_in,qsi,E,D)           
- 
-        assert exc_info.match("out-flowing particle diameter is zero, negative, nan or inf")  
+            att_out = example_square_MWRu._attribute_out(att_up,att_in,qsi,E,A)           
+
+        assert exc_info.match("out-flowing {} is zero, negative, nan or inf".format('organic__content'))       
 
 
-@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")         
-class Test_particle_diameter_node:
+# @pytest.mark.xfail(reason = "TDD, test class is not yet implemented")         
+class Test_attribute_node:
     def test_normal_values_1(self, example_square_MWRu):
         # normal values
         n = 24
-        pd_in = 0.2
-        D = 0.5
+        att_in = {'particle__diameter': 0.25, 'organic__content': 0.2}
+        A = 0.5
         E = 0.5
         
-        pd_out = example_square_MWRu._particle_diameter_node(n,pd_in,E,D)
-        
-        expected_pd_out = 0.215913
+        att_node = example_square_MWRu._attributes_node(n,att_in,E,A)
+        expected_att_node = 0.240913
     
-        np.testing.assert_allclose(pd_out, expected_pd_out,rtol = 1e-4)
+        np.testing.assert_allclose(att_node['particle__diameter'], expected_att_node,rtol = 1e-4)
 
     def test_normal_values_2(self, example_square_MWRu):
         # normal values
         n = 24
-        pd_in = 0.2
-        D = 0.3
+        att_in = {'particle__diameter': 0.25, 'organic__content': 0.2}
+        A = 0.3
         E = 1
                  
-        pd_out = example_square_MWRu._particle_diameter_node(n,pd_in,E,D)
+        att_node = example_square_MWRu._attributes_node(n,att_in,E,A)
         
-        expected_pd_out = 0.2
+        expected_att_node = 0.25
     
-        np.testing.assert_allclose(pd_out, expected_pd_out,rtol = 1e-4)
+        np.testing.assert_allclose(att_node['particle__diameter'], expected_att_node,rtol = 1e-4)
 
     def test_special_values_1(self, example_square_MWRu):
         # deposition depth is 0
         n = 24
-        pd_in = 0.2
-        D = 0
+        att_in = {'particle__diameter': 0.25, 'organic__content': 0.2}
+        A = 0
         E = 1    
 
-        pd_out = example_square_MWRu._particle_diameter_node(n,pd_in,E,D)
+        att_node = example_square_MWRu._attributes_node(n,att_in,E,A)
 
-        expected_pd_out = 0
+        expected_att_node = 0
     
-        np.testing.assert_allclose(pd_out, expected_pd_out,rtol = 1e-4)
+        np.testing.assert_allclose(att_node['particle__diameter'], expected_att_node, rtol = 1e-4)
 
     def test_bad_values_1(self, example_square_MWRu):
         # incoming particle diameter is np.nan
         with pytest.raises(ValueError) as exc_info:
             n = 24
-            pd_in = np.nan
-            D = 0.5
+            att_in = {'particle__diameter': np.nan, 'organic__content': 0.2}
+            A = 0.5
             E = 0.5
             # grid node depth = 1, node particle diameter = 0.075 
             
-            pd_out = example_square_MWRu._particle_diameter_node(n,pd_in,E,D)
+            att_node = example_square_MWRu._attributes_node(n,att_in,E,A)
             
         assert exc_info.match("node particle diameter is negative, nan or inf")
 
@@ -939,10 +983,11 @@ class Test_particle_diameter_node:
         # incoming particle diameter is np.inf
         with pytest.raises(ValueError) as exc_info:
             n = 24
-            pd_in = np.inf
-            D = 0.5
+            att_in = {'particle__diameter': np.inf, 'organic__content': 0.2}
+            A = 0.5
             E = 0.5
             
-            pd_out = example_square_MWRu._particle_diameter_node(n,pd_in,E,D)
+            att_node = example_square_MWRu._attributes_node(n,att_in,E,A)
             
         assert exc_info.match("node particle diameter is negative, nan or inf")  
+        
