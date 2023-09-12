@@ -167,30 +167,64 @@ def example_pile_MWRu():
     MWRu.pf = pf
     return(MWRu)
 
-
+@pytest.fixture
 def example_flume_MWRu():
-    mg, lsn, pf, cc = flume_maker()
-    mg.at_node['topographic__elevation'] = mg.at_node['topographic__elevation']
-    dem = mg.at_node['topographic__elevation']
+    # Define the flume terrain
+    dxdy = 10
+    rows = 15 #
+    columns = 15 # must be odd number
+    ls_width = 3 # number of cells wide, must be odd number
+    ls_length = 5 # number of cells long
+    slope_above_break = 0.6
+    slope_below_break = 0.001
+    slope_break = .15 # ratio of flume 2 to place the slope break
+    soil_thickness = 2
+    Dp = 0.2 # particle diameter
+    qsi_max = 5
+    ls_h = 5
+    deposition_rule = "critical_slope"
 
-    # mg.at_node['topographic__elevation'][55] = mg.at_node['topographic__elevation'][55]+1.3
-
-    # domain for plots
-    xmin = mg.node_x.min(); xmax = mg.node_x.max(); ymin = mg.node_y.min(); ymax = mg.node_y.max()
-
-    # set boundary conditions, add flow direction
+    # run parameters
+    qsc = 0.01 # pick qsc
+    Sc = 0.05 # critical slope
+    k = 0.00328 # erosion coefficient
+    
+    mg, lsn, pf, cc = flume_maker(rows = rows, columns = columns, slope_above_break = slope_above_break
+                                  , slope_below_break = slope_below_break, slope_break = slope_break, 
+                                  ls_width = ls_width, ls_length = ls_length, dxdy = dxdy, double_flume = True)
+    # set boundary conditions
     mg.set_closed_boundaries_at_grid_edges(True, True, True, True) #close all boundaries
-
-
+    dem = mg.at_node['topographic__elevation']
     mg.set_watershed_boundary_condition_outlet_id(cc,dem)
-        
-    mg.at_node['node_id'] = np.hstack(mg.nodes)
 
-    # flow directions
-    fa = FlowAccumulator(mg, 
-                          'topographic__elevation',
-                          flow_director='FlowDirectorD8')
-    fa.run_one_step()
+    # add flow direction field
+    fd = FlowDirectorMFD(mg, diagonals=True,
+                          partition_method = 'square_root_of_slope')
+    fd.run_one_step()
+
+    # soil thickness
+    thickness = np.ones(mg.number_of_nodes)*soil_thickness
+    mg.add_field('node', 'soil__thickness',thickness)
+    
+    # define landslide location
+    mg.at_node['mass__wasting_id'] = np.zeros(mg.number_of_nodes).astype(int)
+    mg.at_node['mass__wasting_id'][lsn] = 1
+    
+    # define landslide thickness
+    mg.at_node['soil__thickness'][lsn] = ls_h  
+    # set particle diameter
+    mg.at_node['particle__diameter'] = np.ones(len(mg.node_x))*Dp
+    # create the mw_dict
+    mw_dict = {'critical slope':[Sc], 'threshold flux':qsc,
+                'scour coefficient':k, 'effective particle diameter':Dp, 'max observed flow depth': qsi_max}
+
+    example_flume_MWRu = MassWastingRunout(mg, 
+                             mw_dict,
+                             tracked_attributes = ['particle__diameter'],
+                             grain_shear = True,
+                             save = True)
+    example_flume_MWRu.pf = pf 
+    return example_flume_MWRu
 
 
 def flume_maker(rows = 5, columns = 3, slope_above_break =.5, slope_below_break =.05, slope_break = 0.7, 
@@ -232,7 +266,7 @@ def flume_maker(rows = 5, columns = 3, slope_above_break =.5, slope_below_break 
     cc : np array
         0-d array of landslide node column id's'
     """
-    def single_flume():
+    def single_flume(slope_break):
         r = rows
         c = columns
         sbr_r = slope_break
@@ -274,9 +308,9 @@ def flume_maker(rows = 5, columns = 3, slope_above_break =.5, slope_below_break 
         return mg, lsn, pf, cc
 
     if double_flume:
-        mg1, lsn1, pf1, cc1 = single_flume()
-        mg2, lsn2, pf2, cc2 = single_flume()
-        mg = RasterModelGrid((rows*2,columns+2),dxdy)
+        mg1, lsn1, pf1, cc1 = single_flume(slope_break)
+        mg2, lsn2, pf2, cc2 = single_flume(min(slope_break*2,.8))
+        mg = RasterModelGrid((rows*2, columns+2), dxdy)
         # translate mg1 vertically to the max height of mg2 minus the wall height plus the flume slope * dxdy
         t1 = mg1.at_node['topographic__elevation'] + mg2.at_node['topographic__elevation'].max()-dxdy*2+dxdy*slope_above_break
         t2 = mg2.at_node['topographic__elevation']

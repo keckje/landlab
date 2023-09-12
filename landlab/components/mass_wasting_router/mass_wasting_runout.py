@@ -364,7 +364,6 @@ class MassWastingRunout(Component):
         self._tracked_attributes = tracked_attributes 
         self.save = save
         self.routing_partition_method = 'slope' # 'square_root_of_slope', see flow director       
-        self.print_model_iteration_frequency = 20 # how often to pring to screen
         
         if tracked_attributes:
             self.track_attributes = True
@@ -644,8 +643,6 @@ class MassWastingRunout(Component):
                 # update iteration counter
                 c+=1
                 
-                if c%self.print_model_iteration_frequency == 0:
-                    print(c)  
                                             
     def _prep_initial_mass_wasting_material(self, inn, mw_i):
         """ Algorithm 1 - from an initial source area (landslide), prepare the 
@@ -1045,12 +1042,15 @@ class MassWastingRunout(Component):
                     
                     # update tracked attributes for sediment movement during settlement
                     if self._tracked_attributes:
+                        # create the att_in dict, this is the same for each of the rn
+                        att_in = {}
                         for key in self._tracked_attributes:
-                            pd_ = self._grid.at_node[key][n]                    
-                            for v, n_ in enumerate(rn):
-                                A = qso_s_i[v]
-                                self._grid.at_node[key][n_] = self._attributes_node(n_,pd_,0,A)
-    
+                            att_in[key] = self._grid.at_node[key][n]
+                        for v, n_ in enumerate(rn):
+                            A = qso_s_i[v]
+                            n_att_d_ = self._attributes_node(n_,att_in,0,A)
+                            for key in self._tracked_attributes:
+                                self._grid.at_node[key][n_] = n_att_d_[key]
 
     def _erosion(self, n, depth, slpn, att_in = None):
         """if self.grain_shear is True, determines the erosion depth using 

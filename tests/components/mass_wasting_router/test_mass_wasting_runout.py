@@ -9,15 +9,15 @@ from landlab.components.mass_wasting_router import MassWastingRunout
 
 class Test__virtual_laboratory_smoke_tests():
     
-    def test_pile_runout(self, example_pile_MWRu):
-        """smoke test using a pile of debris. Check that profile of final
-        topographic surface doesn't change and that mass is always conserved"""
+    def test_pile_collapse(self, example_pile_MWRu):
+        """Smoke test. Model the collapse of a pile of debris. Check that profile 
+        of final topographic surface is as expected and that mass is conserved"""
         MWRu = example_pile_MWRu
         MWRu.run_one_step(run_id = 0)
         c = np.array(list(MWRu.runout_evo_maps[0].keys())).max()
         # profile check
         pf = MWRu.topo_evo_maps[0][c][MWRu.pf]
-        pf_e = nparray([1.        ,  1.        ,  1.        ,  1.        ,  1.,
+        pf_e = np.array([1.        ,  1.        ,  1.        ,  1.        ,  1.,
                 1.        ,  1.        ,  1.        ,  1.        ,  1.        ,
                 1.00689131,  1.15535961,  1.19989349,  1.21732111,  1.30154153,
                 1.3445694 ,  1.34283688,  1.48417702,  1.58725816,  1.73725816,
@@ -36,9 +36,33 @@ class Test__virtual_laboratory_smoke_tests():
         np.testing.assert_allclose(pf, pf_e, atol = 1e-4)
         np.testing.assert_allclose(0, DEMdf.sum(), atol = 1e-4)
         
-    #def test_narrow_flume_runout():
         
-    #def test_wide_flume_runout():
+    def test_runout_down_wide_flume(self, example_flume_MWRu):
+        """Smoke test. Model the runout of a life-size landslide on a wide, benched
+        flume. Check that profile of final topographic surface is as expected and 
+        that mass is conserved"""
+        MWRu = example_flume_MWRu
+        MWRu.run_one_step(run_id = 0)
+        pf_d = MWRu._grid.at_node['topographic__elevation'][MWRu.pf]
+        e_pf_d = np.array([  0.00000000e+00,   1.00000000e-02,   3.46146640e-01,
+                 7.96382423e-01,   1.26551021e+00,   1.78098693e+00,
+                 5.99254585e+00,   1.19924018e+01,   1.79929081e+01,
+                 2.39937102e+01,   2.99951784e+01,   3.59991415e+01,
+                 4.20016948e+01,   4.80019563e+01,   5.40027069e+01,
+                 6.00042779e+01,   6.10689779e+01,   6.20441117e+01,
+                 6.16599761e+01,   6.60082284e+01,   7.20065223e+01,
+                 7.80068818e+01,   8.40073608e+01,   9.00075348e+01,
+                 9.10800000e+01,   9.70800000e+01,   1.03080000e+02,
+                 1.09080000e+02,   1.15080000e+02,   1.26080000e+02])
+        
+        # mass conservation check
+        DEMi = MWRu._grid.at_node['topographic__initial_elevation']
+        DEMf = MWRu._grid.at_node['topographic__elevation']
+        DEMdf = DEMf-DEMi
+        
+        np.testing.assert_allclose(pf_d, e_pf_d, rtol = 1e-4)
+        np.testing.assert_allclose(0, DEMdf.sum(), atol = 1e-4)        
+        
         
 class Test__mass_conserved():
         
@@ -160,7 +184,6 @@ class Test__prep_initial_mass_wasting_material():
 
 
 class Test_E_A_qso_determine_attributes():
-
     
     def test_normal_1(self, example_square_MWRu):
         """Test that output of _E_A_qso_determine_attributes shows correct directional
@@ -367,7 +390,7 @@ class Test_update_E_dem(object):
         E = example_square_MWRu._grid.at_node['energy__elevation'][n]
         np.testing.assert_allclose(E_e, E, rtol = 1e-4)    
 
-#@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
+
 class Test_update_dem(object):
     def test_normal_1(self, example_square_MWRu):
         """test topographic dem updated correctly"""
@@ -381,7 +404,6 @@ class Test_update_dem(object):
         np.testing.assert_allclose(el_e, el, rtol = 1e-4)
 
 
-#@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
 class Test_update_channel_particle_diameter(object):
     def test_normal_1(self, example_square_MWRu):
         """test particle diameter updated correctly"""
@@ -393,7 +415,6 @@ class Test_update_channel_particle_diameter(object):
         np.testing.assert_allclose(pd_e, pd, rtol = 1e-4)
 
 
-#@pytest.mark.xfail(reason = "TDD, test class is not yet implemented")
 class Test_settle(object):
     def test_normal_1(self, example_flat_mg):
         """test topographic__elevation and soil__thickness change correctly"""
