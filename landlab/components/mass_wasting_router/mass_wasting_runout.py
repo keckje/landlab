@@ -94,9 +94,9 @@ class MassWastingRunout(Component):
     >>> example_square_MWR.run_one_step(run_id = 0)
     
     By subtracting the initial DEM from the final DEM, which has evolvod as 
-    a consequence of topographic change caused by the runout, we can see areas
-    of aggradation (positive values) and erosion (negative values). Nodes with 
-    topographic change represents the runout extent.
+    a consequence of the runout, we can see areas of aggradation (positive values) 
+    and erosion (negative values). Nodes with non-zero topographic change 
+    represent the runout extent.
         
     >>> DEM_initial = mg.at_node['topographic__initial_elevation']
     >>> DEM_final = mg.at_node['topographic__elevation']    
@@ -475,8 +475,7 @@ class MassWastingRunout(Component):
         # prepare data containers for saving model images and behavior statistics    
         self.arndn_r = {}
         if self.save:
-            # lists and dictionaries to save variables each model iteration, 
-            # useful for checking model behavior
+            # lists and dictionaries for tracking model behavior 
             self.EL = [] # entrainment depth / regolith depth
             self.AL = [] # aggradation (deposition) depth
             self.qsiL = [] # incoming flux (qsi)
@@ -489,8 +488,7 @@ class MassWastingRunout(Component):
             self.flowing_volume = {} # the total volume [m3] of the mobilized runout material
             # dictionaries, that save the entire model grid field each model iteration
             # for all fields listed below
-            # usefull for creating movies of how the flow and terrain evolve or checking
-            # model behavior
+            # usefull for creating movies of how the flow and terrain evolve
             self.runout_evo_maps = {} # runout material + topographic__elevation
             self.topo_evo_maps = {}# topographic__elevation
             self.att_r = {} # attribute value
