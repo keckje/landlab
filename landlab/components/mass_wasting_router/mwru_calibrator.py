@@ -152,7 +152,7 @@ class MWRu_calibrator():
         
             
         # run the model
-        self.MWRu.run_one_step(dt = 0)
+        self.MWRu.run_one_step(run_id = 0)
         # create the modeldiff_m field
         diff = self.mg.at_node['topographic__elevation'] - self.mg.at_node['topographic__initial_elevation']
         self.mg.at_node['dem_dif_m'] = diff
@@ -480,7 +480,7 @@ class MWRu_calibrator():
         theta = np.arctan(self.MWRu.s)
         
            
-        if self.MWRu.VaryDp: 
+        if self.MWRu.grain_shear: 
             print('grain-inertia')
             # phi = np.arctan(self.MWRu.slpc)
             phi = np.arctan(0.32)
