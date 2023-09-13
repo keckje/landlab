@@ -19,6 +19,10 @@ from .watershed import (
 )
 from .window_statistic import calculate_window_statistic
 
+from .channel_network_grid_tools import(
+    ChannelNetworkToolsInterpretor,
+    ChannelNetworkToolsMapper)
+
 __all__ = [
     "add_halo",
     "count_repeated_values",
