@@ -72,42 +72,48 @@ class LandslideProbability(Component):
 
     .. code-block:: python
 
-        LandslideProbability(grid,
-                             number_of_iterations=250,
-                             groundwater__recharge_distribution='uniform',
-                             groundwater__recharge_min_value=5.,
-                             groundwater__recharge_max_value=121.)
+        LandslideProbability(
+            grid,
+            number_of_iterations=250,
+            groundwater__recharge_distribution="uniform",
+            groundwater__recharge_min_value=5.0,
+            groundwater__recharge_max_value=121.0,
+        )
 
     Option 2 - Lognormal recharge
 
     .. code-block:: python
 
-        LandslideProbability(grid,
-                             number_of_iterations=250,
-                             groundwater__recharge_distribution='lognormal',
-                             groundwater__recharge_mean=30.,
-                             groundwater__recharge_standard_deviation=0.25)
+        LandslideProbability(
+            grid,
+            number_of_iterations=250,
+            groundwater__recharge_distribution="lognormal",
+            groundwater__recharge_mean=30.0,
+            groundwater__recharge_standard_deviation=0.25,
+        )
 
     Option 3 - Lognormal_spatial recharge
 
     .. code-block:: python
 
-        LandslideProbability(grid,
-                             number_of_iterations=250,
-                             groundwater__recharge_distribution='lognormal_spatial',
-                             groundwater__recharge_mean=np.random.randint(20, 120, grid_size),
-                             groundwater__recharge_standard_deviation=np.random.rand(grid_size))
+        LandslideProbability(
+            grid,
+            number_of_iterations=250,
+            groundwater__recharge_distribution="lognormal_spatial",
+            groundwater__recharge_mean=np.random.randint(20, 120, grid_size),
+            groundwater__recharge_standard_deviation=np.random.rand(grid_size),
+        )
 
     Option 4 - Data_driven_spatial recharge
 
     .. code-block:: python
 
-        LandslideProbability(grid,
-                             number_of_iterations=250,
-                             groundwater__recharge_distribution='data_driven_spatial',
-                             groundwater__recharge_HSD_inputs=[HSD_dict,
-                                                               HSD_id_dict,
-                                                               fract_dict])
+        LandslideProbability(
+            grid,
+            number_of_iterations=250,
+            groundwater__recharge_distribution="data_driven_spatial",
+            groundwater__recharge_HSD_inputs=[HSD_dict, HSD_id_dict, fract_dict],
+        )
 
     Option 5 - Event soil saturated zone thickness 
 
@@ -150,7 +156,7 @@ class LandslideProbability(Component):
     that provide the input to this component, use the *input_var_names*
     class property.
 
-    >>> sorted(LandslideProbability.input_var_names)  # doctest: +NORMALIZE_WHITESPACE
+    >>> sorted(LandslideProbability.input_var_names)
     ['soil__density',
      'soil__internal_friction_angle',
      'soil__maximum_total_cohesion',
@@ -164,17 +170,17 @@ class LandslideProbability(Component):
 
     Check the units for the fields.
 
-    >>> LandslideProbability.var_units('topographic__specific_contributing_area')
+    >>> LandslideProbability.var_units("topographic__specific_contributing_area")
     'm'
 
     Create an input field.
 
-    >>> grid.at_node['topographic__slope'] = np.random.rand(grid.number_of_nodes)
+    >>> grid.at_node["topographic__slope"] = np.random.rand(grid.number_of_nodes)
 
     If you are not sure about one of the input or output variables, you can
     get help for specific variables.
 
-    >>> LandslideProbability.var_help('soil__transmissivity')  # doctest: +NORMALIZE_WHITESPACE
+    >>> LandslideProbability.var_help("soil__transmissivity")
     name: soil__transmissivity
     description:
       mode rate of water transmitted through a unit width of saturated
@@ -213,7 +219,7 @@ class LandslideProbability(Component):
     and run it.
 
     >>> ls_prob = LandslideProbability(grid)
-    >>> np.allclose(grid.at_node['landslide__probability_of_failure'], 0.)
+    >>> np.allclose(grid.at_node["landslide__probability_of_failure"], 0.0)
     True
 
     Run the *calculate_landslide_probability* method to update output
@@ -223,14 +229,14 @@ class LandslideProbability(Component):
 
     Check the output variable names.
 
-    >>> sorted(ls_prob.output_var_names) # doctest: +NORMALIZE_WHITESPACE
+    >>> sorted(ls_prob.output_var_names)
     ['landslide__probability_of_failure',
      'soil__mean_relative_wetness',
      'soil__probability_of_saturation']
 
     Check the output from the component, including array at one node.
 
-    >>> np.allclose(grid.at_node['landslide__probability_of_failure'], 0.)
+    >>> np.allclose(grid.at_node["landslide__probability_of_failure"], 0.0)
     False
     >>> core_nodes = ls_prob.grid.core_nodes
 
