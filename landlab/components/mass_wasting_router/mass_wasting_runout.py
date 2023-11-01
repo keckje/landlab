@@ -78,7 +78,7 @@ class MassWastingRunout(Component):
     >>> k = 0.02
     >>> mw_dict = {'critical slope':Sc, 
     ...            'threshold flux':qsc,
-    ...            'scour coefficient':k,
+    ...            'erosion coefficient':k,
     ...            'max observed flow depth':1,
     ... }    
     >>> save = True
@@ -240,7 +240,7 @@ class MassWastingRunout(Component):
         mw_dict : dictionary
             a dictionary of parameters that control the behavoir of the model.
             The dicitonary must include the following keys: 'critical slope', 
-            'threshold flux' and 'scour coefficient'.
+            'threshold flux' and 'erosion coefficient'.
             
                
                 where: 
@@ -265,8 +265,8 @@ class MassWastingRunout(Component):
                  
                         mw_dict = {'critical slope': required user input,
                                    'threshold flux': required user input,
-                                   'scour coefficient': required user input,
-                                   'scour exponent, m': 0.5,
+                                   'erosion coefficient': required user input,
+                                   'erosion exponent, m': 0.5,
                                    'vol solids concentration': 0.6,
                                    'density solids': 2650,
                                    'typical flow thickness, scour': 3,
@@ -274,7 +274,7 @@ class MassWastingRunout(Component):
                                    'max observed flow depth': 4}
                         
                         where: 
-                            - scour exponent: the exponent of equation 11.
+                            - erosion exponent: the exponent of equation 11.
                             - vol solids concentration: the ratio of the volume of
                             the solids to the total volume of the flow mixture.
                             - density solids: the denisty of the solids [kg/m3]
@@ -391,10 +391,10 @@ class MassWastingRunout(Component):
         
         self.qsc = self.mw_dict['threshold flux']
         
-        self.cs = self.mw_dict['scour coefficient']
+        self.k = self.mw_dict['erosion coefficient']
         
-        if 'scour exponent' in self.mw_dict:
-            self.eta = self.mw_dict['scour exponent']
+        if 'erosion exponent' in self.mw_dict:
+            self.eta = self.mw_dict['erosion exponent']
         else:
             self.eta = 0.2               
            
@@ -1103,12 +1103,12 @@ class MassWastingRunout(Component):
             Tcn = np.cos(theta)*self.vs*self.ros*(Dp**2)*(dudz**2)
             Tau = Tcn*np.tan(phi)
 
-            Ec = (self.cs*Tau**self.eta)      
+            Ec = (self.k*Tau**self.eta)      
 
         else:
             # quasi-static approximation
             Tau = self.ro_mw*self.g*depth*(np.sin(theta))
-            Ec = self.cs*(Tau)**self.eta
+            Ec = self.k*(Tau)**self.eta
             u = np.nan
         
         dmx = self._grid.at_node['soil__thickness'][n]

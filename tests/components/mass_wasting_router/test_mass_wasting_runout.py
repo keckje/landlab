@@ -109,7 +109,7 @@ class Test__prep_initial_mass_wasting_material():
         cs = 0.02
     
         mw_dict = {'critical slope':slpc, 'threshold flux':SD,
-                    'scour coefficient':cs}
+                    'erosion coefficient':cs}
             
         example_square_MWRu = MassWastingRunout(example_square_mg,
                                                 mw_dict, 
@@ -151,7 +151,7 @@ class Test__prep_initial_mass_wasting_material():
         cs = 0.02
     
         mw_dict = {'critical slope':slpc, 'threshold flux':SD,
-                    'scour coefficient':cs}
+                    'erosion coefficient':cs}
             
         example_square_MWRu = MassWastingRunout(example_square_mg,
                                                 mw_dict, 
@@ -434,7 +434,7 @@ class Test_settle(object):
         
         
         mw_dict = {'critical slope':slpc, 'threshold flux':SD,
-                   'scour coefficient':cs, 
+                   'erosion coefficient':cs, 
                    'max observed flow depth':mofd}               
         example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
                                            settle_deposit = True)
@@ -470,7 +470,7 @@ class Test_settle(object):
         mofd = 4
         
         mw_dict = {'critical slope':slpc, 'threshold flux':SD,
-                   'scour coefficient':cs, 
+                   'erosion coefficient':cs, 
                    'max observed flow depth':mofd}               
         example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
                                            settle_deposit = True)
@@ -504,7 +504,7 @@ class Test_settle(object):
         mofd = 4
         
         mw_dict = {'critical slope':slpc, 'threshold flux':SD,
-                   'scour coefficient':cs, 
+                   'erosion coefficient':cs, 
                    'max observed flow depth':mofd}               
         example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
                                            settle_deposit = True)
@@ -536,7 +536,7 @@ class Test_settle(object):
         mofd = 4
         
         mw_dict = {'critical slope':slpc, 'threshold flux':SD,
-                   'scour coefficient':cs, 
+                   'erosion coefficient':cs, 
                    'max observed flow depth':mofd}               
         example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
                                            settle_deposit = True)
@@ -568,7 +568,7 @@ class Test_settle(object):
         mofd = 4
         
         mw_dict = {'critical slope':slpc, 'threshold flux':SD,
-                   'scour coefficient':cs, 
+                   'erosion coefficient':cs, 
                    'max observed flow depth':mofd}               
         example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
                                            settle_deposit = True)

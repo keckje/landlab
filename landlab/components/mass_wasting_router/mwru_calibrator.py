@@ -61,9 +61,9 @@ class MWRu_calibrator():
                     upper limit of elevation range included in analysis.
                 mg : raster model grid
                     has fields topographic__elevation, topographic__steepest_slope and dem_dif_o and dem_dif_m
-                channel_nodes : np.array
-                    np.array of node ids of all nodes in channel, output from channel profiler
-                channel_distance : np.array
+                runout_profile_nodes : np.array
+                    np.array of node id numbers that define profile on raster model grid
+                runout_profile_distance : np.array
                     np.array of distance at each node from outlet, output from channel profiler
                 cL : float
                     length of grid cell for modeled grid
@@ -161,7 +161,7 @@ class MWRu_calibrator():
         if self.plot_tf == True:
             plt.figure('iteration'+str(self.it))
             imshow_grid(self.mg,"dem_dif_m",cmap = 'RdBu_r')
-            plt.title("it:{}, slpc:{}, SD:{}, alpha:{}".format(self.it, self.MWRu.slpc, self.MWRu.SD, self.MWRu.cs ))
+            plt.title("it:{}, slpc:{}, SD:{}, alpha:{}".format(self.it, self.MWRu.slpc, self.MWRu.qsc, self.MWRu.k ))
             plt.clim(-1,1)
             plt.show()
                         
@@ -182,53 +182,52 @@ class MWRu_calibrator():
         el_l = self.pcd['el_l']
         el_h = self.pcd['el_h']
         
-        channel_nodes = self.pcd['channel_nodes']
+        runout_profile_nodes = self.pcd['runout_profile_nodes']
         
         # extract all nodes between lower and upper profile limits
         # use observed runout dem to get elevations
         demd_ = mg.at_node['dem_dif_o']
         dem_ = mg.at_node['topographic__initial_elevation']+demd_
-        cel = dem_[channel_nodes]
-        mask = (cel > el_l) & (cel < el_h)
-        channel_nodes = channel_nodes[mask]
-        channel_distance = self.pcd['channel_distance'][mask]
-        runout_distance = (channel_distance-channel_distance.max())*-1
+        pel = dem_[runout_profile_nodes] # elevation of profile nodes 
+        mask = (pel > el_l) & (pel < el_h)
+        runout_profile_nodes = runout_profile_nodes[mask]
+        runout_distance = self.pcd['runout_profile_distance'][mask]
         node_slope = mg.at_node['topographic__steepest_slope']
         cL = self.pcd['cL']
                
         def cv_mass_change(cn):
 
             el = dem[cn]
-            # cumulative downstream deposition and upstream scour
-            # dp: change > 0; Mask dem to get matching array of elevation
+
+            # at point cn along the profile, produces 4 different metrics:
+
+            # metric 1, Vt: cumulative aggradation downslope of point cn
             dp = demd[demd>0]; dem_dp = dem[demd>0]
-            # sc: change < 0; Mask dem to get matching array of elevation
-            sc = demd[demd<0]; dem_sc = dem[demd<0]
-
-            # sum masked dp and and sc
-            # deposition below elevation
             dpe = np.nansum(dp[(dem_dp<el)&(dem_dp>=el_l)])
-            # scour above elevation
+            Vt = dpe*dA # multiply by cell area to get volume
+            
+            # metric 2, dV: cumulative scour upstream of point cn
+            sc = demd[demd<0]; dem_sc = dem[demd<0]
             sce = np.nansum(sc[(dem_sc>el)&(dem_sc<=el_h)])
-            # multiply by cell area to get volume
-            Vt = dpe*dA
-            dV = sce*dA
+            dV = sce*dA # multiply by cell area to get volume
 
-            # cumulative volumetric change in the downstream direction
+            # metric 3, Vd: cumulative erosion and aggradation downslope of point cn
             dd = np.nansum(demd[(dem<=el) & (dem>=el_l)])
             Vd = dd*dA
             
-            # cumulative flow volume past station along profile
-            du = np.nansum(demd[(dem>=el) & (dem<=el_h)])*-1 # multiply by negative 1 because upslope erosion is moves past station
+            # metric 4, Vu: cumulative flow volume past point cn
+            #               equivalent to the cumulative erosion and aggradation 
+            #               upslope of point cn * -1.
+            du = np.nansum(demd[(dem>=el) & (dem<=el_h)])*-1 
             Vu = du*dA
 
             # get channel characteristics
             # same, nut get node distance
-            cd = channel_distance[channel_nodes == cn]
-            rd = runout_distance[channel_nodes == cn]
+            rd = runout_distance[runout_profile_nodes == cn]
             # node slope
             cns = node_slope[cn]
-            return Vu, Vd, dV, Vt, cns, cn, cd, rd, el        
+            #return Vu, Vd, dV, Vt, cns, cn, cd, rd, el 
+            return Vu, Vd, dV, Vt, cns, cn, rd, el
 
         dem_m = mg.at_node['topographic__elevation']
         if datatype == "modeled":
@@ -239,10 +238,10 @@ class MWRu_calibrator():
             dem = mg.at_node['topographic__initial_elevation']+demd
 
         mbL = []
-        for cn in channel_nodes:
+        for cn in runout_profile_nodes:
             mbL.append(cv_mass_change(cn))
         mbLdf = pd.DataFrame(mbL)
-        mbLdf.columns = ['Vu','Vd','dV','Vt', 'slope', 'node','distance','runout_distance','elevation']
+        mbLdf.columns = ['Vu','Vd','dV','Vt', 'slope', 'node','runout_distance','elevation']
         return mbLdf
 
 
@@ -275,60 +274,6 @@ class MWRu_calibrator():
         T = X+U+O
         omegaT = X/T-U/T-O/T+1
         return omegaT
-
-
-    # def _RMSEomegaT(self, metric = 'runout'):
-    #     """ determines intersection, over estimated area and underestimated area of
-    #     modeled debris flow deposition and the the calibration metric OmegaT following
-    #     Heiser et al. (2017)
-    #     """
-    #     c1 = 1; c2 = 1
-    #     n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
-    #     na = self.mg.dx*self.mg.dy
-    #     if metric == 'runout':
-    #         n_o =  n_a[np.abs(self.mg.at_node['dem_dif_o']) > 0] # get nodes with scour or deposit
-    #         n_m = n_a[np.abs(self.mg.at_node['dem_dif_m']) > 0]
-    #     elif metric == 'deposition':
-    #         n_o =  n_a[self.mg.at_node['dem_dif_o'] > 0] # get nodes with scour or deposit
-    #         n_m = n_a[self.mg.at_node['dem_dif_m'] > 0]
-    #     elif metric == 'scour':
-    #         n_o =  n_a[self.mg.at_node['dem_dif_o'] < 0] # get nodes with scour or deposit
-    #         n_m = n_a[self.mg.at_node['dem_dif_m'] < 0]
-    #     self.a_o = n_o*na
-    #     self.a_m = n_m*na
-    #     n_x =  n_o[np.isin(n_o,n_m)]#np.unique(np.concatenate([n_o,n_m])) # intersection nodes
-    #     n_u = n_o[~np.isin(n_o,n_m)] # underestimate
-    #     n_o = n_m[~np.isin(n_m,n_o)] # overestimate
-    #     A_x = len(n_x)*self.mg.dx*self.mg.dy
-    #     A_u = len(n_u)*self.mg.dx*self.mg.dy
-    #     A_o = len(n_o)*self.mg.dx*self.mg.dy
-        
-    #     observed_ = self.mg.at_node['dem_dif_o']
-    #     mask =  np.abs(observed_)>0 
-    #     modeled_ = self.mg.at_node['dem_dif_m']       
-    #     # mask_m =  np.abs(modeled_)<=0 
-    #     # modeled_[mask_m] = np.abs(modeled_).max()
-        
-    #     modeled = modeled_[mask]
-    #     observed = observed_[mask]
-    #     X = A_x*self._SE(observed, modeled)
-    #     # if X != 0:
-    #     #     X = 1/X
-    #     modeled = modeled_[n_u]
-    #     observed = observed_[n_u]
-    #     U = A_u*self._MSE(observed, modeled)
-    #     # if U != 0:
-    #     #     U = 1/(U*c)
-    #     modeled = modeled_[n_o]
-    #     observed = observed_[n_o]        
-    #     O = A_o*self._MSE(observed, modeled)
-    #     # if O != 0:
-    #     #     O = 1/(O*c)
-    #     T = X+c1*U+c2*O
-    #     # T = X/T+(U*c)/T+(O*c)/T
-    #     RMSEomegaT =1/T# X/T-U/T-O/T+1 ##
-    #     return RMSEomegaT
-
 
 
     def _Vse(self, metric = 'runout'):
@@ -400,8 +345,7 @@ class MWRu_calibrator():
             modeled = np.array([0])
             observed = np.array([0])
         MSE = (((observed-modeled)**2).mean())
-        return MSE
-    
+        return MSE   
     
     
     def _SE(self, observed, modeled):
@@ -427,18 +371,6 @@ class MWRu_calibrator():
         RSEmax = (((observed-modeled)**2).mean())**0.5
         return RSEmax
 
-    
-    # def _deposition_thickness_error(self, metric = 'max'):
-    #     """computes the deposition thickness error (DTE)"""
-    #     if metric == 'max':
-    #         h_o = self.mg.at_node['dem_dif_o'].max()
-    #         h_m = self.mg.at_node['dem_dif_m'].max()
-    #     if metric == 'mean':
-    #         h_o = (self.mg.at_node['dem_dif_o'][self.mg.at_node['dem_dif_o']>0].mean())/self.a_o
-    #         h_m = (self.mg.at_node['dem_dif_m'][self.mg.at_node['dem_dif_m']>0].mean())/self.a_m            
-
-    #     DTE = 1/(np.exp(np.abs(h_o-h_m)))
-    #     return DTE
 
     def _prior_probability(self, value, key):
         """get prior liklihood of parameter value"""
@@ -480,17 +412,21 @@ class MWRu_calibrator():
         theta = np.arctan(self.MWRu.s)
         
            
-        if self.MWRu.grain_shear: 
+        if self.MWRu.grain_shear:
+            
+            # use mean particle diameter in runout profile for representative grain size used to determine erosion rate
+            _Dp = self.MWRu._grid.at_node['particle__diameter'][self.pcd['runout_profile_nodes']].mean()
+            
             print('grain-inertia')
             # phi = np.arctan(self.MWRu.slpc)
             phi = np.arctan(0.32)
             
             # inertial stresses
             us = (self.MWRu.g*self.MWRu.h*self.MWRu.s)**0.5
-            u = us*5.75*np.log10(self.MWRu.h/self.MWRu.Dp)
+            u = us*5.75*np.log10(self.MWRu.h/_Dp)
             
             dudz = u/self.MWRu.h
-            Tcn = np.cos(theta)*self.MWRu.vs*self.MWRu.ros*(self.MWRu.Dp**2)*(dudz**2)
+            Tcn = np.cos(theta)*self.MWRu.vs*self.MWRu.ros*(_Dp**2)*(dudz**2)
             tau = Tcn*np.tan(phi)
         else:
             print('quasi-static')
@@ -509,38 +445,38 @@ class MWRu_calibrator():
         """A check that average erosion depth (E) does not exceed flux constraint (E must be less than qsc*lambda)
         if average E>qsc, resample alpha until average E<(qsc*lambda) OR resample qsc until (qsc*lambda)>E"""
         # this may not be needed anymore
-        equivalent_E = self._determine_erosion(self.MWRu.cs, solve_for = 'E_l')*self.mg.dx
+        equivalent_E = self._determine_erosion(self.MWRu.k, solve_for = 'E_l')*self.mg.dx
         
         _lambda = 1 # when slpc is low, model is unstable when ~E>qsc.
         if self.MWRu.slpc>=0.02: # when slpc is low (<0.01), model is unstable when ~E>(10*qsc)
             _lambda = 10
             
-        if equivalent_E>self.MWRu.SD*_lambda:
+        if equivalent_E>self.MWRu.qsc*_lambda:
             
             # if alpha is a calibration parameter, first apply constraint to alpha, since model is very sensitive to qsc
-            if self.params.get('cs'):
+            if self.params.get('k'):
                 # check if minimum alpha range is low enough
-                equivalent_E_min = self._determine_erosion(self.params['cs'][0], solve_for = 'E_l')*self.mg.dx
-                if equivalent_E_min>self.MWRu.SD*_lambda:
+                equivalent_E_min = self._determine_erosion(self.params['k'][0], solve_for = 'E_l')*self.mg.dx
+                if equivalent_E_min>self.MWRu.qsc*_lambda:
                     msg = "minimum possible alpha value results in too much erosion"
                     raise ValueError(msg)                    
                 else: # if low enough, randomly select an alpha value until the erosion equivalent is less than qsc
                     _pass = False
                     _i_ = 0
                     while _pass is False:
-                        candidate_value['cs'], jump_size['cs'] = self._candidate_value(selected_value['cs'], 'cs')
-                        self.MWRu.cs = candidate_value['cs']
-                        equivalent_E = self._determine_erosion(self.MWRu.cs, solve_for = 'E_l')*self.mg.dx
-                        if equivalent_E < self.MWRu.SD*_lambda:
+                        candidate_value['k'], jump_size['k'] = self._candidate_value(selected_value['k'], 'k')
+                        self.MWRu.k = candidate_value['k']
+                        equivalent_E = self._determine_erosion(self.MWRu.k, solve_for = 'E_l')*self.mg.dx
+                        if equivalent_E < self.MWRu.qsc*_lambda:
                             _pass = True
                             print('resampled, E<qsc')
                         _i_+=1; 
                         if _i_%1000 == 0:
-                            print('after {} runs, all sampled cs values are too large, decrease the lower range of cs'.format(_i_))
+                            print('after {} runs, all sampled k values are too large, decrease the lower range of k'.format(_i_))
             # if alpha is not a calibration parameter (alpha is fixed), then adjust qsc to meet constraint
             elif self.params.get('SD'):
                 # check if maximum qsi range is high enough
-                equivalent_E = self._determine_erosion(self.MWRu.cs, solve_for = 'E_l')*self.mg.dx
+                equivalent_E = self._determine_erosion(self.MWRu.k, solve_for = 'E_l')*self.mg.dx
                 if equivalent_E > self.params['SD'][1]*_lambda:
                     msg = "maximum possible qsc value is less than erosion caused by alpha value"
                     raise ValueError(msg)   
@@ -549,8 +485,8 @@ class MWRu_calibrator():
                     _i_ = 0
                     while _pass is False:
                         candidate_value['SD'], jump_size['SD'] = self._candidate_value(selected_value['SD'], 'SD')
-                        self.MWRu.SD = candidate_value['SD']
-                        if equivalent_E < self.MWRu.SD*_lambda:
+                        self.MWRu.qsc = candidate_value['SD']
+                        if equivalent_E < self.MWRu.qsc*_lambda:
                             _pass = True
                             print('resampled, qsc>E')
                             _i_+=1; 
@@ -631,9 +567,9 @@ class MWRu_calibrator():
             # update instance parameter values
             for key in self.params:
                 if key == 'SD':
-                    self.MWRu.SD = candidate_value[key]
-                if key == 'cs':
-                    self.MWRu.cs = candidate_value[key]
+                    self.MWRu.qsc = candidate_value[key]
+                if key == 'k':
+                    self.MWRu.k = candidate_value[key]
                 if key == 'slpc':
                     self.MWRu.slpc = candidate_value[key] # slpc is a list
                 if key == "t_avg":
@@ -655,16 +591,6 @@ class MWRu_calibrator():
 
                 # MSE of Qt
                 MSE_Qt = self._MSE_Qt()
-                # observed = self.mg.at_node['dem_dif_o'][self.mbLdf_o['node']] 
-                # modeled = self.mg.at_node['dem_dif_m'][self.mbLdf_m['node']]
-                
-                # RMSE of topographic profile
-                # RMSE_pf = self._RMSE(observed, modeled)
-                
-                # RMSE of topography
-                # observed = self.mg.at_node['dem_dif_o'] 
-                # modeled = self.mg.at_node['dem_dif_m']
-                # RMSE_map = self._RMSE(observed, modeled)
                 
                 # omegaT
                 omegaT = self._omegaT(metric = self.omega_metric)
@@ -731,43 +657,166 @@ class MWRu_calibrator():
             # self.LHvals.columns = ['iteration', 'model iterations', 'total_mobilized_volume', 'obs_mean_total_flow',  'prior', 'omegaT','MSE_Qt^1/2','Vse^1/2', 'RMSE_pf', 'RMSE_map', 'DTE', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
             self.LHvals.columns = ['iteration', 'model iterations', 'total_mobilized_volume', 'obs_mean_total_flow',  'prior', 'omegaT','MSE_Qt^1/2','Vse^1/2', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
 
-        self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] # {'SD': selected_value_SD, 'cs': selected_value_cs}
+        self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] # {'SD': selected_value_SD, 'k': selected_value_cs}
 
 
-def profile_distance(mg, xsd):
-    """small function to get distance between profile nodes. Nodes must be ordered
-    from downstream to upstream (lowest to highest)"""
+def plot_node_field_with_shaded_dem(mg, field, save_name= None, plot_name = None, figsize = (12,9.5), 
+                                    cmap = 'terrain', fontsize = 12, alpha = 0.5, cbr = None,  norm = None, allow_colorbar = True,
+                                    var_name = None, var_units = None):
+    if plot_name is None:
+        plt.figure(field,figsize= figsize)
+    else:
+        plt.figure(plot_name,figsize= figsize)   
+    imshow_grid_at_node(mg, 'hillshade', cmap='Greys',
+                      grid_units=('coordinates', 'coordinates'),
+                      shrink=0.75, var_name=None, var_units=None,output=None,allow_colorbar=False,color_for_closed= 'white')
+    fig = imshow_grid_at_node(mg, field, cmap= cmap,
+                      grid_units=('coordinates', 'coordinates'),
+                      shrink=0.75, var_name=var_name, var_units=var_units,alpha = alpha,output=None,
+                      color_for_closed= None, color_for_background = None,
+                      norm = norm,allow_colorbar=allow_colorbar)
+    
+    plt.xlim([mg.x_of_node[mg.core_nodes].min()-20, mg.x_of_node[mg.core_nodes].max()+20])
+    plt.ylim([mg.y_of_node[mg.core_nodes].min()-20, mg.y_of_node[mg.core_nodes].max()+20])
+    
+    plt.xticks(fontsize = fontsize)
+    plt.yticks(fontsize = fontsize)
+    plt.title(plot_name)
+    if cbr is None:
+        r_values = mg.at_node[field][mg.core_nodes]
+        plt.clim(r_values.min(), r_values.max())
+    else:
+        
+        plt.clim(cbr[0], cbr[1])
 
-    x = mg.node_x[xsd]
-    y = mg.node_y[xsd]
+    if save_name is not None:
+        plt.savefig(save_name+'.png', dpi = 300, bbox_inches='tight')
 
-    def path(x,y):
-        return(((x[0]-x[1])**2+(y[0]-y[1])**2)**.5)
-    dist = [0]
-    for i in range(len(x)-1):
-        x_ = x[i:i+2]
-        y_ = y[i:i+2]
-        dist.append(dist[i]+path(x_,y_))
-    return np.array(dist)
+def define_profile_nodes(mg):
+    """begininng from the outlet of the domain of interest (e.g., watershed outlet),
+    map the channel to above the crown or just upslope of the initial mass wasting area by
+    selecting points along the channel centerline. Mass wasting runout flow volume will 
+    be computed at each node along the profile"""
+    
+    # create to plot from which profile will be mapped
+    plot_node_field_with_shaded_dem(mg,field = 'drainage_area', fontsize = 10,
+                                    cmap = 'YlGnBu',alpha = .35,figsize = (12,12),
+                                    allow_colorbar = False)
+    lsn = np.hstack(mg.nodes)[mg.at_node['mass__wasting_id']>0]
+    plt.scatter(mg.node_x[lsn], mg.node_y[lsn], 
+           marker = '.', color = 'k',alpha = 1, label = 'initial mass wasting area nodes')
+    
+    
+    def title_message(s):
+        print(s)
+        plt.title(s, fontsize=12)
+        plt.draw()
+    
+    title_message('   Beginning from the upslope edge of the landslide crown or just upstream of the initial mass wasting\n \
+        material, map the centerline of the potential runout path. Use interactive plot to zoom and scroll \n \
+        (right click to zoom out). Move mouse curser, press "space" to add point, "delete" to remove point \n \
+        and "enter" to finish.')
+                  
+    pts = np.asarray(plt.ginput(n=0, timeout=0, 
+                                mouse_add=None, 
+                                mouse_pop=None, 
+                                mouse_stop=None))
+    plt.plot(pts[:, 0], pts[:, 1], 'w--', lw=1)
+    plt.plot(pts[:, 0], pts[:, 1], 'rx', lw=2)
+    # grid node coordinates, translated to origin of 0,0
+    gridx = mg.node_x#-grid.node_x[0] 
+    gridy = mg.node_y#-grid.node_y[0]
+    # extent of each cell in grid        
+    ndxe = gridx+mg.dx/2
+    ndxw = gridx-mg.dx/2
+    ndyn = gridy+mg.dy/2
+    ndys = gridy-mg.dy/2
+    nodes = mg.nodes.reshape(mg.shape[0]*mg.shape[1],1)
+    
+    def _coordinates_to_rmg_nodes(pts):
+        '''convert a list of coordinates that describe the map (x and y) location 
+        of a profile to the coincident raster model grid nodes located along that profile
+        '''
+        Lnodelist = [] # list of lists of all nodes that coincide with each link
+        Ldistlist = []
+        Lxy= [] # list of all nodes the coincide with the profile
+        k = 0 # node number
+        cdist = 0 # cummulative distance along profile
+        while k < len(pts)-1:
+            x0 = pts[k][0] #x and y of downstream link node
+            y0 = pts[k][1]
+            x1 = pts[k+1][0] #x and y of upstream link node
+            y1 = pts[k+1][1]
+            # create 1000 points along domain of link
+            X = np.linspace(x0,x1,1000)
+            Xs = X-x0 # change begin value to zero
+            # determine distance from upstream node to each point
+            # y value of points
+            if Xs.max() ==0: # if a vertical link (x is constant)
+                vals = np.linspace(y0,y1,1000)
+                dist = vals-y0 # distance along link, from downstream end upstream
+                dist = dist.max()-dist #distance from updtream to downstream
+            else: # all their lines
+                vals = y0+(y1-y0)/(x1-x0)*(Xs)
+                dist = ((vals-y0)**2+Xs**2)**.5
+                # dist = dist.max()-dist #distance from upstream to downstream
+            # match points along link (vals) with grid cells that coincide with link
+            nodelist = [] # list of nodes along link
+            distlist = [] # list of distance along link corresponding to node
+            for i,v in enumerate(vals):
+                x = X[i]
+                mask = (ndyn>=v) & (ndys<=v) & (ndxe>=x) & (ndxw<=x)  # mask - use multiple boolean tests to find cell that contains point on link
+                node = nodes[mask] # use mask to extract node value
+                if node.shape[0] > 1:
+                    node = np.array([node[0]])
+                # create list of all nodes that coincide with linke
+                if node not in nodelist: #if node not already in list, append - many points will be in same cell; only need to list cell once
+                    nodelist.append(node[0][0])
+                    distlist.append(dist[i]+cdist)
+                    xy = {'linkID':k,
+                        'node':node[0][0],
+                          'x':gridx[node[0][0]],
+                          'y':gridy[node[0][0]],
+                          'dist':dist[i]+cdist}
+                    Lxy.append(xy)
+            if k+1 == len(pts)-1:
+                Lnodelist.append(nodelist)
+                Ldistlist.append(distlist)
+            else:
+                Lnodelist.append(nodelist[:-1])
+                Ldistlist.append(distlist[:-1])
+            pnodes = np.hstack(Lnodelist)
+            pnodedist = np.hstack(Ldistlist)
+            # pnodedist = np.cumsum(((mg.node_x[pnodes][1:]-mg.node_x[pnodes][:-1])**2+ \
+            #                        (mg.node_y[pnodes][1:]-mg.node_y[pnodes][:-1])**2)**.5)
+            k+=1
+            cdist = cdist + dist.max()
+        return (pnodes, pnodedist, Lxy)
+    pnodes, pnodedist, Lxy = _coordinates_to_rmg_nodes(pts)
+    
+    plt.plot(mg.node_x[pnodes],mg.node_y[pnodes],'g.', alpha = 0.5, markersize = 3, label = 'profile nodes')
+    plt.legend()
+
+    return pnodes, pnodedist, Lxy 
 
 
-def profile_plot(mg, xsd, ef = 2, xlim = None, ylim = None, aspect = None, figsize = None, fs = 8):
-    """function for plotting profile of observed pre and post-failure topography"""
-
-    dist = profile_distance(mg, xsd)
-
-    y_dem = mg.at_node['topographic__elevation'][xsd]
-    y_demdf_o = y_dem+mg.at_node['dem_dif_o'][xsd]*ef
+def profile_plot(mg, pnodes, pnodedist, ef = 2, xlim = None, ylim = None, aspect = None, figsize = None, fs = 8):
+    """function for plotting profile of observed pre- and post-failure topography"""
+    y_dem = mg.at_node['topographic__elevation'][pnodes]
+    y_demdf_o = y_dem+mg.at_node['dem_dif_o'][pnodes]*ef
 
     if figsize:
         fig, ax = plt.subplots(figsize=figsize)
     else:
-        fig, ax = plt.subplots(figsize=(2,5))
-    plt.plot(dist,y_dem,'k-', alpha = .66, linewidth = 1)
-    plt.plot(dist,y_demdf_o,'k--', alpha = 0.66, linewidth = 1, label = 'observed deposition and scour')
+        fig, ax = plt.subplots(figsize=(3,5))
+    plt.plot(pnodedist,y_dem,'k-', alpha = .66, linewidth = 1, label = 'pre-runout-DEM')
+    plt.plot(pnodedist,y_demdf_o,'k--', alpha = 0.66, linewidth = 1, label = 'post-runout-DEM')
     plt.grid(alpha = 0.5)
     plt.legend(fontsize = fs)
     ax.tick_params(axis = 'both', which = 'major', labelsize = fs)
+    plt.xlabel('horizontal distance, [m]',fontsize = fs)
+    plt.ylabel('vertical distance, [m]',fontsize = fs)
+    plt.title('observed pre- and post- runout DEM', fontsize = fs)
     if aspect:
         ax.set_aspect(aspect)
     else:
@@ -776,21 +825,3 @@ def profile_plot(mg, xsd, ef = 2, xlim = None, ylim = None, aspect = None, figsi
         plt.xlim([xlim])
     if ylim:
         plt.ylim([ylim])
-
-
-def view_profile_nodes(mg, xsd, field = 'dem_dif_o', clim = None, cmap = 'RdBu_r'):
-    """function for plotting profile nodes in plan view, over any node field"""
-
-    plt.figure(figsize = (5,5))
-    imshow_grid_at_node(mg, field,cmap = cmap)
-    x_mn = mg.node_x[np.abs(mg.at_node['dem_dif_o']) > 0].min()
-    x_mx = mg.node_x[np.abs(mg.at_node['dem_dif_o']) > 0].max()
-    y_mn = mg.node_y[np.abs(mg.at_node['dem_dif_o']) > 0].min()
-    y_mx = mg.node_y[np.abs(mg.at_node['dem_dif_o']) > 0].max()
-    plt.xlim([x_mn, x_mx])
-    plt.ylim([y_mn, y_mx])
-    if clim:
-        plt.clim(clim)
-    plt.plot(mg.node_x[xsd],mg.node_y[xsd],'g.', alpha = 0.5, markersize = 3, label = 'profile nodes')
-    plt.legend(fontsize = 7)
-    plt.show()

@@ -46,7 +46,7 @@ def example_square_MWRu(example_square_mg):
 
     mw_dict = {'critical slope':slpc, 
                'threshold flux':SD,
-               'scour coefficient':cs,
+               'erosion coefficient':cs,
                'max observed flow depth':mofd}
 
     tracked_attributes = ['particle__diameter','organic__content']
@@ -160,7 +160,7 @@ def example_pile_MWRu():
     pf = mg.nodes[int((r-1)/2),:]
     # set up MWR
     mw_dict = {'critical slope':slpc, 'threshold flux':qsi,
-                'scour coefficient':k, 'scour exponent':eta,
+                'erosion coefficient':k, 'erosion exponent':eta,
                 'effective particle diameter':Dp}
     MWRu = MassWastingRunout(mg, mw_dict, effective_qsi = False, save = True, grain_shear = False, settle_deposit = True)
     MWRu.r = r
@@ -216,7 +216,7 @@ def example_flume_MWRu():
     mg.at_node['particle__diameter'] = np.ones(len(mg.node_x))*Dp
     # create the mw_dict
     mw_dict = {'critical slope':[Sc], 'threshold flux':qsc,
-                'scour coefficient':k, 'effective particle diameter':Dp, 'max observed flow depth': qsi_max}
+                'erosion coefficient':k, 'effective particle diameter':Dp, 'max observed flow depth': qsi_max}
 
     example_flume_MWRu = MassWastingRunout(mg, 
                              mw_dict,
