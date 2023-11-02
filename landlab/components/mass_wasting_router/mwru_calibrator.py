@@ -8,7 +8,11 @@ import matplotlib.pyplot as plt
 
 from landlab import RasterModelGrid
 from landlab.components import SinkFillerBarnes, FlowAccumulator, FlowDirectorMFD
-from landlab.components.mass_wasting_router import MassWastingRunout
+from landlab.components.mass_wasting_router.mass_wasting_runout import (MassWastingRunout,
+                                                                       shear_stress_grains,
+                                                                       shear_stress_static,
+                                                                       erosion_rate,
+                                                                       erosion_coef_k)
 from landlab import imshow_grid
 
 from landlab import imshow_grid_at_node
@@ -18,6 +22,10 @@ class MWRu_calibrator():
     MassWastingRunout to observed landslide runout and/or scour and deposition
 
     author: Jeff Keck
+    
+    TODO:
+    is _check_E_lessthan_lambda_times_qsc needed?
+    save data for plots
     """
 
     def __init__(self,
@@ -323,6 +331,7 @@ class MWRu_calibrator():
 
         observed = self.mbLdf_o[self.RMSE_metric] 
         modeled = self.mbLdf_m[self.RMSE_metric]
+        self.trial_qs_profiles[self.it] = modeled
         CA = self.mg.dx*self.mg.dy
         MSE_Qt = self._MSE(observed, modeled)/(self.Qtm**2)
         
@@ -413,30 +422,52 @@ class MWRu_calibrator():
         
            
         if self.MWR.grain_shear:
-            
             # use mean particle diameter in runout profile for representative grain size used to determine erosion rate
-            _Dp = self.MWR._grid.at_node['particle__diameter'][self.pcd['runout_profile_nodes']].mean()
+            Dp = self.MWR._grid.at_node['particle__diameter'][self.pcd['runout_profile_nodes']].mean()
+            tau = shear_stress_grains(self.MWR.vs,
+                                                   self.MWR.ros,
+                                                   Dp,
+                                                   self.MWR.h,
+                                                   self.MWR.s,
+                                                   self.MWR.g)
             
-            print('grain-inertia')
-            # phi = np.arctan(self.MWR.slpc)
-            phi = np.arctan(0.32)
+            # # use mean particle diameter in runout profile for representative grain size used to determine erosion rate
+            # _Dp = self.MWR._grid.at_node['particle__diameter'][self.pcd['runout_profile_nodes']].mean()
             
-            # inertial stresses
-            us = (self.MWR.g*self.MWR.h*self.MWR.s)**0.5
-            u = us*5.75*np.log10(self.MWR.h/_Dp)
+            # print('grain-inertia')
+            # # phi = np.arctan(self.MWR.slpc)
+            # phi = np.arctan(0.32)
             
-            dudz = u/self.MWR.h
-            Tcn = np.cos(theta)*self.MWR.vs*self.MWR.ros*(_Dp**2)*(dudz**2)
-            tau = Tcn*np.tan(phi)
+            # # inertial stresses
+            # us = (self.MWR.g*self.MWR.h*self.MWR.s)**0.5
+            # u = us*5.75*np.log10(self.MWR.h/_Dp)
+            
+            # dudz = u/self.MWR.h
+            # Tcn = np.cos(theta)*self.MWR.vs*self.MWR.ros*(_Dp**2)*(dudz**2)
+            # tau = Tcn*np.tan(phi)
         else:
-            print('quasi-static')
-            tau = rodf*self.MWR.g*self.MWR.h*(np.sin(theta))
+            
+            tau = shear_stress_static(self.MWR.vs,
+                                      self.MWR.ros,
+                                      self.MWR.rof,
+                                      self.MWR.h,
+                                      self.MWR.s,
+                                      self.MWR.g)
+            # print('quasi-static')
+            # tau = rodf*self.MWR.g*self.MWR.h*(np.sin(theta))
     
         if solve_for == 'k':
-            k = value*self.mg.dx/(tau**self.MWR.eta)
+            # k = value*self.mg.dx/(tau**self.MWR.eta)
+            k = erosion_coef_k(value,
+                               tau,
+                               self.MWR.eta,
+                               self.mg.dx)
             return_value = k
         elif solve_for == 'E_l':
-            E_l = (value*tau**self.MWR.eta)/self.mg.dx
+            E_l = erosion_rate(value,tau,
+                               self.MWR.eta,
+                               self.mg.dx)
+            # E_l = (value*tau**self.MWR.eta)/self.mg.dx
             return_value = E_l
         return return_value
 
@@ -661,7 +692,7 @@ class MWRu_calibrator():
 
 
 def plot_node_field_with_shaded_dem(mg, field, save_name= None, plot_name = None, figsize = (12,9.5), 
-                                    cmap = 'terrain', fontsize = 12, k = 0.5, cbr = None,  norm = None, allow_colorbar = True,
+                                    cmap = 'terrain', fontsize = 12, alpha = 0.5, cbr = None,  norm = None, allow_colorbar = True,
                                     var_name = None, var_units = None):
     if plot_name is None:
         plt.figure(field,figsize= figsize)
@@ -672,7 +703,7 @@ def plot_node_field_with_shaded_dem(mg, field, save_name= None, plot_name = None
                       shrink=0.75, var_name=None, var_units=None,output=None,allow_colorbar=False,color_for_closed= 'white')
     fig = imshow_grid_at_node(mg, field, cmap= cmap,
                       grid_units=('coordinates', 'coordinates'),
-                      shrink=0.75, var_name=var_name, var_units=var_units,k = k,output=None,
+                      shrink=0.75, var_name=var_name, var_units=var_units,alpha = alpha,output=None,
                       color_for_closed= None, color_for_background = None,
                       norm = norm,allow_colorbar=allow_colorbar)
     
@@ -693,10 +724,8 @@ def plot_node_field_with_shaded_dem(mg, field, save_name= None, plot_name = None
         plt.savefig(save_name+'.png', dpi = 300, bbox_inches='tight')
 
 def define_profile_nodes(mg):
-    """begininng from the outlet of the domain of interest (e.g., watershed outlet),
-    map the channel to above the crown or just upslope of the initial mass wasting area by
-    selecting points along the channel centerline. Mass wasting runout flow volume will 
-    be computed at each node along the profile"""
+    """begininng from above the mass wasting source area, map the runout profile. 
+    Mass wasting runout flow volume will be computed at each node along the runoutprofile"""
     
     # create to plot from which profile will be mapped
     plot_node_field_with_shaded_dem(mg,field = 'drainage_area', fontsize = 10,
@@ -759,7 +788,6 @@ def define_profile_nodes(mg):
             else: # all their lines
                 vals = y0+(y1-y0)/(x1-x0)*(Xs)
                 dist = ((vals-y0)**2+Xs**2)**.5
-                # dist = dist.max()-dist #distance from upstream to downstream
             # match points along link (vals) with grid cells that coincide with link
             nodelist = [] # list of nodes along link
             distlist = [] # list of distance along link corresponding to node
@@ -787,8 +815,6 @@ def define_profile_nodes(mg):
                 Ldistlist.append(distlist[:-1])
             pnodes = np.hstack(Lnodelist)
             pnodedist = np.hstack(Ldistlist)
-            # pnodedist = np.cumsum(((mg.node_x[pnodes][1:]-mg.node_x[pnodes][:-1])**2+ \
-            #                        (mg.node_y[pnodes][1:]-mg.node_y[pnodes][:-1])**2)**.5)
             k+=1
             cdist = cdist + dist.max()
         return (pnodes, pnodedist, Lxy)
@@ -825,3 +851,19 @@ def profile_plot(mg, pnodes, pnodedist, ef = 2, xlim = None, ylim = None, aspect
         plt.xlim([xlim])
     if ylim:
         plt.ylim([ylim])
+
+def profile_distance(mg, xsd):
+    """small function to get distance between profile nodes. Nodes must be ordered
+    from downstream to upstream (lowest to highest)"""
+
+    x = mg.node_x[xsd]
+    y = mg.node_y[xsd]
+
+    def path(x,y):
+        return(((x[0]-x[1])**2+(y[0]-y[1])**2)**.5)
+    dist = [0]
+    for i in range(len(x)-1):
+        x_ = x[i:i+2]
+        y_ = y[i:i+2]
+        dist.append(dist[i]+path(x_,y_))
+    return np.array(dist)

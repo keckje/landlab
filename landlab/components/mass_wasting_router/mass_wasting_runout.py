@@ -1093,17 +1093,29 @@ class MassWastingRunout(Component):
             if depth < Dp: # grain size dependent erosion breaks if depth<Dp
                 Dp = depth*.99
             
-            phi = np.arctan(0.32)
+            # phi = np.arctan(0.32)
             
-            # inertial stresses
-            us = (self.g*depth*slpn)**0.5
-            u = us*5.75*np.log10(depth/Dp)
+            # # inertial stresses
+            # us = (self.g*depth*slpn)**0.5
+            # u = us*5.75*np.log10(depth/Dp)
+            u = flow_velocity(Dp,depth,slpn,self.g)
             
-            dudz = u/depth
-            Tcn = np.cos(theta)*self.vs*self.ros*(Dp**2)*(dudz**2)
-            Tau = Tcn*np.tan(phi)
+            # dudz = u/depth
+            # Tcn = np.cos(theta)*self.vs*self.ros*(Dp**2)*(dudz**2)
+            # Tau = Tcn*np.tan(phi)
+            
+            Tau = shear_stress_grains(self.vs,
+                                      self.ros,
+                                      Dp,
+                                      depth,
+                                      slpn,
+                                      self.g)
 
-            Ec = (self.k*Tau**self.eta)      
+            # Ec = (self.k*Tau**self.eta)
+            Ec = self._grid.dx*erosion_rate(self.k,
+                                            Tau,
+                                            self.eta,
+                                            self._grid.dx)
 
         else:
             # quasi-static approximation
@@ -1360,3 +1372,33 @@ class MassWastingRunout(Component):
                 msg = "out-flowing {} is zero, negative, nan or inf".format(key)
                 raise ValueError(msg)
         return att_out
+
+
+def flow_velocity(Dp,h,s,g):
+    us = (g*h*s)**0.5
+    u = us*5.75*np.log10(h/Dp)
+    return u
+
+def shear_stress_grains(vs,ros,Dp,h,s,g):
+    theta = np.arctan(s)
+    phi = np.arctan(0.32)   
+    u = flow_velocity(Dp,h,s,g)
+    dudz = u/h
+    Tcn = np.cos(theta)*vs*ros*(Dp**2)*(dudz**2)
+    tau = Tcn*np.tan(phi)
+    return tau
+
+def shear_stress_static(vs,ros,rof,h,s,g):
+    theta = np.arctan(s)
+    rodf = vs*ros+(1-vs)*rof
+    tau = rodf*g*h*(np.sin(theta))
+    return tau
+
+def erosion_rate(k,tau,eta,dx):
+    E_l = (k*tau**eta)/dx
+    return E_l
+        
+def erosion_coef_k(E_l,tau,eta,dx):
+    k = E_l*dx/(tau**eta)
+    return k     
+        
