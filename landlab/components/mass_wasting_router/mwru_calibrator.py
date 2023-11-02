@@ -420,44 +420,23 @@ class MWRu_calibrator():
         rodf = self.MWR.vs*self.MWR.ros+(1-self.MWR.vs)*self.MWR.rof
         theta = np.arctan(self.MWR.s)
         
-           
         if self.MWR.grain_shear:
             # use mean particle diameter in runout profile for representative grain size used to determine erosion rate
             Dp = self.MWR._grid.at_node['particle__diameter'][self.pcd['runout_profile_nodes']].mean()
             tau = shear_stress_grains(self.MWR.vs,
-                                                   self.MWR.ros,
-                                                   Dp,
-                                                   self.MWR.h,
-                                                   self.MWR.s,
-                                                   self.MWR.g)
-            
-            # # use mean particle diameter in runout profile for representative grain size used to determine erosion rate
-            # _Dp = self.MWR._grid.at_node['particle__diameter'][self.pcd['runout_profile_nodes']].mean()
-            
-            # print('grain-inertia')
-            # # phi = np.arctan(self.MWR.slpc)
-            # phi = np.arctan(0.32)
-            
-            # # inertial stresses
-            # us = (self.MWR.g*self.MWR.h*self.MWR.s)**0.5
-            # u = us*5.75*np.log10(self.MWR.h/_Dp)
-            
-            # dudz = u/self.MWR.h
-            # Tcn = np.cos(theta)*self.MWR.vs*self.MWR.ros*(_Dp**2)*(dudz**2)
-            # tau = Tcn*np.tan(phi)
+                                      self.MWR.ros,
+                                      Dp,
+                                      self.MWR.h,
+                                      self.MWR.s,
+                                      self.MWR.g)
         else:
-            
             tau = shear_stress_static(self.MWR.vs,
                                       self.MWR.ros,
                                       self.MWR.rof,
                                       self.MWR.h,
                                       self.MWR.s,
                                       self.MWR.g)
-            # print('quasi-static')
-            # tau = rodf*self.MWR.g*self.MWR.h*(np.sin(theta))
-    
         if solve_for == 'k':
-            # k = value*self.mg.dx/(tau**self.MWR.eta)
             k = erosion_coef_k(value,
                                tau,
                                self.MWR.eta,
@@ -467,7 +446,6 @@ class MWRu_calibrator():
             E_l = erosion_rate(value,tau,
                                self.MWR.eta,
                                self.mg.dx)
-            # E_l = (value*tau**self.MWR.eta)/self.mg.dx
             return_value = E_l
         return return_value
 
@@ -506,9 +484,9 @@ class MWRu_calibrator():
                             print('after {} runs, all sampled k values are too large, decrease the lower range of k'.format(_i_))
             # if k is not a calibration parameter (k is fixed), then adjust qsc to meet constraint
             elif self.params.get('qsc'):
-                # check if maximum qsi range is high enough
+                # esimate of erosion depth caused by passage of one debriton
                 equivalent_E = self._determine_erosion(self.MWR.k, solve_for = 'E_l')*self.mg.dx
-                if equivalent_E > self.params['qsc'][1]*_lambda:
+                if equivalent_E > self.params['qsc'][1]*_lambda: # if erosion is less than lambda times qsc
                     msg = "maximum possible qsc value is less than erosion caused by k value"
                     raise ValueError(msg)   
                 else: # if high enough, randomly select a qsi value until that value exceeds the erosion equivalent of the k value
