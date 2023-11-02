@@ -95,7 +95,7 @@ class MWRu_calibrator():
         assert (profile_calib_dict is not None
                 ),"must provide parameters for either profile or planemetric evaluation"
 
-        self.MWRu = MassWastingRunout
+        self.MWR = MassWastingRunout
         self.mg = MassWastingRunout.grid
         self.params = params
         self.pcd = profile_calib_dict
@@ -142,17 +142,17 @@ class MWRu_calibrator():
         """run the model, determine the cumulative modeled deposition along the
         channel centerline"""
         # reset the dem to the initial dem and soil to initial soil depth
-        self.MWRu.grid.at_node['topographic__elevation'] = self.MWRu.grid.at_node['topographic__initial_elevation'].copy()
+        self.MWR.grid.at_node['topographic__elevation'] = self.MWR.grid.at_node['topographic__initial_elevation'].copy()
         self._update_topographic_slope()
-        self.MWRu.grid.at_node['energy__elevation'] = self.MWRu.grid.at_node['topographic__elevation'].copy()
-        self.MWRu.grid.at_node['soil__thickness'] = self.initial_soil_depth.copy()
+        self.MWR.grid.at_node['energy__elevation'] = self.MWR.grid.at_node['topographic__elevation'].copy()
+        self.MWR.grid.at_node['soil__thickness'] = self.initial_soil_depth.copy()
         self.mg.at_node['disturbance_map'] = np.full(self.mg.number_of_nodes, False)
         if self.mg.has_field("particle__diameter", at="node"):
             self.mg.at_node["particle__diameter"] = self.initial_particle_diameter.copy()
         
             
         # run the model
-        self.MWRu.run_one_step(run_id = 0)
+        self.MWR.run_one_step(run_id = 0)
         # create the modeldiff_m field
         diff = self.mg.at_node['topographic__elevation'] - self.mg.at_node['topographic__initial_elevation']
         self.mg.at_node['dem_dif_m'] = diff
@@ -161,7 +161,7 @@ class MWRu_calibrator():
         if self.plot_tf == True:
             plt.figure('iteration'+str(self.it))
             imshow_grid(self.mg,"dem_dif_m",cmap = 'RdBu_r')
-            plt.title("it:{}, slpc:{}, qsc:{}, k:{}".format(self.it, self.MWRu.slpc, self.MWRu.qsc, self.MWRu.k ))
+            plt.title("it:{}, slpc:{}, qsc:{}, k:{}".format(self.it, self.MWR.slpc, self.MWR.qsc, self.MWR.k ))
             plt.clim(-1,1)
             plt.show()
                         
@@ -170,7 +170,7 @@ class MWRu_calibrator():
         """updates the topographic__slope and flow directions fields using the 
         topographic__elevation field"""
         fd = FlowDirectorMFD(self.mg, surface="topographic__elevation", diagonals=True,
-                partition_method = self.MWRu.routing_partition_method)
+                partition_method = self.MWR.routing_partition_method)
         fd.run_one_step()
 
 
@@ -408,35 +408,35 @@ class MWRu_calibrator():
     
         """
     
-        rodf = self.MWRu.vs*self.MWRu.ros+(1-self.MWRu.vs)*self.MWRu.rof
-        theta = np.arctan(self.MWRu.s)
+        rodf = self.MWR.vs*self.MWR.ros+(1-self.MWR.vs)*self.MWR.rof
+        theta = np.arctan(self.MWR.s)
         
            
-        if self.MWRu.grain_shear:
+        if self.MWR.grain_shear:
             
             # use mean particle diameter in runout profile for representative grain size used to determine erosion rate
-            _Dp = self.MWRu._grid.at_node['particle__diameter'][self.pcd['runout_profile_nodes']].mean()
+            _Dp = self.MWR._grid.at_node['particle__diameter'][self.pcd['runout_profile_nodes']].mean()
             
             print('grain-inertia')
-            # phi = np.arctan(self.MWRu.slpc)
+            # phi = np.arctan(self.MWR.slpc)
             phi = np.arctan(0.32)
             
             # inertial stresses
-            us = (self.MWRu.g*self.MWRu.h*self.MWRu.s)**0.5
-            u = us*5.75*np.log10(self.MWRu.h/_Dp)
+            us = (self.MWR.g*self.MWR.h*self.MWR.s)**0.5
+            u = us*5.75*np.log10(self.MWR.h/_Dp)
             
-            dudz = u/self.MWRu.h
-            Tcn = np.cos(theta)*self.MWRu.vs*self.MWRu.ros*(_Dp**2)*(dudz**2)
+            dudz = u/self.MWR.h
+            Tcn = np.cos(theta)*self.MWR.vs*self.MWR.ros*(_Dp**2)*(dudz**2)
             tau = Tcn*np.tan(phi)
         else:
             print('quasi-static')
-            tau = rodf*self.MWRu.g*self.MWRu.h*(np.sin(theta))
+            tau = rodf*self.MWR.g*self.MWR.h*(np.sin(theta))
     
         if solve_for == 'k':
-            k = value*self.mg.dx/(tau**self.MWRu.eta)
+            k = value*self.mg.dx/(tau**self.MWR.eta)
             return_value = k
         elif solve_for == 'E_l':
-            E_l = (value*tau**self.MWRu.eta)/self.mg.dx
+            E_l = (value*tau**self.MWR.eta)/self.mg.dx
             return_value = E_l
         return return_value
 
@@ -445,19 +445,19 @@ class MWRu_calibrator():
         """A check that average erosion depth (E) does not exceed flux constraint (E must be less than qsc*lambda)
         if average E>qsc, resample k until average E<(qsc*lambda) OR resample qsc until (qsc*lambda)>E"""
         # this may not be needed anymore
-        equivalent_E = self._determine_erosion(self.MWRu.k, solve_for = 'E_l')*self.mg.dx
+        equivalent_E = self._determine_erosion(self.MWR.k, solve_for = 'E_l')*self.mg.dx
         
         _lambda = 1 # when slpc is low, model is unstable when ~E>qsc.
-        if self.MWRu.slpc>=0.02: # when slpc is low (<0.01), model is unstable when ~E>(10*qsc)
+        if self.MWR.slpc>=0.02: # when slpc is low (<0.01), model is unstable when ~E>(10*qsc)
             _lambda = 10
             
-        if equivalent_E>self.MWRu.qsc*_lambda:
+        if equivalent_E>self.MWR.qsc*_lambda:
             
             # if k is a calibration parameter, first apply constraint to k, since model is very sensitive to qsc
             if self.params.get('k'):
                 # check if minimum k range is low enough
                 equivalent_E_min = self._determine_erosion(self.params['k'][0], solve_for = 'E_l')*self.mg.dx
-                if equivalent_E_min>self.MWRu.qsc*_lambda:
+                if equivalent_E_min>self.MWR.qsc*_lambda:
                     msg = "minimum possible k value results in too much erosion"
                     raise ValueError(msg)                    
                 else: # if low enough, randomly select an k value until the erosion equivalent is less than qsc
@@ -465,9 +465,9 @@ class MWRu_calibrator():
                     _i_ = 0
                     while _pass is False:
                         candidate_value['k'], jump_size['k'] = self._candidate_value(selected_value['k'], 'k')
-                        self.MWRu.k = candidate_value['k']
-                        equivalent_E = self._determine_erosion(self.MWRu.k, solve_for = 'E_l')*self.mg.dx
-                        if equivalent_E < self.MWRu.qsc*_lambda:
+                        self.MWR.k = candidate_value['k']
+                        equivalent_E = self._determine_erosion(self.MWR.k, solve_for = 'E_l')*self.mg.dx
+                        if equivalent_E < self.MWR.qsc*_lambda:
                             _pass = True
                             print('resampled, E<qsc')
                         _i_+=1; 
@@ -476,7 +476,7 @@ class MWRu_calibrator():
             # if k is not a calibration parameter (k is fixed), then adjust qsc to meet constraint
             elif self.params.get('qsc'):
                 # check if maximum qsi range is high enough
-                equivalent_E = self._determine_erosion(self.MWRu.k, solve_for = 'E_l')*self.mg.dx
+                equivalent_E = self._determine_erosion(self.MWR.k, solve_for = 'E_l')*self.mg.dx
                 if equivalent_E > self.params['qsc'][1]*_lambda:
                     msg = "maximum possible qsc value is less than erosion caused by k value"
                     raise ValueError(msg)   
@@ -485,8 +485,8 @@ class MWRu_calibrator():
                     _i_ = 0
                     while _pass is False:
                         candidate_value['qsc'], jump_size['qsc'] = self._candidate_value(selected_value['qsc'], 'qsc')
-                        self.MWRu.qsc = candidate_value['qsc']
-                        if equivalent_E < self.MWRu.qsc*_lambda:
+                        self.MWR.qsc = candidate_value['qsc']
+                        if equivalent_E < self.MWR.qsc*_lambda:
                             _pass = True
                             print('resampled, qsc>E')
                             _i_+=1; 
@@ -567,14 +567,14 @@ class MWRu_calibrator():
             # update instance parameter values
             for key in self.params:
                 if key == 'qsc':
-                    self.MWRu.qsc = candidate_value[key]
+                    self.MWR.qsc = candidate_value[key]
                 if key == 'k':
-                    self.MWRu.k = candidate_value[key]
+                    self.MWR.k = candidate_value[key]
                 if key == 'slpc':
-                    self.MWRu.slpc = candidate_value[key] # slpc is a list
+                    self.MWR.slpc = candidate_value[key] # slpc is a list
                 if key == "t_avg":
                     # adjust thickness of landslide with id = 1
-                    self.MWRu._grid.at_node['soil__thickness'][self.MWRu._grid.at_node['mass__wasting_id'] == 1] = candidate_value[key]
+                    self.MWR._grid.at_node['soil__thickness'][self.MWR._grid.at_node['mass__wasting_id'] == 1] = candidate_value[key]
             
             if self.qsc_constraint:
                 self._check_E_lessthan_lambda_times_qsc(candidate_value, jump_size, selected_value)
@@ -629,12 +629,12 @@ class MWRu_calibrator():
                 p_table = p_table+[jump_size[key], candidate_value[key],selected_value[key]]
                 p_nms = p_nms+['jump_size_'+key, 'candidate_value_'+key, 'selected_value_'+key]
             if self.method == "omega":
-                self.LHList.append([i, self.MWRu.c, prior_t, omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                self.LHList.append([i, self.MWR.c, prior_t, omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             elif self.method == "RMSE":
-                self.LHList.append([i, self.MWRu.c, prior_t, MSE_Qt,1/RMSE_pf,1/RMSE_map,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                self.LHList.append([i, self.MWR.c, prior_t, MSE_Qt,1/RMSE_pf,1/RMSE_map,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
             elif self.method == "both":
-                # self.LHList.append([i, self.MWRu.c, self.TMV, self.Qtm, prior_t, omegaT, MSE_Qt**0.5, Vse**0.5, RMSE_pf, RMSE_map, DTE, candidate_posterior, acceptance_ratio, rv, msg, selected_posterior]+p_table)
-                self.LHList.append([i, self.MWRu.c, self.TMV, self.Qtm, prior_t, omegaT, MSE_Qt**0.5, Vse**0.5, candidate_posterior, acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                # self.LHList.append([i, self.MWR.c, self.TMV, self.Qtm, prior_t, omegaT, MSE_Qt**0.5, Vse**0.5, RMSE_pf, RMSE_map, DTE, candidate_posterior, acceptance_ratio, rv, msg, selected_posterior]+p_table)
+                self.LHList.append([i, self.MWR.c, self.TMV, self.Qtm, prior_t, omegaT, MSE_Qt**0.5, Vse**0.5, candidate_posterior, acceptance_ratio, rv, msg, selected_posterior]+p_table)
 
             # adjust jump size every N_cycles
             if i%self.N_cycles == 0:
