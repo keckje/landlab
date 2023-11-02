@@ -161,7 +161,7 @@ class MWRu_calibrator():
         if self.plot_tf == True:
             plt.figure('iteration'+str(self.it))
             imshow_grid(self.mg,"dem_dif_m",cmap = 'RdBu_r')
-            plt.title("it:{}, slpc:{}, SD:{}, alpha:{}".format(self.it, self.MWRu.slpc, self.MWRu.qsc, self.MWRu.k ))
+            plt.title("it:{}, slpc:{}, qsc:{}, k:{}".format(self.it, self.MWRu.slpc, self.MWRu.qsc, self.MWRu.k ))
             plt.clim(-1,1)
             plt.show()
                         
@@ -386,9 +386,9 @@ class MWRu_calibrator():
         return prior
 
 
-    def _determine_erosion(self, value, solve_for = 'alpha'):
+    def _determine_erosion(self, value, solve_for = 'k'):
         """
-        determine alpha using (26) or E_l using (27)  
+        determine k using (36) or E_l using (35)  
         
         Parameters
         ----------
@@ -404,7 +404,7 @@ class MWRu_calibrator():
     
         Returns
         -------
-        alpha
+        k
     
         """
     
@@ -432,9 +432,9 @@ class MWRu_calibrator():
             print('quasi-static')
             tau = rodf*self.MWRu.g*self.MWRu.h*(np.sin(theta))
     
-        if solve_for == 'alpha':
-            alpha = value*self.mg.dx/(tau**self.MWRu.eta)
-            return_value = alpha
+        if solve_for == 'k':
+            k = value*self.mg.dx/(tau**self.MWRu.eta)
+            return_value = k
         elif solve_for == 'E_l':
             E_l = (value*tau**self.MWRu.eta)/self.mg.dx
             return_value = E_l
@@ -443,7 +443,7 @@ class MWRu_calibrator():
 
     def _check_E_lessthan_lambda_times_qsc(self, candidate_value, jump_size, selected_value):
         """A check that average erosion depth (E) does not exceed flux constraint (E must be less than qsc*lambda)
-        if average E>qsc, resample alpha until average E<(qsc*lambda) OR resample qsc until (qsc*lambda)>E"""
+        if average E>qsc, resample k until average E<(qsc*lambda) OR resample qsc until (qsc*lambda)>E"""
         # this may not be needed anymore
         equivalent_E = self._determine_erosion(self.MWRu.k, solve_for = 'E_l')*self.mg.dx
         
@@ -453,14 +453,14 @@ class MWRu_calibrator():
             
         if equivalent_E>self.MWRu.qsc*_lambda:
             
-            # if alpha is a calibration parameter, first apply constraint to alpha, since model is very sensitive to qsc
+            # if k is a calibration parameter, first apply constraint to k, since model is very sensitive to qsc
             if self.params.get('k'):
-                # check if minimum alpha range is low enough
+                # check if minimum k range is low enough
                 equivalent_E_min = self._determine_erosion(self.params['k'][0], solve_for = 'E_l')*self.mg.dx
                 if equivalent_E_min>self.MWRu.qsc*_lambda:
-                    msg = "minimum possible alpha value results in too much erosion"
+                    msg = "minimum possible k value results in too much erosion"
                     raise ValueError(msg)                    
-                else: # if low enough, randomly select an alpha value until the erosion equivalent is less than qsc
+                else: # if low enough, randomly select an k value until the erosion equivalent is less than qsc
                     _pass = False
                     _i_ = 0
                     while _pass is False:
@@ -473,28 +473,28 @@ class MWRu_calibrator():
                         _i_+=1; 
                         if _i_%1000 == 0:
                             print('after {} runs, all sampled k values are too large, decrease the lower range of k'.format(_i_))
-            # if alpha is not a calibration parameter (alpha is fixed), then adjust qsc to meet constraint
-            elif self.params.get('SD'):
+            # if k is not a calibration parameter (k is fixed), then adjust qsc to meet constraint
+            elif self.params.get('qsc'):
                 # check if maximum qsi range is high enough
                 equivalent_E = self._determine_erosion(self.MWRu.k, solve_for = 'E_l')*self.mg.dx
-                if equivalent_E > self.params['SD'][1]*_lambda:
-                    msg = "maximum possible qsc value is less than erosion caused by alpha value"
+                if equivalent_E > self.params['qsc'][1]*_lambda:
+                    msg = "maximum possible qsc value is less than erosion caused by k value"
                     raise ValueError(msg)   
-                else: # if high enough, randomly select a qsi value until that value exceeds the erosion equivalent of the alpha value
+                else: # if high enough, randomly select a qsi value until that value exceeds the erosion equivalent of the k value
                     _pass = False
                     _i_ = 0
                     while _pass is False:
-                        candidate_value['SD'], jump_size['SD'] = self._candidate_value(selected_value['SD'], 'SD')
-                        self.MWRu.qsc = candidate_value['SD']
+                        candidate_value['qsc'], jump_size['qsc'] = self._candidate_value(selected_value['qsc'], 'qsc')
+                        self.MWRu.qsc = candidate_value['qsc']
                         if equivalent_E < self.MWRu.qsc*_lambda:
                             _pass = True
                             print('resampled, qsc>E')
                             _i_+=1; 
                             if _i_%1000 == 0:
-                                print('after {} runs, all sampled SD values are to small, increase the upper range of SD'.format(_i_))
+                                print('after {} runs, all sampled qsc values are to small, increase the upper range of qsc'.format(_i_))
                 
             else:
-                msg = "minimum possible alpha value results in too much erosion"
+                msg = "minimum possible k value results in too much erosion"
                 raise ValueError(msg)  
         else:
             print('E<qsc')
@@ -566,7 +566,7 @@ class MWRu_calibrator():
 
             # update instance parameter values
             for key in self.params:
-                if key == 'SD':
+                if key == 'qsc':
                     self.MWRu.qsc = candidate_value[key]
                 if key == 'k':
                     self.MWRu.k = candidate_value[key]
@@ -657,11 +657,11 @@ class MWRu_calibrator():
             # self.LHvals.columns = ['iteration', 'model iterations', 'total_mobilized_volume', 'obs_mean_total_flow',  'prior', 'omegaT','MSE_Qt^1/2','Vse^1/2', 'RMSE_pf', 'RMSE_map', 'DTE', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
             self.LHvals.columns = ['iteration', 'model iterations', 'total_mobilized_volume', 'obs_mean_total_flow',  'prior', 'omegaT','MSE_Qt^1/2','Vse^1/2', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
 
-        self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] # {'SD': selected_value_SD, 'k': selected_value_cs}
+        self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] # {'qsc': selected_value_SD, 'k': selected_value_cs}
 
 
 def plot_node_field_with_shaded_dem(mg, field, save_name= None, plot_name = None, figsize = (12,9.5), 
-                                    cmap = 'terrain', fontsize = 12, alpha = 0.5, cbr = None,  norm = None, allow_colorbar = True,
+                                    cmap = 'terrain', fontsize = 12, k = 0.5, cbr = None,  norm = None, allow_colorbar = True,
                                     var_name = None, var_units = None):
     if plot_name is None:
         plt.figure(field,figsize= figsize)
@@ -672,7 +672,7 @@ def plot_node_field_with_shaded_dem(mg, field, save_name= None, plot_name = None
                       shrink=0.75, var_name=None, var_units=None,output=None,allow_colorbar=False,color_for_closed= 'white')
     fig = imshow_grid_at_node(mg, field, cmap= cmap,
                       grid_units=('coordinates', 'coordinates'),
-                      shrink=0.75, var_name=var_name, var_units=var_units,alpha = alpha,output=None,
+                      shrink=0.75, var_name=var_name, var_units=var_units,k = k,output=None,
                       color_for_closed= None, color_for_background = None,
                       norm = norm,allow_colorbar=allow_colorbar)
     
