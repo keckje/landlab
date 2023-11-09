@@ -141,8 +141,7 @@ class MWRu_calibrator():
 
     
     def _maker(self,seed):
-        """prepares the np random generator"""
-        
+        """prepares the np random generator"""       
         self.maker = np.random.RandomState(seed=seed)
 
 

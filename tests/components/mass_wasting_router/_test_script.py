@@ -34,7 +34,7 @@ def example_square_mg():
                         at='node')
     
     mg.set_closed_boundaries_at_grid_edges(True, True, True, True) #close all boundaries
-    mg.set_watershed_boundary_condition_outlet_id(3,dem)   
+    # mg.set_watershed_boundary_condition_outlet_id(3,dem)   
     mg.at_node['node_id'] = np.hstack(mg.nodes)
     fd = FlowDirectorMFD(mg, diagonals=True,
                           partition_method = 'slope')
@@ -55,24 +55,22 @@ example_square_mg = example_square_mg()
 
 def example_square_MWRu(example_square_mg):
     slpc = [0.03]   
-    SD = 0.01
-    cs = 0.02
+    qsc = 0.01
+    k = 0.02
     mofd = 1
 
-    mw_dict = {'critical slope':slpc, 
-               'threshold flux':SD,
-               'scour coefficient':cs,
-               'max observed flow depth':mofd}
-    
-    save = True
-    
+
     tracked_attributes = ['particle__diameter','organic__content']
         
     example_square_MWRu = MassWastingRunout(example_square_mg,
-                                            mw_dict, 
+                                            critical_slope=slpc,
+                                            threshold_flux=qsc,
+                                            erosion_coefficient=k,
+                                            max_flow_depth_observed_in_field=mofd,
                                             save = True,                                    
                                             tracked_attributes = tracked_attributes)
     return(example_square_MWRu)
+
 
 example_square_MWRu = example_square_MWRu(example_square_mg)
 

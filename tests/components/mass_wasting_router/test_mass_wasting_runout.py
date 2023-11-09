@@ -105,14 +105,13 @@ class Test__prep_initial_mass_wasting_material():
         example_square_mg.at_node['mass__wasting_id'][np.array([31, 38])] = \
         np.array([1,1])
         slpc = [0.03]   
-        SD = 0.01
-        cs = 0.02
-    
-        mw_dict = {'critical slope':slpc, 'threshold flux':SD,
-                    'erosion coefficient':cs}
-            
+        qsc = 0.01
+        k = 0.02
+
         example_square_MWRu = MassWastingRunout(example_square_mg,
-                                                mw_dict, 
+                                                critical_slope = slpc,
+                                                threshold_flux = qsc,
+                                                erosion_coefficient = k,
                                                 save = True,
                                                 effective_qsi = False,
                                                 grain_shear = False)
@@ -147,14 +146,13 @@ class Test__prep_initial_mass_wasting_material():
         example_square_mg.at_node['mass__wasting_id'][np.array([31, 38])] = \
         np.array([1,1])
         slpc = [0.03]   
-        SD = 0.01
-        cs = 0.02
-    
-        mw_dict = {'critical slope':slpc, 'threshold flux':SD,
-                    'erosion coefficient':cs}
+        qsc = 0.01
+        k = 0.02
             
         example_square_MWRu = MassWastingRunout(example_square_mg,
-                                                mw_dict, 
+                                                critical_slope = slpc,
+                                                threshold_flux = qsc,
+                                                erosion_coefficient = k,
                                                 save = True,
                                                 effective_qsi = False,
                                                 grain_shear = False)
@@ -427,17 +425,17 @@ class Test_settle(object):
         npu = [1] 
         nid = [1] 
         slpc = [0.03]   
-        SD = 0.01
-        cs = 0.02
+        qsc = 0.01
+        k = 0.02
         mofd = 4
-        
-        
-        
-        mw_dict = {'critical slope':slpc, 'threshold flux':SD,
-                   'erosion coefficient':cs, 
-                   'max observed flow depth':mofd}               
-        example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
-                                           settle_deposit = True)
+             
+        example_MWRu = MassWastingRunout(mg, 
+                                         critical_slope = slpc,
+                                         threshold_flux = qsc,
+                                         erosion_coefficient = k,
+                                         max_flow_depth_observed_in_field = mofd,
+                                         save = True,
+                                         settle_deposit = True)
         example_MWRu.arn_u = np.array([n])# np.unique(rn) # set the array of unique receiver nodes
         example_MWRu.D_L = [19] # deposition depth at node 
         
@@ -465,15 +463,17 @@ class Test_settle(object):
         npu = [1] 
         nid = [1] 
         slpc = [0.03]   
-        SD = 0.01
-        cs = 0.02
+        qsc = 0.01
+        k = 0.02
         mofd = 4
-        
-        mw_dict = {'critical slope':slpc, 'threshold flux':SD,
-                   'erosion coefficient':cs, 
-                   'max observed flow depth':mofd}               
-        example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
-                                           settle_deposit = True)
+           
+        example_MWRu = MassWastingRunout(mg,
+                                         critical_slope = slpc,
+                                         threshold_flux = qsc,
+                                         erosion_coefficient = k,
+                                         max_flow_depth_observed_in_field = mofd,
+                                         save = True,
+                                         settle_deposit = True)
 
         example_MWRu.arn_u = np.array([n])# np.unique(rn) # set the array of unique receiver nodes
         example_MWRu.D_L = [5] # deposition depth at node 
@@ -499,15 +499,17 @@ class Test_settle(object):
         npu = [1] 
         nid = [1] 
         slpc = [0.03]   
-        SD = 0.01
-        cs = 0.02
+        qsc = 0.01
+        k = 0.02
         mofd = 4
-        
-        mw_dict = {'critical slope':slpc, 'threshold flux':SD,
-                   'erosion coefficient':cs, 
-                   'max observed flow depth':mofd}               
-        example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
-                                           settle_deposit = True)
+            
+        example_MWRu = MassWastingRunout(mg, 
+                                         critical_slope = slpc,
+                                         threshold_flux = qsc,
+                                         erosion_coefficient = k,
+                                         max_flow_depth_observed_in_field = mofd, 
+                                         save = True,
+                                         settle_deposit = True)
 
         example_MWRu.arn_u = np.array([n])# np.unique(rn) # set the array of unique receiver nodes
         example_MWRu.D_L = [0.3] # deposition depth at node 
@@ -531,15 +533,17 @@ class Test_settle(object):
         npu = [1] 
         nid = [1] 
         slpc = [0.03]   
-        SD = 0.01
-        cs = 0.02
+        qsc = 0.01
+        k = 0.02
         mofd = 4
-        
-        mw_dict = {'critical slope':slpc, 'threshold flux':SD,
-                   'erosion coefficient':cs, 
-                   'max observed flow depth':mofd}               
-        example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
-                                           settle_deposit = True)
+             
+        example_MWRu = MassWastingRunout(mg, 
+                                         critical_slope = slpc,
+                                         threshold_flux = qsc,
+                                         erosion_coefficient = k,
+                                         max_flow_depth_observed_in_field = mofd, 
+                                         save = True,
+                                         settle_deposit = True)
 
         example_MWRu.arn_u = np.array([n])# np.unique(rn) # set the array of unique receiver nodes
         example_MWRu.D_L = [19] # deposition depth at node 
@@ -563,15 +567,17 @@ class Test_settle(object):
         fd.run_one_step()
         rn = mg.at_node.dataset['flow__receiver_node'].values[n]
         slpc = [0.03]   
-        SD = 0.01
-        cs = 0.02
+        qsc = 0.01
+        k = 0.02
         mofd = 4
-        
-        mw_dict = {'critical slope':slpc, 'threshold flux':SD,
-                   'erosion coefficient':cs, 
-                   'max observed flow depth':mofd}               
-        example_MWRu = MassWastingRunout(mg, mw_dict, save = True,
-                                           settle_deposit = True)
+             
+        example_MWRu = MassWastingRunout(mg,
+                                         critical_slope = slpc,
+                                         threshold_flux = qsc,
+                                         erosion_coefficient = k,
+                                         max_flow_depth_observed_in_field = mofd,
+                                         save = True,
+                                         settle_deposit = True)
 
         example_MWRu.arn_u = np.array([n])# np.unique(rn) # set the array of unique receiver nodes
         example_MWRu.D_L = [3] # deposition depth at node 

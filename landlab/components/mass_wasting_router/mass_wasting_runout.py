@@ -218,16 +218,26 @@ class MassWastingRunout(Component):
     def __init__(
     self,
     grid,
-    mw_dict,
+    critical_slope,
+    threshold_flux,
+    erosion_coefficient,
     tracked_attributes = None,
     deposition_rule = "critical_slope",
-    dist_to_full_qsc_constraint = 0,
-    itL = 1000,
     grain_shear = True,
     effective_qsi = True,
     settle_deposit = False,
     E_constraint = True,
     save = False,
+    typical_flow_thickness_of_erosion_zone = 2,
+    typical_slope_of_erosion_zone = 0.15,
+    erosion_exponent = 0.2,
+    max_flow_depth_observed_in_field = None, 
+    vol_solids_concentration = 0.6,
+    density_solids = 2650,
+    density_fluid = 1000,
+    gravity = 9.81,
+    dist_to_full_qsc_constraint = 0,
+    itL = 1000,
     run_id = 0
     ):
         
@@ -236,70 +246,100 @@ class MassWastingRunout(Component):
         Parameters
         ----------
         grid : landlab raster model grid
+
+        critical_slope: list of floats
+            critical slope (angle of repose if no cohesion) of mass 
+            wasting material , L/L list of length 1 for a basin uniform Sc value
+            list of length 2 for hydraulic geometry defined Sc, where the first 
+            and second values in the list are the coefficient and exponent of a 
+            user defined function for crictical slope that varies with contributing
+            area [m2] to a node (e.g., [0.146,0.051] sets Sc<=0.1 at 
+            contributing area > ~1100 m2).                                            
         
-        mw_dict : dictionary
-            a dictionary of parameters that control the behavoir of the model.
-            The dicitonary must include the following keys: 'critical slope', 
-            'threshold flux' and 'erosion coefficient'.
-            
-               
-                where: 
-                    critical slope: list of floats
-                        critical slope (angle of repose if no cohesion) of mass 
-                        wasting material , L/L list of length 1 for a basin uniform Sc value
-                        list of length 2 for hydraulic geometry defined Sc, where the first 
-                        and second values in the list are the coefficient and exponent of a 
-                        user defined function for crictical slope that varies with contributing
-                        area [m2] to a node (e.g., [0.146,0.051] sets Sc<=0.1 at 
-                        contributing area > ~1100 m2).                                            
-                    threshold flux: float
-                        minimum volumetric flux per unit contour width, (i.e., 
-                        volume/(grid.dx*grid.dx)/iteration or L/iteration).
-                        flux below this threshold stops at the cell as a deposit
-                    erosion coefficient: float
-                        coefficient that converts total shear stress [kPa] 
-                        at the base of the runout material to a scour depth [m]
-                        
-                 The mw_dict dictionary can also include the following keys. If 
-                 not included, default values are used. (listed below).
-                 
-                        mw_dict = {'critical slope': required user input,
-                                   'threshold flux': required user input,
-                                   'erosion coefficient': required user input,
-                                   'erosion exponent, m': 0.5,
-                                   'vol solids concentration': 0.6,
-                                   'density solids': 2650,
-                                   'typical flow thickness, scour': 3,
-                                   'typical slope, scour': 0.4,
-                                   'max observed flow depth': 4}
-                        
-                        where: 
-                            - erosion exponent: the exponent of equation 11.
-                            - vol solids concentration: the ratio of the volume of
-                            the solids to the total volume of the flow mixture.
-                            - density solids: the denisty of the solids [kg/m3]
-                            - typical flow thickness, scour: field estimated flow
-                            thickness in the scour reaches of the runout path [m]
-                            - typical slope, scour: field or remote sensing estimated
-                            slope in the scour dominated reach of the runout path [L/L]
-                            - max observed flow depth: maximum observed flow depth over
-                            the entire runout path [m], use for h_max constraint, equation 24.
-                            
+        threshold_flux: float
+            minimum volumetric flux per unit contour width, [L3/L2/iterataion] or
+            [L/iteration]. Flux below this threshold stops at the cell as a deposit
+        
+        erosion_coefficient: float
+            coefficient used to convert total basal shear stress [kPa] of the runout 
+            material to a scour depth [m]            
                                  
-        tracked_attributes : list or None
-            A list of the attributes that will be tracked by the runout model. 
-            Attributes in tracked_attributes must also be a field on the model grid
-            and names in list must match the grid field names. Default is None.
+        tracked_attributes : list of str or None
+            A list of the attribute names (strings) that will be tracked by the 
+            runout model. Attributes in tracked_attributes must also be a field 
+            on the model grid and names in list must match the grid field names. 
+            Default is None.
          
         deposition_rule : str
             Can be either "critical_slope", "L_metric" or "both". 
-            "critical_slope" is deposition rule describe in Keck et al. 2023.
-            "L_metric" is varation of rule described by Cartier et al., 2016 and 
-            Campforts et al. 2020.
+            "critical_slope" is deposition rule used in Keck et al. 2023.
+            "L_metric" is a variation of rule described by Campforts et al. 2020.
             "both" uses the minimum value of both rules.
+            Default value is "critical_slope".          
+         
+        grain_shear : boolean
+            Indicate whether to define shear stress at the base of the runout material
+            as a function of grain size using Equation 13 (True) or the depth-slope 
+            approximation using Equation 12 (False). Default is True.
             
-            All results in Keck et al. 2023 use "critical_slope". Default value is 
-            "critical_slope".
+        effective_qsi : boolean
+            Indicate whether to limit erosion and aggradation rates to <= the
+            erosion and aggradation rates coorisponding to the maximum observed flow 
+            depth. All results in Keck et al. 2023 use this constraint. Default is True.
+
+        E_constraint : boolean
+             Indicate if erosion can not simultaneously occur with aggradation. If True,
+             aggradation > 0, then erosion = 0. This is True in Keck et al., 2023. 
+             Default is True.
+             
+        settle_deposit : boolean
+            Indicate whether to allow deposits to settle before the next model iteration
+            is implemented. Settlement is determined the critical slope as evaluated from 
+            the lowest adjacent node to the deposit. This is not used in Keck et al. 2023
+            but tends to allow model to better reproduce smooth, evenly sloped deposits.
+            Default is False.
+                  
+        save : boolean
+            Save topographic elevation of watershed after each model iteration? 
+            This uses a lot of memory but is helpful for illustrating runout. 
+            The default is False.
+               
+        
+        Other Parameters
+        ----------
+        These parameters have a lesser impact on model behavior or may not be
+        applicable, depending on model run options.               
+
+        typical_flow_thickness_of_erosion_zone: float
+            field estimated flow thickness in the erosion-dominatedd reaches of 
+            the runout path [m], used to estimate erosion_coefficient k using
+            erosion_coef_k function. Default value: 3
+            
+        typical slope_of_erosion_zone: floatf
+            field or remote sensing estimated slope in the scour dominated reach 
+            of the runout path [L/L], used to estimate erosion_coefficient k using
+            erosion_coef_k function. Default value: 0.4
+            
+        erosion_exponent: float
+            The exponent of equation 11, that scales erosion depth as a function of
+            shear stress. Default value: 0.5
+            
+        max_flow_depth_observed: maximum observed flow depth, over the entire 
+            runout path [m], h_max in equation 24. Only used effective_qsi is True.
+            Default value: 4
+            
+        vol_solids_concentration: float
+            The ratio of the volume of the solids to the total volume of the flow 
+            mixture. Default value: 0.6
+            
+        density solids: float
+            The density of the solids [kg/m3]. Default value: 2650
+            
+        density fluid: float
+            The density of the fluid [kg/m3]. Default value: 1000
+            
+        gravity: float
+            Acceleration due to gravity [m2/s]. Default value: 9.81
             
         dist_to_full_qsc_constraint : float
             distance in meters at which qsc is applied to runout. If the landslide
@@ -312,38 +352,12 @@ class MassWastingRunout(Component):
             maximum number of iterations the model runs before it
             is forced to stop. The default is 1000. Ideally, if properly parameterized,
             the model should stop on its own. All modeled runout in Keck et al. 2023
-            stopped on its own.
-         
-        grain_shear : boolean
-            indicate whether to define shear stress at the base of the runout material
-            as a function of grain size (Equation 13, True) or the depth-slope 
-            approximation (Equation 12, False). Default is True.
-            
-        effective_qsi : boolean
-            indicate wheter to limit the flux appled to erosion and aggradation rules
-            to the maximum observed flow depth (i.e., the effective qsi). All results in
-            Keck et al. 2023 use this constraint. Default is True.
-            
-        settle_deposit : boolean
-            indicate whether to allow deposits to settle before the next model iteration
-            is implemented. Settlement is determined the critical slope as evaluated from 
-            the lowest adjacent node to the deposit. This is not used in Keck et al. 2023
-            but tends to allow model to better reproduce smooth, evenly sloped deposits.
-            Default is false.
-         
-        E_constraint : boolean
-             indicate if erosion can occur simultaneously with aggradation. If True, if 
-             aggradation > 0, then erosion = 0. This is True in Keck et al., 2023. 
-             Default is True.
-         
-        save : boolean
-            Save topographic elevation of watershed after each model iteration? 
-            The default is False.
-         
+            stopped on its own.            
+
         run_id : float, int or str 
             label for landslide run, can be the time or some other identifier. This
             can be updated each time model is implemnted with "run_one_step"
-        
+         
         Returns
         -------
         None.
@@ -351,19 +365,38 @@ class MassWastingRunout(Component):
         """
 
         super().__init__(grid)
-
-        self.mw_dict = mw_dict
-        self.run_id = run_id
-        self.itL = itL
+        
+        if len(critical_slope)>1: # change this to check for list input if defined as func of CA
+            self.variable_slpc = True    
+            self.a = critical_slope[0]
+            self.b = critical_slope[1]
+        else:
+            self.variable_slpc = False
+            self.slpc = critical_slope[0]
+        self.qsc = threshold_flux
+        self.k = erosion_coefficient
+        self._tracked_attributes = tracked_attributes         
+        self.deposition_rule = deposition_rule
+        self.grain_shear = grain_shear
+        self.effecitve_qsi = effective_qsi
         self.settle_deposit = settle_deposit
-        self.grain_shear = grain_shear 
-        self.deposition_rule = deposition_rule 
-        self.dist_to_full_qsc_constraint = dist_to_full_qsc_constraint 
-        self.effecitve_qsi = effective_qsi 
-        self.E_constraint = E_constraint 
-        self._tracked_attributes = tracked_attributes 
+        self.E_constraint = E_constraint
         self.save = save
-        self.routing_partition_method = 'slope' # 'square_root_of_slope', see flow director       
+        self.h = typical_flow_thickness_of_erosion_zone
+        self.s = typical_slope_of_erosion_zone
+        self.eta = erosion_exponent
+        self.qsi_max = max_flow_depth_observed_in_field
+        if (self.effecitve_qsi) == True & (self.qsi_max == None):
+                raise ValueError("Need to define the max_flow_depth_observed_in_field n\
+                                 or set effecitve_qsi to False")      
+        self.vs = vol_solids_concentration
+        self.ros = density_solids
+        self.rof = density_fluid
+        self.g = gravity
+        self.dist_to_full_qsc_constraint = dist_to_full_qsc_constraint 
+        self.itL = itL
+        self.run_id = run_id    
+      
         
         if tracked_attributes:
             self.track_attributes = True
@@ -382,62 +415,12 @@ class MassWastingRunout(Component):
                     raise ValueError("{} not included as field in grid and/or key in tracked_attributes".format(key))
         else:
             self.track_attributes = False
-                   
-        if len(self.mw_dict['critical slope'])>1: # change this to check for list input if defined as func of CA
-            self.a = self.mw_dict['critical slope'][0]
-            self.b = self.mw_dict['critical slope'][1]
-        else:
-            self.slpc = self.mw_dict['critical slope'][0]
         
-        self.qsc = self.mw_dict['threshold flux']
-        
-        self.k = self.mw_dict['erosion coefficient']
-        
-        if 'erosion exponent' in self.mw_dict:
-            self.eta = self.mw_dict['erosion exponent']
-        else:
-            self.eta = 0.2               
-           
-        if 'vol solids concentration' in self.mw_dict:
-            self.vs = self.mw_dict['vol solids concentration']
-        else:
-            self.vs = 0.6
-        
-        if 'density solids' in self.mw_dict:
-            self.ros = self.mw_dict['density solids']
-        else:
-            self.ros = 2650
-            
-        if 'density fluid' in self.mw_dict:
-            self.rof = self.mw_dict['density fluid']
-        else:
-            self.rof = 1000
-        
-        if 'gravity' in self.mw_dict:
-            self.g = self.mw_dict['gravity'] 
-        else:
-            self.g = 9.81
-        
-        if 'typical flow thickness, scour' in self.mw_dict:
-            self.h = self.mw_dict['typical flow thickness, scour'] 
-        else:
-            self.h = 2
-
-        if 'typical slope, scour' in self.mw_dict:
-            self.s = self.mw_dict['typical slope, scour'] 
-        else:
-            self.s = 0.15
-        if 'max observed flow depth' in self.mw_dict:
-            self.qsi_max = self.mw_dict['max observed flow depth']
-        else:
-            self.qsi_max = None
-            if self.effecitve_qsi == True:
-                    raise ValueError("Need to define the 'max observed flow depth' in mw_dict n\
-                                     or set effecitve_qsi to False")
-
+        # flow routing option
+        self.routing_partition_method = 'slope' # 'square_root_of_slope', see flow director               
         # density of runout mixture
         self.ro_mw = self.vs*self.ros+(1-self.vs)*self.rof
-        # distance equivalent iteration
+        # number of model iterations needed to reach dist_to_full_qsc_constraint
         self.d_it = int(self.dist_to_full_qsc_constraint/self._grid.dx)
         
         # define initial topographic + mass wasting thickness topography
@@ -769,7 +752,7 @@ class MassWastingRunout(Component):
             self._grid.diagonal_adjacent_nodes_at_node[n]))
             
             # look up critical slope at node n
-            if len(self.mw_dict['critical slope'])>1: # if option 1, critical slope is not constant but depends on location
+            if self.variable_slpc: # if option 1, critical slope is not constant but depends on location
                 self.slpc = self.a*self._grid.at_node['drainage_area'][n]**self.b                      
             
             # incoming attributes (weighted average)
@@ -991,7 +974,7 @@ class MassWastingRunout(Component):
                 rn = rn[np.where(rn != -1)]  
                          
                 # critical slope
-                if len(self.mw_dict['critical slope'])>1:
+                if self.variable_slpc:
                     self.slpc = self.a*self._grid.at_node['drainage_area'][n]**self.b
                 
                 # only consider all cells that slope > Sc
