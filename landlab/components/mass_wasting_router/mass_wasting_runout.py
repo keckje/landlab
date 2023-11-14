@@ -49,7 +49,7 @@ class MassWastingRunout(Component):
     >>> fd.run_one_step()   
     >>> nn = mg.number_of_nodes   
     >>> depth = np.ones(nn)*1 
-    >>> mg.add_field('node', 'soil__thickness',depth)
+    >>> _ = mg.add_field('node', 'soil__thickness',depth)
     
     Define the initial landslide. Any mass_wasting_id value >1 is considered a 
     landslide. The landslide extent is defined by assigining all nodes withing 
@@ -73,20 +73,18 @@ class MassWastingRunout(Component):
     
     Next define parameter values for MassWastingRunout and instantiate the model:
 
-    >>> Sc = [0.03] # Note this value needs to defined as a list (see below)  
-    >>> qsc = 0.01
-    >>> k = 0.02
-    >>> mw_dict = {'critical slope':Sc, 
-    ...            'threshold flux':qsc,
-    ...            'erosion coefficient':k,
-    ...            'max observed flow depth':1,
-    ... }    
-    >>> save = True
+    >>> Sc = [0.03] # Sc, note: defined as a list (see below)
+    >>> qsc = 0.01 # qsc
+    >>> k = 0.02 # k
+    >>> h_max = 1
     >>> tracked_attributes = ['particle__diameter','organic__content']        
     >>> example_square_MWR = MassWastingRunout(mg,
-    ...                                        mw_dict, 
-    ...                                        save = True,                                    
-    ...                                        tracked_attributes = tracked_attributes
+    ...                                        critical_slope = Sc,
+    ...                                        threshold_flux = qsc,                    
+    ...                                        erosion_coefficient = k,
+    ...                                        tracked_attributes = tracked_attributes,
+    ...                                        max_flow_depth_observed_in_field = h_max,
+    ...                                        save = True
     ... )
 
     Run MassWastingRunout
@@ -102,18 +100,18 @@ class MassWastingRunout(Component):
     >>> DEM_final = mg.at_node['topographic__elevation']    
     >>> print(DEM_final - DEM_initial)  
     [ 0.          0.          0.          0.          0.          0.
-      0.          0.          0.          1.37913556  0.91366375 -0.09076448
-      0.          0.          0.          0.         -0.10883346 -0.22891717
-     -0.10741615  0.          0.          0.          0.         -0.12151655
-     -0.20061788 -0.12439051  0.          0.          0.          0.
-     -0.07056957 -0.16119971 -0.07857385  0.          0.          0.
+      0.          0.          0.          0.96579201  0.52734339 -0.00778869
+      0.          0.          0.          0.         -0.00594927 -0.12261762
+     -0.0027898   0.          0.          0.          0.         -0.04562554
+     -0.10973222 -0.05776526  0.          0.          0.          0.
+     -0.01225359 -0.07973101 -0.04888238  0.          0.          0.
       0.          0.         -1.          0.          0.          0.
       0.          0.          0.          0.          0.          0.
       0.        ]
 
     See how the landslide removes all of the regolith at node 38 (the negative -1)    
     
-    Look at the final spatial distribution of particle diameters.
+    Look at the final spatial distribution of regolith particle diameter.
     
     >>> print(mg.at_node['particle__diameter'])
     [ 0.06526166  0.20598376  0.13768185  0.19469304  0.2455979   0.15769917
@@ -132,7 +130,9 @@ class MassWastingRunout(Component):
     
     References
     ----------
-    Keck et al., (2023), submitted to Earth Surface Dynamics.
+    Keck, J., Istanbulluoglu, E., Campforts, B., Tucker G., Horner-Devine A., (2023), 
+    A landslide runout model for sediment transport, landscape evolution and hazard 
+    assessment applications, submitted to Earth Surface Dynamics.
     
     '''
     
