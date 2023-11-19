@@ -14,9 +14,9 @@ class Test__virtual_laboratory_smoke_tests():
         of final topographic surface is as expected and that mass is conserved"""
         MWRu = example_pile_MWRu
         MWRu.run_one_step(run_id = 0)
-        c = np.array(list(MWRu.runout_evo_maps[0].keys())).max()
+        c = np.array(list(MWRu.saver.runout_evo_maps[0].keys())).max()
         # profile check
-        pf = MWRu.topo_evo_maps[0][c][MWRu.pf]
+        pf = MWRu.saver.topo_evo_maps[0][c][MWRu.pf]
         pf_e = np.array([1.        ,  1.        ,  1.        ,  1.        ,  1.,
                 1.        ,  1.        ,  1.        ,  1.        ,  1.        ,
                 1.00689131,  1.15535961,  1.19989349,  1.21732111,  1.30154153,
@@ -368,8 +368,8 @@ class Test_determine_qsi(object):
         example_square_MWRu.itL = 2       
         example_square_MWRu.run_one_step(run_id = 0)      
         n = 25
-        qs_to_nodes = np.hstack(example_square_MWRu.arqso_r[1][1])
-        nodes = np.hstack(example_square_MWRu.arn_r[1][1])
+        qs_to_nodes = np.hstack(example_square_MWRu.saver.arqso_r[1][1])
+        nodes = np.hstack(example_square_MWRu.saver.arn_r[1][1])
         qsi_e = np.sum(qs_to_nodes[nodes==n])
         qsi = example_square_MWRu.qsi_dat[2,1]
   
@@ -382,7 +382,7 @@ class Test_update_E_dem(object):
         example_square_MWRu.itL = 1       
         example_square_MWRu.run_one_step(run_id = 0)
         n = 30
-        el = example_square_MWRu.topo_evo_maps[0][0][n] # elevation of initial topo
+        el = example_square_MWRu.saver.topo_evo_maps[0][0][n] # elevation of initial topo
         qsi = example_square_MWRu.qsi_dat[0][1]
         E_e = el+qsi
         E = example_square_MWRu._grid.at_node['energy__elevation'][n]
