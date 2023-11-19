@@ -455,34 +455,9 @@ class MassWastingRunout(Component):
             innL.append(np.hstack(self._grid.nodes)[ls_mask])
                
         # prepare data containers for saving model images and behavior statistics    
-        # self.arndn_r = {}
-        if self.save:
-            
+        if self.save:           
             self.saver = MWR_Saver(self)
             self.saver.prep_data_containers()
-            
-            # # lists and dictionaries for tracking model behavior 
-            # self.EL = [] # entrainment depth / regolith depth
-            # self.AL = [] # aggradation (deposition) depth
-            # self.qsiL = [] # incoming flux (qsi)
-            # self.TauL = [] # basal shear stress 
-            # self.slopeL = [] # slope
-            # self.velocityL = [] # velocity (if any)
-            # self.arqso_r = {} # flux out
-            # self.arn_r = {} # receiver nodes
-            # self.aratt_r = {} #  arriving attributes
-            # self.flowing_volume = {} # the total volume [m3] of the mobilized runout material
-            # # dictionaries, that save the entire model grid field each model iteration
-            # # for all fields listed below
-            # # usefull for creating movies of how the flow and terrain evolve
-            # self.runout_evo_maps = {} # runout material + topographic__elevation
-            # self.topo_evo_maps = {}# topographic__elevation
-            # self.att_r = {} # attribute value
-            # self.st_r = {} # soil__thickness
-            # self.tss_r ={} # topographic__steepest_slope
-            # self.frn_r = {} # flow__receiver_node
-            # self.frp_r = {} # 'flow__receiver_proportions'
-            # self.arqso_r = {} # flux out
             
         # For each mass wasting event in list:
         for mw_i,inn in enumerate(innL):
@@ -494,22 +469,8 @@ class MassWastingRunout(Component):
                 self.qsi_max = self._grid.at_node['soil__thickness'][inn].max()
             
             # prepare temporary data containers for each mass wasting event mw_i
-            # self.arndn_r[mw_id] = []
             if self.save:
                 self.saver.prep_mw_data_containers(mw_i, mw_id)
-                # self.runout_evo_maps[mw_i] = {}
-                # self.topo_evo_maps[mw_i] = {}
-                # self.flowing_volume[mw_id] = []
-                # self.st_r[mw_id] = []
-                # self.tss_r[mw_id] = []
-                # self.frn_r[mw_id] = []
-                # self.frp_r[mw_id] = []            
-                # self.arqso_r[mw_id] = []
-                # self.arn_r[mw_id] = []
-                # if self.track_attributes:
-                #     self.att_r[mw_id] = dict.fromkeys(self._tracked_attributes, []) # this becomes the data container for each attribute
-                #     self.aratt_r[mw_id] = dict.fromkeys(self._tracked_attributes, [])  
-                    
             
             # Algorithm 1, prepare initial mass wasting material (debritons) for release 
             self._prep_initial_mass_wasting_material(inn, mw_i)
@@ -518,28 +479,13 @@ class MassWastingRunout(Component):
             if self.save:
                 # save first set of data to reflect scar created by landslide
                 self.saver.save_conditions_before_runout(mw_i, mw_id)
-                # self.runout_evo_maps[mw_i][0] = self._grid.at_node['energy__elevation'].copy()
-                # self.topo_evo_maps[mw_i][0] = self._grid.at_node['topographic__elevation'].copy()
-                # self.flowing_volume[mw_id].append(0)            
-                # if self.track_attributes:
-                #     for key in self._tracked_attributes:
-                #         self.att_r[mw_id][key].append(self._grid.at_node[key].copy()) # for each attribute, a copy of entire grid
-                #         self.aratt_r[mw_id][key].append(self.aratt) 
-                # self.st_r[mw_id].append(self._grid.at_node['soil__thickness'].copy())
-                # self.tss_r[mw_id].append(self._grid.at_node['topographic__steepest_slope'].copy())
-                # self.frn_r[mw_id].append(self._grid.at_node['flow__receiver_node'].copy())
-                # self.frp_r[mw_id].append(self._grid.at_node['flow__receiver_proportions'].copy())
-                # self.arqso_r[mw_id].append(self.arqso)
-                # self.arn_r[mw_id].append(self.arn)
-                   
 
             # Algorith 2, now loop through each receiving nodes, 
             # determine next set of recieving nodes,
             # repeat until no more receiving nodes (material deposits)             
             self.c = 0 # model iteration counter
             while len(self.arn)>0 and self.c < self.itL:
-
-                #self.c = c
+                
                 # set qsc: the qsc constraint does not fully apply until runout 
                 # has traveled dist_to_full_qsc_constraint
                 if self.d_it == 0:
@@ -609,23 +555,6 @@ class MassWastingRunout(Component):
 
                 if self.save:
                     self.saver.save_conditions_after_one_iteration(mw_i, mw_id)
-                    # DEMf = self._grid.at_node['topographic__elevation'].copy()                    
-                    # DEMdf_r = DEMf-self._grid.at_node['topographic__initial_elevation']            
-                    # self.flowing_volume[mw_id].append(DEMdf_r.sum()*self._grid.dx*self._grid.dy)     
-                    # self.runout_evo_maps[mw_i][c+1] = self._grid.at_node['energy__elevation'].copy()
-                    # self.runout_evo_maps[mw_i][c+1] = self._grid.at_node['energy__elevation'].copy()
-                    # self.topo_evo_maps[mw_i][c+1] = self._grid.at_node['topographic__elevation'].copy()
-                    # if self.track_attributes:
-                    #     for key in self._tracked_attributes:
-                    #         self.att_r[mw_id][key].append(self._grid.at_node[key].copy())
-                    #         self.aratt_r[mw_id][key].append(self.arattL) 
-                    # self.st_r[mw_id].append(self._grid.at_node['soil__thickness'].copy())
-                    # self.tss_r[mw_id].append(self._grid.at_node['topographic__steepest_slope'].copy())
-                    # self.frn_r[mw_id].append(self._grid.at_node['flow__receiver_node'].copy())
-                    # self.frp_r[mw_id].append(self._grid.at_node['flow__receiver_proportions'].copy())
-                    # self.arqso_r[mw_id].append(self.arqsoL)
-                    # self.arn_r[mw_id].append(self.arnL)                          
-                    # self.arndn_r[mw_id].append(self.arndn)
 
                 # update iteration counter
                 self.c+=1
@@ -708,7 +637,7 @@ class MassWastingRunout(Component):
             rni = np.concatenate((rni,rn), axis = 0) 
             rqsoi = np.concatenate((rqsoi,rqso), axis = 0) 
         
-        self.arndn = np.ones([len(rni)])*np.nan # TODO: set this to node id
+        self.arndn = np.ones([len(rni)])*np.nan
         self.arn = rni
         self.arqso = rqsoi
         if self._tracked_attributes:
@@ -743,13 +672,10 @@ class MassWastingRunout(Component):
             # maximum slope at node n
             slpn = self._grid.at_node['topographic__steepest_slope'][n].max()
             
-            # proportion of flow in steepest direction
-            pn = 1#self._grid.at_node['flow__receiver_proportions'][n].max() 
-            
             if self.effecitve_qsi:
-                qsi_ = min(qsi*pn,self.qsi_max)
+                qsi_ = min(qsi,self.qsi_max)
             else:
-                qsi_ = qsi*pn
+                qsi_ = qsi
 
             dn = self.arndn[self.arn == n]
 
@@ -809,12 +735,6 @@ class MassWastingRunout(Component):
             # model behavior tracking
             if self.save:
                 self.saver.save_flow_stats(E,A,qsi,slpn,Tau,u)
-                # self.EL.append(E)
-                # self.AL.append(A)
-                # self.qsiL.append(qsi)
-                # self.slopeL.append(slpn) # slope
-                # self.TauL.append(Tau)
-                # self.velocityL.append(u) # velocity (if any)
 
             # updated attribute values at node
             if self._tracked_attributes:

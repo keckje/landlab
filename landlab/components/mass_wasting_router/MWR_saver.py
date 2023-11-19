@@ -13,9 +13,10 @@ class MWR_Saver():
         self.qsiL = [] # incoming flux (qsi)
         self.TauL = [] # basal shear stress 
         self.slopeL = [] # slope
-        self.velocityL = [] # velocity (if any)
+        self.velocityL = [] # velocity (if computed)
         self.arqso_r = {} # flux out
         self.arn_r = {} # receiver nodes
+        self.arndn_r = {} # donar nodes
         self.aratt_r = {} #  arriving attributes
         self.flowing_volume = {} # the total volume [m3] of the mobilized runout material
         # dictionaries, that save the entire model grid field each model iteration
@@ -28,8 +29,7 @@ class MWR_Saver():
         self.tss_r ={} # topographic__steepest_slope
         self.frn_r = {} # flow__receiver_node
         self.frp_r = {} # 'flow__receiver_proportions'
-        self.arqso_r = {} # flux out
-        self.arndn_r = {} # donar nodes
+
             
     def prep_mw_data_containers(self, mw_i, mw_id):
         # containeers for each unique mass wasting ID
