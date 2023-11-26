@@ -13,7 +13,7 @@ class Test__virtual_laboratory_smoke_tests():
         """Smoke test. Model the collapse of a pile of debris. Check that profile 
         of final topographic surface is as expected and that mass is conserved"""
         MWRu = example_pile_MWRu
-        MWRu.run_one_step(run_id = 0)
+        MWRu.run_one_step()
         c = np.array(list(MWRu.saver.runout_evo_maps[0].keys())).max()
         # profile check
         pf = MWRu.saver.topo_evo_maps[0][c][MWRu.pf]
@@ -42,7 +42,7 @@ class Test__virtual_laboratory_smoke_tests():
         flume. Check that profile of final topographic surface is as expected and 
         that mass is conserved"""
         MWRu = example_flume_MWRu
-        MWRu.run_one_step(run_id = 0)
+        MWRu.run_one_step()
         pf_d = MWRu._grid.at_node['topographic__elevation'][MWRu.pf]
         e_pf_d = np.array([  0.00000000e+00,   1.00000000e-02,   3.46146640e-01,
                  7.96382423e-01,   1.26551021e+00,   1.78098693e+00,
@@ -69,7 +69,7 @@ class Test__mass_conserved():
     def test_full_runout(self, example_square_MWRu):
         """check that cumulative topographic change at end of model run (len(rn) = 0) 
         equals zero"""
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         mg = example_square_MWRu._grid
         diff = mg.at_node['topographic__elevation'] - mg.at_node['topographic__initial_elevation']
         np.testing.assert_allclose(0, diff.sum(), atol = 1e-4)
@@ -78,7 +78,7 @@ class Test__mass_conserved():
         """pause model in the middle of modeled runout and check that cumulative 
         topographic change plus flux equals zero"""
         example_square_MWRu.itL = 3
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         mg = example_square_MWRu._grid
         # cumulative topographic change [L]
         diff = mg.at_node['topographic__elevation'] - mg.at_node['topographic__initial_elevation']
@@ -92,7 +92,7 @@ class Test__prep_initial_mass_wasting_material():
         """Test correct number of receiving nodes and volumes from 
         initial mass wasting cells are positive"""
         example_square_MWRu.itL = 0
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         rn = example_square_MWRu.arn
         rqso = example_square_MWRu.arqso
         assert len(rn) == 3
@@ -116,7 +116,7 @@ class Test__prep_initial_mass_wasting_material():
                                                 effective_qsi = False,
                                                 grain_shear = False)
         example_square_MWRu.itL = 0
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         rn = example_square_MWRu.arn
         rqso = example_square_MWRu.arqso
         assert len(rn) == 4
@@ -127,7 +127,7 @@ class Test__prep_initial_mass_wasting_material():
         """Test receiving nodes and volumes from initial mass wasting cells
         are correct, one initial mass wasting node"""
         example_square_MWRu.itL = 0
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         rn = example_square_MWRu.arn
         rqso = example_square_MWRu.arqso
         
@@ -167,7 +167,7 @@ class Test__prep_initial_mass_wasting_material():
         # which is determined after the debriton has been removed, from
         # bottom surface of the debriton
         example_square_MWRu.itL = 0
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         rn = example_square_MWRu.arn
         rqso = example_square_MWRu.arqso
         mask_2 = example_square_MWRu._grid.at_node['flow__link_to_receiver_node'][38] != -1
@@ -188,7 +188,7 @@ class Test_E_A_qso_determine_attributes():
         change (e.g., positive negative or no change)
         """
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(run_id = 0)      
+        example_square_MWRu.run_one_step()      
         nodes = example_square_MWRu.nudat[:,0].astype(float)
         deta = example_square_MWRu.nudat[:,1].astype(float)
         qso = example_square_MWRu.nudat[:,2].astype(float)
@@ -221,7 +221,7 @@ class Test_E_A_qso_determine_attributes():
         """Smoke test that the output of _E_A_qso_determine_attributes 
         have not changed and are stored in the class variable nudat as expected"""
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(run_id = 0)      
+        example_square_MWRu.run_one_step()      
         nodes = example_square_MWRu.nudat[:,0].astype(float)
         deta = example_square_MWRu.nudat[:,1].astype(float)
         qso = example_square_MWRu.nudat[:,2].astype(float)
@@ -271,7 +271,7 @@ class Test_E_A_qso_determine_attributes():
         nn = example_square_MWRu._grid.number_of_nodes
         example_square_MWRu._grid.at_node['soil__thickness'] = np.ones(nn)*0.01
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(run_id = 0)      
+        example_square_MWRu.run_one_step()      
         nodes = example_square_MWRu.nudat[:,0].astype(float)
         deta = example_square_MWRu.nudat[:,1].astype(float)
         qso = example_square_MWRu.nudat[:,2] .astype(float)
@@ -317,7 +317,7 @@ class Test_E_A_qso_determine_attributes():
         nn = example_square_MWRu._grid.number_of_nodes
         example_square_MWRu._grid.at_node['soil__thickness'] = np.ones(nn)*0.01
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(run_id = 0)      
+        example_square_MWRu.run_one_step()      
         nodes = example_square_MWRu.nudat[:,0].astype(float)
         deta = example_square_MWRu.nudat[:,1].astype(float)
         qso = example_square_MWRu.nudat[:,2] .astype(float)
@@ -366,7 +366,7 @@ class Test_determine_qsi(object):
         """test ouput of function  _determine_qsi is correct and stored
         in class variable vqdat as expected"""
         example_square_MWRu.itL = 2       
-        example_square_MWRu.run_one_step(run_id = 0)      
+        example_square_MWRu.run_one_step()      
         n = 25
         qs_to_nodes = np.hstack(example_square_MWRu.saver.arqso_r[1][1])
         nodes = np.hstack(example_square_MWRu.saver.arn_r[1][1])
@@ -380,7 +380,7 @@ class Test_update_E_dem(object):
     def test_normal_1(self, example_square_MWRu):
         """run one iteration, check qsi+initial dem matches energy__elevation"""
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         n = 30
         el = example_square_MWRu.saver.topo_evo_maps[0][0][n] # elevation of initial topo
         qsi = example_square_MWRu.qsi_dat[0][1]
@@ -393,7 +393,7 @@ class Test_update_dem(object):
     def test_normal_1(self, example_square_MWRu):
         """test topographic dem updated correctly"""
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         n = 30
         eli = example_square_MWRu._grid.at_node['topographic__initial_elevation'][n]
         deta = example_square_MWRu.nudat[0][1]
@@ -406,7 +406,7 @@ class Test_update_channel_particle_diameter(object):
     def test_normal_1(self, example_square_MWRu):
         """test particle diameter updated correctly"""
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         n = 30
         pd = example_square_MWRu._grid.at_node['particle__diameter'][n]
         pd_e = 0.09096981
@@ -601,7 +601,7 @@ class Test_erosion(object):
         depth = qsi
         example_square_MWRu.itL = 0
         example_square_MWRu.grain_shear = False
-        example_square_MWRu.run_one_step(run_id = 0)       
+        example_square_MWRu.run_one_step()       
         E = example_square_MWRu._erosion(n, depth, slope)
         expected_E = 0.1017184
         np.testing.assert_allclose(E[0], expected_E, rtol = 1e-4)
@@ -617,7 +617,7 @@ class Test_erosion(object):
         depth = qsi    
         example_square_MWRu.itL = 0
         example_square_MWRu.grain_shear = False
-        example_square_MWRu.run_one_step(run_id = 0)      
+        example_square_MWRu.run_one_step()      
         E = example_square_MWRu._erosion(n, depth, slope)
         expected_E = 0.144256
         np.testing.assert_allclose(E[0], expected_E, rtol = 1e-4)
@@ -630,7 +630,7 @@ class Test_erosion(object):
         example_square_MWRu.slpc = 0.01
         depth = qsi
         example_square_MWRu.itL = 0
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         att_in = {'particle__diameter': 0.25}               
         E = example_square_MWRu._erosion(n, depth, slope, att_in = att_in)
         expected_E = 0.065142
@@ -644,7 +644,7 @@ class Test_erosion(object):
         example_square_MWRu.slpc = 0.1
         depth = qsi
         example_square_MWRu.itL = 0
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         att_in = {'particle__diameter': 0.25}                
         E = example_square_MWRu._erosion(n, depth, slope, att_in = att_in)
         expected_E = 0.065142
@@ -658,7 +658,7 @@ class Test_erosion(object):
         example_square_MWRu.slpc = 0.05
         depth = qsi
         example_square_MWRu.itL = 0
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         att_in = {'particle__diameter': 0.25}                
         E = example_square_MWRu._erosion(n, depth, slope, att_in = att_in)
         expected_E = 0.058276
@@ -779,7 +779,7 @@ class Test_aggradation(object):
 
     def test_determine_zo_normal_1(self, example_square_MWRu):
         example_square_MWRu.itL = 1
-        example_square_MWRu.run_one_step(run_id = 0)        
+        example_square_MWRu.run_one_step()        
         n = 24
         qsi = 0.2
         zi = example_square_MWRu._grid.at_node['topographic__elevation'][n]
@@ -789,7 +789,7 @@ class Test_aggradation(object):
 
     def test_determine_zo_normal_2(self, example_square_MWRu):
         example_square_MWRu.itL = 1
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         
         n = 24
         qsi = 2
@@ -800,7 +800,7 @@ class Test_aggradation(object):
 
     def test_determine_zo_boundary_1(self, example_square_MWRu):
         example_square_MWRu.itL = 1
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         
         n = 24
         qsi = 0
@@ -814,7 +814,7 @@ class Test_aggradation(object):
         example_square_MWRu.routing_surface = "energy__elevation"
         example_square_MWRu.itL = 1
         example_square_MWRu.settle_deposit = True
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         
         # make node 24 a pit
         example_square_MWRu._grid.at_node['topographic__elevation'][24] = 3
@@ -832,7 +832,7 @@ class Test_attributes_in(object):
     def test_normal_values_1(self, example_square_MWRu):
         """"""
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
 
         n = 24
         qsi = np.sum(example_square_MWRu.arqso[example_square_MWRu.arn == n])
@@ -848,7 +848,7 @@ class Test_attributes_in(object):
         """"""
 
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
 
         n = 31
         qsi = np.sum(example_square_MWRu.arqso[example_square_MWRu.arn == n])
@@ -864,7 +864,7 @@ class Test_attributes_in(object):
     def test_special_values_1(self, example_square_MWRu):
         """no incoming volume"""
         example_square_MWRu.itL = 0       
-        example_square_MWRu.run_one_step(run_id = 0)        
+        example_square_MWRu.run_one_step()        
         
         n = 24
         qsi = np.sum(example_square_MWRu.arqso[example_square_MWRu.arn == n])
@@ -880,7 +880,7 @@ class Test_attributes_in(object):
     def test_bad_values_1(self, example_square_MWRu):
         """incoming is np.nan"""
         example_square_MWRu.itL = 8       
-        example_square_MWRu.run_one_step(run_id = 0)   
+        example_square_MWRu.run_one_step()   
 
         with pytest.raises(ValueError) as exc_info:
             n = 24
@@ -895,7 +895,7 @@ class Test_attribute_out(object):
     def test_normal_values_1(self, example_square_MWRu):
         # use inputs from MWR 
         example_square_MWRu.itL = 1       
-        example_square_MWRu.run_one_step(run_id = 0)
+        example_square_MWRu.run_one_step()
         qsi = example_square_MWRu.nudat[:,3][0]
         E = example_square_MWRu.nudat[:,4][0]
         A = example_square_MWRu.nudat[:,5][0]

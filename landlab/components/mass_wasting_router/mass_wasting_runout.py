@@ -89,7 +89,7 @@ class MassWastingRunout(Component):
 
     Run MassWastingRunout
     
-    >>> example_square_MWR.run_one_step(run_id = 0)
+    >>> example_square_MWR.run_one_step()
     
     By subtracting the initial DEM from the final DEM, which has evolvod as 
     a consequence of the runout, we can see areas of aggradation (positive values) 
@@ -427,22 +427,8 @@ class MassWastingRunout(Component):
         self._grid.at_node['topographic__initial_elevation'] = self._grid.at_node['topographic__elevation'].copy()
         
        
-    def run_one_step(self, run_id):
-        """for each mass wasting event that occurs during time/instance ""run_id",
-        implement Algorithm 1 and Algorithm 2.
-        
-        
-        Parameters
-        ----------
-        run_id : label for landslide run, can be a time stamp or some other identifier
-
-        Returns
-        -------
-        None.
-
-        """
-        # set run_id
-        self.run_id = run_id
+    def run_one_step(self):
+        """run MWR"""
                    
         # get all nodes that define the mass wasting events
         mask = self._grid.at_node['mass__wasting_id'] > 0
