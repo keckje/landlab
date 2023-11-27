@@ -365,7 +365,7 @@ class MassWastingRunout(Component):
 
         super().__init__(grid)
         
-        if len(critical_slope)>1: # change this to check for list input if defined as func of CA
+        if len(critical_slope)>1: 
             self.variable_slpc = True    
             self.a = critical_slope[0]
             self.b = critical_slope[1]

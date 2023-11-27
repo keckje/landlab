@@ -1,4 +1,6 @@
 class MWR_Saver():
+    """This class is instantiated and called by MassWastingRunout to save
+    model ouput. Only called in MassWastingRunout if save = True"""
     
     def __init__(
             self,
@@ -48,7 +50,7 @@ class MWR_Saver():
             self.aratt_r[mw_id] = dict.fromkeys(self.MWR._tracked_attributes, [])          
             
     def save_conditions_before_runout(self, mw_i, mw_id):
-        # save first set of data to reflect scar created by landslide
+        # save first set of data to reflect scar/depression in DEM created by mass wasting source area
         self.runout_evo_maps[mw_i][0] = self.MWR._grid.at_node['energy__elevation'].copy()
         self.topo_evo_maps[mw_i][0] = self.MWR._grid.at_node['topographic__elevation'].copy()
         self.flowing_volume[mw_id].append(0)            
