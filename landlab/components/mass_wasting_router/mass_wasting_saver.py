@@ -1,4 +1,4 @@
-class Mass_wasting_saver():
+class MassWastingSaver():
     """This class is instantiated and called by MassWastingRunout to save
     model ouput. Only called in MassWastingRunout if save = True"""
     

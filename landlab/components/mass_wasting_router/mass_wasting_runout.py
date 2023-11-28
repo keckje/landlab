@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from landlab import Component
 from landlab.components import FlowDirectorMFD
-from landlab.components.mass_wasting_router.MWR_saver import MWR_Saver
+from landlab.components.mass_wasting_router.mass_wasting_saver import MassWastingSaver
 
 class MassWastingRunout(Component):
     
@@ -425,7 +425,10 @@ class MassWastingRunout(Component):
         # define initial topographic + mass wasting thickness topography
         self._grid.at_node['energy__elevation'] = self._grid.at_node['topographic__elevation'].copy()
         self._grid.at_node['topographic__initial_elevation'] = self._grid.at_node['topographic__elevation'].copy()
-        
+        # prepare data containers for saving model images and behavior statistics    
+        if self.save:           
+            self.saver = MassWastingSaver(self)
+            self.saver.prep_data_containers()
        
     def run_one_step(self):
         """run MWR"""
@@ -440,11 +443,6 @@ class MassWastingRunout(Component):
             ls_mask = self._grid.at_node['mass__wasting_id'] == mw_id
             innL.append(np.hstack(self._grid.nodes)[ls_mask])
                
-        # prepare data containers for saving model images and behavior statistics    
-        if self.save:           
-            self.saver = MWR_Saver(self)
-            self.saver.prep_data_containers()
-            
         # For each mass wasting event in list:
         for mw_i,inn in enumerate(innL):
                          
