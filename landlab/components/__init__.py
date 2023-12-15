@@ -8,7 +8,7 @@ from .depression_finder import DepressionFinderAndRouter
 from .depth_dependent_diffusion import DepthDependentDiffuser
 from .depth_dependent_taylor_soil_creep import DepthDependentTaylorDiffuser
 from .detachment_ltd_erosion import DepthSlopeProductErosion, DetachmentLtdErosion
-from .distributed_hydrology_generator import DHSVMtoLandlab
+from .distributed_hydrology_generator import DistributedHydrologyGenerator
 from .diffusion import LinearDiffuser
 from .dimensionless_discharge import DimensionlessDischarge
 from .discharge_diffuser import DischargeDiffuser
