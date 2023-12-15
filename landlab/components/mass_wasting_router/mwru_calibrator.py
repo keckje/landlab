@@ -18,7 +18,7 @@ from landlab import imshow_grid
 from landlab import imshow_grid_at_node
 
 class MWRu_calibrator():
-    """an adaptive Markov Chain Monte Carlo calibration utitlity for calibrating
+    """an adaptive Markov Chain Monte Carlo calibration utility for calibrating
     MassWastingRunout to observed landslide runout and/or scour and deposition
 
     author: Jeff Keck
@@ -225,8 +225,8 @@ class MWRu_calibrator():
             # metric 4, Vu: cumulative flow volume past point cn
             #               equivalent to the cumulative erosion and aggradation 
             #               upslope of point cn * -1.
-            du = np.nansum(demd[(dem>=el) & (dem<=el_h)])*-1 
-            Vu = du*dA
+            du = np.nansum(demd[(dem>=el) & (dem<=el_h)])*-1  # equation 28
+            Vu = du*dA # equation 28
 
             # get channel characteristics
             # same, nut get node distance
@@ -332,7 +332,7 @@ class MWRu_calibrator():
         modeled = self.mbLdf_m[self.RMSE_metric]
         self.trial_qs_profiles[self.it] = modeled
         CA = self.mg.dx*self.mg.dy
-        MSE_Qt = self._MSE(observed, modeled)/(self.Qtm**2)
+        MSE_Qt = self._MSE(observed, modeled)/(self.Qtm**2) # equation 29
         
         nm = 'V_rms, iteration'+str(self.it)
         if self.plot_tf == True:

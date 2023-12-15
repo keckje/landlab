@@ -111,8 +111,8 @@ class downscale_DTW_to_landlab_grid():
             self._resample(by = self.resample['by'], metric = self.resample['metric'])
         
         
-        #print('interpolating DHSVM dtw maps to landlab grid')
-        #self._interpolate_DHSVM_to_landlab()
+        print('interpolating DHSVM dtw maps to landlab grid')
+        self._interpolate_DHSVM_to_landlab()
 
 
     def _grid_to_da(self, grid, field):

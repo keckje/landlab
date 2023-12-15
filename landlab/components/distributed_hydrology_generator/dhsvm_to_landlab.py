@@ -13,25 +13,25 @@ from landlab.plot import graph
 from landlab.io import read_esri_ascii
 from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsMapper
 
-class DHSVMtoLandlab(Component):
+class DistributedHydrologyGenerator(Component):
 
-    """Generate a time series of flow rates and/or soil water conditions on the
-    network model grid and/or raster model grid from hydrology modeled a distributed
-    hydrology model. 
+    """Generate a time series of flow rates and/or soil water conditions using
+    the output from an external distribute hydrology model
     
-    This component takes the raw modeled flow and depth from a distributed hydrlogy
-    model. From the modeled flow, it parameterizes a probability distribution 
-    function (pdf) of flow rates at each link in a network model grid representation
-    of the channel network. From the mapped depth to soil water file, it parameterizes
-    a pdf of the depth to soil water at each node in the raster model grid 
-    representaiton of the watershed.
+    The DistributedHydrologyGenerator(DHG) component takes the raw modeled flow 
+    and depth from a distributed hydrlogy model. From the modeled flow, it 
+    parameterizes a probability distribution function (pdf) of flow rates at each
+    link in a network model grid representation of the channel network.
+    From the mapped depth to soil water file, it parameterizes a pdf of the depth 
+    to soil water at each node in the raster model grid representaiton of the watershed.
     
-    The dhsvm channel network and grid do not need to exactly match the landlab model.
+    The external model channel network and grid do not need to match the landlab model exactly.
     Mapping functions determine which DHSVM network model grid links match
     with the network model grid links and which DHSVM grid cells match the landlab
     raster model grid cells. NOTE: to map between raster model grids, the Topmodel
     wetness index for both the Landlab grid and the DHSVM grid is needed. For the
-    DHSVM grid (which is coarser), use a minimum contributing cell number of 1 cell.
+    external model grid (which is assumed to be coarser), use a minimum contributing 
+    cell number of 1 cell.
     
     The run one step function randomly picks a storm intensity (return interval) and 
     storm date and updates the raster model grid depth to water table field and/or 
@@ -96,7 +96,7 @@ class DHSVMtoLandlab(Component):
             self.opt = 3
         else:
             raise ValueError("a network model grid and raster model grid or a" \
-                             "raster model grid are required to run DHSVMtoLandlab")
+                             "raster model grid are required to run DHG")
 
 
         # check for network model grid inputs
@@ -246,7 +246,7 @@ class DHSVMtoLandlab(Component):
             
                              
     def _prep_flow(self):
-        """Prepare DHSVMtoLandlab for generating flow values at each link"""
+        """Prepare DHG for generating flow values at each link"""
         
         # map raster model grid cells to network model grid and dhsvm network
         # properties of raster model grid added as class variables in GridTTools      
@@ -340,9 +340,9 @@ class DHSVMtoLandlab(Component):
                 self._streamflowonly_ag = self._streamflowonly.resample(self.tag).min().fillna(method='ffill') #convert sub  hourly obs to hourly
 
     def _prep_depth_to_watertable(self):
-        """Prepare DHSVMtoLandlab for generating depth to soil water values at
+        """Prepare DHG for generating depth to soil water values at
         each node"""
-        # load depth to water table maps into DHSVMtoLandlab as a 2-D
+        # load depth to water table maps into DHG as a 2-D
         # np array
         
         # initially set DHSVM grid wetness index as None
