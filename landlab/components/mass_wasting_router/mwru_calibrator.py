@@ -20,12 +20,33 @@ from landlab import imshow_grid_at_node
 class MWRu_calibrator():
     """an adaptive Markov Chain Monte Carlo calibration utility for calibrating
     MassWastingRunout to observed landslide runout and/or scour and deposition
-
-    author: Jeff Keck
     
     TODO:
     is _check_E_lessthan_lambda_times_qsc needed?
     save data for plots
+
+    Examples
+    ----------
+    1. Import necessary packages and components
+    
+    2. Define raster model grid representation of topography and landslide
+            topography
+            flow directions
+            regolith
+    
+    3. Instantiate MassWastingRunout
+    
+    4. Define parameter ranges for Calibrator
+            for detailed explanation of how to pick parameter values, see paper
+    
+    5. Instantiate Calibrator
+    
+    6. Run Calibrator
+    
+    7. List example liklihood scores for a MCMC chain that is 10 jumps long
+
+
+
     """
 
     def __init__(self,
@@ -159,7 +180,7 @@ class MWRu_calibrator():
         
             
         # run the model
-        self.MWR.run_one_step(run_id = 0)
+        self.MWR.run_one_step()
         # create the modeldiff_m field
         diff = self.mg.at_node['topographic__elevation'] - self.mg.at_node['topographic__initial_elevation']
         self.mg.at_node['dem_dif_m'] = diff

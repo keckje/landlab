@@ -695,7 +695,7 @@ class MassWastingRunout(Component):
  
             else:
                 # aggradation
-                A = min(qsi, self._aggradation(qsi_, slpn, n))                               
+                A = min(qsi, self._aggradation(qsi, slpn, n))                               
                 if A > 0 and self.E_constraint:
                     E = 0
                     if self._tracked_attributes:
