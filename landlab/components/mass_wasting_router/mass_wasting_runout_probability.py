@@ -239,9 +239,9 @@ class MassWastingRunoutProbability(Component):
             vals = self._parameter_cdf['SD'][1]
             self.MWR.SD = self._generate_val(q,vals)
     
-            self.MWR.run_one_step(dt = i)
+            self.MWR.run_one_step()
             
-            self.para_dict[i] = {'slpc':self.MWR.slpc, 'qsc':self.MWR.SD, 'alpha':self.MWR.cs}
+            self.para_dict[i] = {'slpc':self.MWR.slpc, 'qsc':self.MWR.qsc, 'alpha':self.MWR.k}
             self.ls_dict[i] = self._grid.at_node['mass__wasting_id']
             self.runout_dict[i] = self._grid.at_node['topographic__elevation'] - self._topographic__initial_elevation
             
