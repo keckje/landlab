@@ -264,6 +264,70 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
             
         return (Lnodelist, Ldistlist, Lxy)
 
+
+    def map_nmg_links_to_rmg_nodes_DHSVM(self, linknodes, active_links, nmgx, nmgy):
+        '''convert network model grid links to coincident raster model grid nodes.
+        Output is a list of lists. order of lists is order of links
+        '''
+        Lnodelist = [] #list of lists of all nodes that coincide with each link
+        Ldistlist = [] #list of lists of the distance on the link (measured from upstream link node) for all nodes that coincide with each link
+        xdDFlist = []
+        Lxy= [] #list of all nodes the coincide with the network links
+        #loop through all links in network grid to determine raster grid cells that coincide with each link
+        #and equivalent distance from upstream node on link
+        for k,lk in enumerate(linknodes) : #for each link in network grid
+            linkID = active_links[k] #link id (indicie of link in nmg fields)
+            lknd = lk #link node numbers
+            x0 = nmgx[lknd[0]] #x and y of downstream link node
+            y0 = nmgy[lknd[0]]
+            x1 = nmgx[lknd[1]] #x and y of upstream link node
+            y1 = nmgy[lknd[1]]
+            #create 1000 points along domain of link
+            X = np.linspace(x0,x1,1000)
+            Xs = X-x0 #change begin value to zero
+            #determine distance from upstream node to each point
+            #y value of points
+            if Xs.max() ==0: #if a vertical link (x is constant)
+                vals = np.linspace(y0,y1,1000)
+                dist = vals-y0 #distance along link, from downstream end upstream
+                dist = dist.max()-dist #distance from updtream to downstream
+            else: #all their lines
+                vals = y0+(y1-y0)/(x1-x0)*(Xs)
+                dist = ((vals-y0)**2+Xs**2)**.5
+                dist = dist.max()-dist #distance from updtream to downstream
+            #match points along link (vals) with grid cells that coincide with link
+            nodelist = [] #list of nodes along link
+            distlist = [] #list of distance along link corresponding to node
+            for i,v in enumerate(vals):
+                x = X[i]
+                mask = (self.ndyn>=v) & (self.ndys<=v) & (self.ndxe>=x) & (self.ndxw<=x)  #mask - use multiple boolean tests to find cell that contains point on link
+                node = self.nodes[mask] #use mask to extract node value
+                if node.shape[0] > 1:
+                    node = np.array([node[0]])
+                # create list of all nodes that coincide with linke
+                if node not in nodelist: #if node not already in list, append - many points will be in same cell; only need to list cell once
+                    nodelist.append(node[0][0])  
+                    distlist.append(dist[i])
+                    xy = {'linkID':linkID,
+                        'node':node[0][0],
+                          'x':self.gridx[node[0][0]],
+                          'y':self.gridy[node[0][0]]}
+                    Lxy.append(xy)
+                     
+                
+             
+            Lnodelist.append(nodelist)
+            Ldistlist.append(distlist)
+            
+            df = pd.DataFrame.from_dict(Lxy)
+            df['row'] = self._grid.at_node['DHSVM_row'][df['node']]
+            df['column'] = self._grid.at_node['DHSVM_column'][df['node']]
+            
+            
+            
+             
+        return (Lnodelist, Ldistlist, Lxy, df)
+
             
     def map_nmg1_links_to_nmg2_links(self,Lnodelist,xyDf_d):    
         
