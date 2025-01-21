@@ -112,7 +112,7 @@ class downscale_DTW_to_landlab_grid():
         
         
         print('interpolating DHSVM dtw maps to landlab grid')
-        self._interpolate_DHSVM_to_landlab()
+        # self._interpolate_DHSVM_to_landlab()
 
 
     def _grid_to_da(self, grid, field):
