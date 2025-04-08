@@ -11,8 +11,9 @@ from landlab.components import(FlowDirectorD8,
                                 FlowDirectorDINF, 
                                 FlowDirectorMFD, 
                                 FlowDirectorSteepest)
-from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
-from landlab.utils.channel_network_grid_tools_v3 import ChannelNetworkToolsInterpretor 
+# from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools # note, this was referencing old ChannelNetworkGridTools, before commit 77aff9f
+from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsInterpretor
+
 
 class LandslideMapper(Component):
 
@@ -149,7 +150,7 @@ class LandslideMapper(Component):
             self.gti = gti
             # check if ChannelNodes already created                   
         else:
-            self.gti = ChannelNetworkGridTools(grid = grid,Ct = Ct,BCt = BCt)
+            self.gti = ChannelNetworkToolsInterpretor(grid = grid,Ct = Ct,BCt = BCt)
 
         # if gtm != None:
         #     self.gtm = gtm

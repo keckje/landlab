@@ -1,32 +1,139 @@
-# -*- coding: utf-8 -*-
-
 import numpy as np
 import pandas as pd
-from landlab import RasterModelGrid
-from landlab import Component, FieldError
-from landlab.components import FlowAccumulator
-from landlab.components import(FlowDirectorD8, 
-                                FlowDirectorDINF, 
-                                FlowDirectorMFD, 
-                                FlowDirectorSteepest)
+from landlab import Component
+from landlab.components import FlowDirectorMFD
+from landlab.components.mass_wasting_router.mass_wasting_saver import MassWastingSaver
 
 class MassWastingRunout(Component):
     
-    '''a cellular automata mass wasting model that routes an initial mass wasting  
-    volume (e.g., a landslide) through a watershed, determines Scour, Entrainment
-    and Depostion depths, tracks grain size and updates the DEM. This model is
-    intended for modeling the runout of individually mapped landslides and landslides
-    inferred from a landslide hazard map.
+    '''a cellular-automata mass wasting runout model that routes an initial mass 
+    wasting body (e.g., a landslide) through a watershed, determines erosion and 
+    aggradation depths, evolves the terrain and regolith and tracks attributes of 
+    the regolith. This model is intended for modeling the runout extent, topographic
+    change and sediment transport caused by a mapped landslide(s) or landslides 
+    inferred from a landslide hazard map. 
+    
+    
+    Examples
+    ----------
+    Import necessary packages and components
+    
+    >>> import numpy as np
+    >>> from landlab import RasterModelGrid
+    >>> from landlab.components import FlowDirectorMFD
+    >>> from landlab.components.mass_wasting_router import MassWastingRunout
 
-    TODO: change particle diameter to a function that is applied to all fields that will be tracked
-    change dictionary keys to aruguements in the call function
-    probably don't need to separate user options into children classes
-    use cython or try to restructure SEDU function so that it can be applied with 
-    vector operations, the filter all changes to correct cells where computations should not have occurred
+    Define the topographic__elevation field of a 7 columns by 7 rows, 10-meter 
+    raster model grid
+    
+    >>> dem = np.array([[10,8,4,3,4,7.5,10],[10,9,3.5,4,5,8,10],[10,9,6.5,5,6,8,10],
+    ...                 [10,9.5,7,6,7,9,10],[10,10,9.5,8,9,9.5,10],
+    ...                 [10,10,10,10,10,10,10],[10,10,10,10,10,10,10]]
+    ... )
+
+    >>> dem = np.hstack(dem).astype(float)
+    >>> mg = RasterModelGrid((7,7),10)
+    >>> _ = mg.add_field('topographic__elevation',
+    ...                   dem,
+    ...                   at='node'
+    ... )
+    
+    Define boundary conditions
+    
+    >>> mg.set_closed_boundaries_at_grid_edges(True, True, True, True) # close all boundaries
+    
+    Add multiflow direction fields, soil thickness (here set to 1 meter)
+
+    >>> fd = FlowDirectorMFD(mg, diagonals=True,
+    ...                       partition_method = 'slope')
+    >>> fd.run_one_step()   
+    >>> nn = mg.number_of_nodes   
+    >>> depth = np.ones(nn)*1 
+    >>> _ = mg.add_field('node', 'soil__thickness',depth)
+    
+    Define the initial landslide. Any mass_wasting_id value >1 is considered a 
+    landslide. The landslide extent is defined by assigining all nodes withing 
+    the landslide the same mass_wasting_id value.
+    Here, the landslide is represented by a single node (node 38), which assigned
+    a mass_wasting_id value of 1:
+    
+    >>> mg.at_node['mass__wasting_id'] = np.zeros(nn).astype(int)
+    >>> mg.at_node['mass__wasting_id'][np.array([38])] = 1 
+    
+    Add attributes of the regolith as fields of the raster model grid that will 
+    be tracked by the model. These could be any attribute in which the tracking
+    method used by MassWastingRunout reasonably represents movement of the
+    attribute. Here we track the particle diameter and organic content
+    of the regolith. Note, a particle__diameter field is required if shear stress
+    is determined as a function of grain size.
+    
+    >>> np.random.seed(seed=7)
+    >>> mg.at_node['particle__diameter'] = np.random.uniform(0.05,0.25,nn)
+    >>> mg.at_node['organic__content'] = np.random.uniform(0.01,0.10,nn) 
+    
+    Next define parameter values for MassWastingRunout and instantiate the model:
+
+    >>> Sc = [0.03] # Sc, note: defined as a list (see below)
+    >>> qsc = 0.01 # qsc
+    >>> k = 0.02 # k
+    >>> h_max = 1
+    >>> tracked_attributes = ['particle__diameter','organic__content']        
+    >>> example_square_MWR = MassWastingRunout(mg,
+    ...                                        critical_slope = Sc,
+    ...                                        threshold_flux = qsc,                    
+    ...                                        erosion_coefficient = k,
+    ...                                        tracked_attributes = tracked_attributes,
+    ...                                        max_flow_depth_observed_in_field = h_max,
+    ...                                        save = True
+    ... )
+
+    Run MassWastingRunout
+    
+    >>> example_square_MWR.run_one_step()
+    
+    By subtracting the initial DEM from the final DEM, which has evolvod as 
+    a consequence of the runout, we can see areas of aggradation (positive values) 
+    and erosion (negative values). Nodes with non-zero topographic change 
+    represent the runout extent.
+        
+    >>> DEM_initial = mg.at_node['topographic__initial_elevation']
+    >>> DEM_final = mg.at_node['topographic__elevation']    
+    >>> print(DEM_final - DEM_initial)  
+    [ 0.          0.          0.          0.          0.          0.
+      0.          0.          0.          0.96579201  0.52734339 -0.00778869
+      0.          0.          0.          0.         -0.00594927 -0.12261762
+     -0.0027898   0.          0.          0.          0.         -0.04562554
+     -0.10973222 -0.05776526  0.          0.          0.          0.
+     -0.01225359 -0.07973101 -0.04888238  0.          0.          0.
+      0.          0.         -1.          0.          0.          0.
+      0.          0.          0.          0.          0.          0.
+      0.        ]
+
+    See how the landslide removes all of the regolith at node 38 (the negative -1)    
+    
+    Look at the final spatial distribution of regolith particle diameter.
+    
+    >>> print(mg.at_node['particle__diameter'])
+    [ 0.06526166  0.20598376  0.13768185  0.19469304  0.2455979   0.15769917
+      0.15022409  0.06441023  0.1036878   0.15619144  0.17680799  0.21074781
+      0.12618823  0.06318727  0.10762912  0.23191871  0.09295928  0.14042479
+      0.23545374  0.05497985  0.17010978  0.2400259   0.09606058  0.15969798
+      0.23182567  0.07663389  0.15468252  0.20008197  0.18380265  0.14355057
+      0.09096982  0.14815318  0.12447694  0.14548023  0.12317808  0.2175836
+      0.2037295   0.11279894  0.          0.10520981  0.14056859  0.12059567
+      0.18147989  0.12407022  0.1418186   0.19386482  0.13259837  0.23128465
+      0.08609032]
+
+    Also see that the attribute value is set to zero at any node in which the regolith
+    depth is 0.    
     
     
+    References
+    ----------
+    Keck, J., Istanbulluoglu, E., Campforts, B., Tucker G., Horner-Devine A., (2023), 
+    A landslide runout model for sediment transport, landscape evolution and hazard 
+    assessment applications, submitted to Earth Surface Dynamics.
     
-    author: Jeff Keck
     '''
     
     
@@ -45,7 +152,6 @@ class MassWastingRunout(Component):
             "doc": "interger or float id of each mass wasting area is assigned \
                 to all nodes representing the mass wasting area."
             },
-        
         
         'topographic__elevation': {            
             "dtype": float,
@@ -107,513 +213,367 @@ class MassWastingRunout(Component):
             },
 
         }
-    
-    
-    
+       
     
     def __init__(
     self,
     grid,
-    release_dict,
-    mw_dict,
-    save = False, 
-    run_id = 0, 
-    itL = 1000,
-    routing_surface = "energy__elevation",
-    settle_deposit = False,
+    critical_slope,
+    threshold_flux,
+    erosion_coefficient,
+    tracked_attributes = None,
     deposition_rule = "critical_slope",
-    veg_factor = 1,
-    dist_to_full_flux_constraint = 0,
-    deposit_style = 'downslope_deposit',
-    anti_sloshing = False,
-    sloshing_check_frequency = 20,
-    effective_qsi = False,
-    number_deposition_nodes = 3,
-    E_constraint = True):
+    grain_shear = True,
+    effective_qsi = True,
+    settle_deposit = False,
+    E_constraint = True,
+    save = False,
+    typical_flow_thickness_of_erosion_zone = 2,
+    typical_slope_of_erosion_zone = 0.15,
+    erosion_exponent = 0.2,
+    max_flow_depth_observed_in_field = None, 
+    vol_solids_concentration = 0.6,
+    density_solids = 2650,
+    density_fluid = 1000,
+    gravity = 9.81,
+    dist_to_full_qsc_constraint = 0,
+    itL = 1000,
+    run_id = 0
+    ):
         
+        """        
+        Parameters
+        ----------
+        grid: landlab raster model grid
+
+        critical_slope: list of floats
+            critical slope (angle of repose if no cohesion) of mass 
+            wasting material , L/L list of length 1 for a basin uniform Sc value
+            list of length 2 for hydraulic geometry defined Sc, where the first 
+            and second values in the list are the coefficient and exponent of a 
+            user defined function for crictical slope that varies with contributing
+            area [m2] to a node (e.g., [0.146,0.051] sets Sc<=0.1 at 
+            contributing area > ~1100 m2).                                            
+        
+        threshold_flux: float
+            minimum volumetric flux per unit contour width, [L3/L2/iterataion] or
+            [L/iteration]. Flux below this threshold stops at the cell as a deposit
+        
+        erosion_coefficient: float
+            coefficient used to convert total basal shear stress [kPa] of the runout 
+            material to a scour depth [m]            
+                                 
+        tracked_attributes : list of str or None
+            A list of the attribute names (strings) that will be tracked by the 
+            runout model. Attributes in tracked_attributes must also be a field 
+            on the model grid and names in list must match the grid field names. 
+            Default is None.
+         
+        deposition_rule : str
+            Can be either "critical_slope", "L_metric" or "both". 
+            "critical_slope" is deposition rule used in Keck et al. 2023.
+            "L_metric" is a variation of rule described by Campforts et al. 2020.
+            "both" uses the minimum value of both rules.
+            Default value is "critical_slope".          
+         
+        grain_shear : boolean
+            Indicate whether to define shear stress at the base of the runout material
+            as a function of grain size using Equation 13 (True) or the depth-slope 
+            approximation using Equation 12 (False). Default is True.
+            
+        effective_qsi : boolean
+            Indicate whether to limit erosion and aggradation rates to <= the
+            erosion and aggradation rates coorisponding to the maximum observed flow 
+            depth. All results in Keck et al. 2023 use this constraint. Default is True.
+
+        E_constraint : boolean
+             Indicate if erosion can not simultaneously occur with aggradation. If True,
+             aggradation > 0, then erosion = 0. This is True in Keck et al., 2023. 
+             Default is True.
+             
+        settle_deposit : boolean
+            Indicate whether to allow deposits to settle before the next model iteration
+            is implemented. Settlement is determined the critical slope as evaluated from 
+            the lowest adjacent node to the deposit. This is not used in Keck et al. 2023
+            but tends to allow model to better reproduce smooth, evenly sloped deposits.
+            Default is False.
+                  
+        save : boolean
+            Save topographic elevation of watershed after each model iteration? 
+            This uses a lot of memory but is helpful for illustrating runout. 
+            The default is False.
+               
+        
+        Other Parameters
+        ----------
+        These parameters have a lesser impact on model behavior or may not be
+        applicable, depending on model run options.               
+
+        typical_flow_thickness_of_erosion_zone: float
+            field estimated flow thickness in the erosion-dominatedd reaches of 
+            the runout path [m], used to estimate erosion_coefficient k using
+            erosion_coef_k function. Default value: 3
+            
+        typical slope_of_erosion_zone: floatf
+            field or remote sensing estimated slope in the scour dominated reach 
+            of the runout path [L/L], used to estimate erosion_coefficient k using
+            erosion_coef_k function. Default value: 0.4
+            
+        erosion_exponent: float
+            The exponent of equation 11, that scales erosion depth as a function of
+            shear stress. Default value: 0.5
+            
+        max_flow_depth_observed: maximum observed flow depth, over the entire 
+            runout path [m], h_max in equation 24. Only used effective_qsi is True.
+            Default value: 4
+            
+        vol_solids_concentration: float
+            The ratio of the volume of the solids to the total volume of the flow 
+            mixture. Default value: 0.6
+            
+        density solids: float
+            The density of the solids [kg/m3]. Default value: 2650
+            
+        density fluid: float
+            The density of the fluid [kg/m3]. Default value: 1000
+            
+        gravity: float
+            Acceleration due to gravity [m2/s]. Default value: 9.81
+            
+        dist_to_full_qsc_constraint : float
+            distance in meters at which qsc is applied to runout. If the landslide
+            initiates on relatively flat terrain, it may be difficult to determine
+            a qsc value that allows the model start and deposit in a way that matches
+            the observed. In Keck et al. 2023, dist_to_full_qsc_constraint = 0, but
+            other landslides may need dist_to_full_qsc_constraint = 20 to 50 meters.
+         
+        itL : int
+            maximum number of iterations the model runs before it
+            is forced to stop. The default is 1000. Ideally, if properly parameterized,
+            the model should stop on its own. All modeled runout in Keck et al. 2023
+            stopped on its own.            
+
+        run_id : float, int or str 
+            label for landslide run, can be the time or some other identifier. This
+            can be updated each time model is implemnted with "run_one_step"
+         
+        Returns
+        -------
+        None.
+        
+        """
+
         super().__init__(grid)
-
-        self.release_dict = release_dict
-        self.mw_dict = mw_dict
-        self.save = save
-        self.run_id = run_id
-        self.itL = itL
-        self.routing_partition_method = 'slope'#'square_root_of_slope'  #
-        self.routing_surface = routing_surface
-        self.settle_deposit = settle_deposit
-        self.VaryDp = self._grid.has_field('node', 'particle__diameter')
+        
+        if len(critical_slope)>1: 
+            self.variable_slpc = True    
+            self.a = critical_slope[0]
+            self.b = critical_slope[1]
+        else:
+            self.variable_slpc = False
+            self.slpc = critical_slope[0]
+        self.qsc = threshold_flux
+        self.k = erosion_coefficient
+        self._tracked_attributes = tracked_attributes         
         self.deposition_rule = deposition_rule
-        self.veg_factor = veg_factor # increase SD by this factor for all undisturbed nodes
-        self.dist_to_full_flux_constraint = dist_to_full_flux_constraint # make his larger than zero if material is stuck
-        self._deposit_style = deposit_style # assume deposition below cell or not
-        self.slosh_limit = 1
-        self._anti_sloshing = anti_sloshing
-        self._check_frequency = sloshing_check_frequency
+        self.grain_shear = grain_shear
         self.effecitve_qsi = effective_qsi
-        self.ndn = number_deposition_nodes
-        self._E_constraint = E_constraint
-        if self.VaryDp:
-            print(' running with spatially variable Dp ')
-
-        # release parameters for landslide
-        self.nps = list(self.release_dict['number of pulses'])
-        self.nid = list(self.release_dict['iteration delay'])
-       
-
-        if len(self.mw_dict['critical slope'])>1: # change this to check for list input if defined as func of CA
-            self.a = self.mw_dict['critical slope'][0]
-            self.b = self.mw_dict['critical slope'][1]
-        else:
-            self.slpc = self.mw_dict['critical slope'][0]
+        self.settle_deposit = settle_deposit
+        self.E_constraint = E_constraint
+        self.save = save
+        self.h = typical_flow_thickness_of_erosion_zone
+        self.s = typical_slope_of_erosion_zone
+        self.eta = erosion_exponent
+        self.qsi_max = max_flow_depth_observed_in_field
+        if (self.effecitve_qsi) == True & (self.qsi_max == None):
+                raise ValueError("Need to define the max_flow_depth_observed_in_field n\
+                                 or set effecitve_qsi to False")      
+        self.vs = vol_solids_concentration
+        self.ros = density_solids
+        self.rof = density_fluid
+        self.g = gravity
+        self.dist_to_full_qsc_constraint = dist_to_full_qsc_constraint 
+        self.itL = itL
+        self.run_id = run_id    
+      
         
-        self.SD = self.mw_dict['minimum flux']
-        
-        self.cs = self.mw_dict['scour coefficient']
-        
-        if 'scour exponent' in self.mw_dict:
-            self.eta = self.mw_dict['scour exponent']
-        else:
-            self.eta = 0.2
+        if tracked_attributes:
+            self.track_attributes = True
+            
+            # check attributes are included in grid
+            for key in self._tracked_attributes:
+                if self._grid.has_field('node', key) == False:
+                    raise ValueError("{} not included as field in grid".format(key))
                 
-        if 'effective particle diameter' in self.mw_dict: # specify Dp
-            self.Dp = self.mw_dict['effective particle diameter']
+            # if using grain size dependent erosion, check 
+            # particle_diameter is included as an attribute
+            if self.grain_shear == True:
+                if 'particle__diameter' in self._tracked_attributes:
+                    print(' running with spatially variable Dp ')
+                else:
+                    raise ValueError("{} not included as field in grid and/or key in tracked_attributes".format(key))
         else:
-            self.Dp = 0.25   
-            
-        if 'vol solids concentration' in self.mw_dict:
-            self.vs = self.mw_dict['vol solids concentration']
-        else:
-            self.vs = 0.6
+            self.track_attributes = False
         
-        if 'density solids' in self.mw_dict:
-            self.ros = self.mw_dict['density solids']
-        else:
-            self.ros = 2650
-            
-        if 'density fluid' in self.mw_dict:
-            self.rof = self.mw_dict['density fluid']
-        else:
-            self.rof = 1000
-        
-        if 'gravity' in self.mw_dict:
-            self.g = self.mw_dict['gravity'] 
-        else:
-            self.g = 9.81
-        
-        if 'typical flow thickness, scour' in self.mw_dict:
-            self.h = self.mw_dict['typical flow thickness, scour'] 
-        else:
-            self.h = 2
-
-        if 'typical slope, scour' in self.mw_dict:
-            self.s = self.mw_dict['typical slope, scour'] 
-        else:
-            self.s = 0.15
-        if 'max observed flow depth' in self.mw_dict:
-            self.qsi_max = self.mw_dict['max observed flow depth']
-        else:
-            self.qsi_max = None
-
-
-        # density of debris flow mixture
-        self.rodf = self.vs*self.ros+(1-self.vs)*self.rof
-        # distance equivalent iteration
-        self.d_it = int(self.dist_to_full_flux_constraint/self._grid.dx)
+        # flow routing option
+        self.routing_partition_method = 'slope' # 'square_root_of_slope', see flow director               
+        # density of runout mixture
+        self.ro_mw = self.vs*self.ros+(1-self.vs)*self.rof
+        # number of model iterations needed to reach dist_to_full_qsc_constraint
+        self.d_it = int(self.dist_to_full_qsc_constraint/self._grid.dx)
         
         # define initial topographic + mass wasting thickness topography
         self._grid.at_node['energy__elevation'] = self._grid.at_node['topographic__elevation'].copy()
         self._grid.at_node['topographic__initial_elevation'] = self._grid.at_node['topographic__elevation'].copy()
-        
-        # define the initial disturbance map
-        # if the user included a disturbance map field then:
-        if self._grid.has_field('disturbance_map'):
-            self._grid.at_node['disturbance_map'] = self._grid.at_node['disturbance_map'].astype(bool)
-        else: # otherwise define everthing as undisturbed
-            self._grid.at_node['disturbance_map'] = np.full(self._grid.number_of_nodes, False)
-    
-   
-    """route an initial mass wasting volume through a watershed, determine Scour, 
-    Entrainment and Depostion depths and update the DEM
-    
-    
-    Parameters
-    ----------
-    grid : landlab raster model grid
-        raster model grid 
-
-    release_dict : dictionary
-        a dictionary of parameters that control the release of the mass wasting 
-        material into the watershed. A pulse (fraction) of the total landslide volume
-        is added at interval "nid" until the total number of pulses is equal to 
-        the total landslide volume             
-                mw_release_dict = {
-                    'number of pulses': 1, 
-                    'iteration delay': 1
-                    }   
-                
-                where:
-                    number of pulses: int
-                        number of pulses that are used to release the total mass
-                        wasting volume
-                    iteration delay: int
-                        number of iterations between each pulse
-    
-    mw_dict : dictionary
-        a dictionary of parameters that control the behavoir of the cellular-automata 
-        debris flow model formatted as follows:
-                mw_dict = {
-                    'critical slope':0.05, 'minimum flux':0.1,
-                    'scour coefficient':0.03}
-            
-            where: 
-                critical slope: list of floats
-                    critical slope (angle of repose if no cohesion) of mass wasting material , L/L
-                            list of length 1 for a basin uniform Sc value
-                            list of length 2 for hydraulic geometry defined Sc
-                            coefficient and exponent of a user defined function for mass wasting 
-                            crictical slope. e.g., [0.146,0.051] sets Sc<=0.1 at 
-                            contributing area > ~1100 m2
-                                        
-                minimum-flux: float
-                    minimum volumetric flux per unit contour width, i.e., 
-                    volume/(grid.dx*grid.dx) per iteration, (L)/i.
-                    flux below this threshold stops at the cell as a deposit
-                scour coefficient: float [L/((M*L*T^-2)/L^2)]
-                    coefficient that converts the depth-slope approximation of
-                    total shear stress (kPa from the debris flow to a 
-                    scour depth [m]
-                        
-    save : boolean
-        Save topographic elevation of watershed after each model iteration? 
-        The default is False.
-    itL : int
-        maximum number of iterations the cellular-automata model runs before it
-        is forced to stop. The default is 1000.
-    
-  
-    routing_surface: str
-        "energy__elevation" to use the potential energy surface of the landscape to route
-        "topographic__elevation" use the ground surface of the landscape to route
-
-    
-    
-    settle_deposit: boolean
-         Allow settling after deposition during runout? Settling is applied each
-         iteration of the model run after outflow from all cells have been computed
-         default is False
-
-    Returns
-    -------
-    None.
-    
-    """
-    
-    def run_one_step(self, dt):
-        """route a list of mass wasting volumes through a DEM and update
-        the DEM based on the scour, entrainment and depostion depths at each 
-        cell        
-        ----------
-        Parameters
-        dt : foat
-            duration of storm, in seconds
-
-        Returns
-        -------
-        None.
-
-        """
-        # set instance time stamp
-        self.run_id = dt
+        # prepare data containers for saving model images and behavior statistics    
+        if self.save:           
+            self.saver = MassWastingSaver(self)
+            self.saver.prep_data_containers()
+       
+    def run_one_step(self):
+        """run MWR"""
                    
-        # mass wasting cells coded according to id
+        # get all nodes that define the mass wasting events
         mask = self._grid.at_node['mass__wasting_id'] > 0
 
-        # list of unique mw_id
+        # separate the mass wasting event nodes into individual events
         self.mw_ids = np.unique(self._grid.at_node['mass__wasting_id'][mask])
-        
-        # innL is list of lists of nodes in each landslide
-        innL = []
+        innL = [] # innL is list of lists of nodes in each mass wasting event
         for mw_id in self.mw_ids:
             ls_mask = self._grid.at_node['mass__wasting_id'] == mw_id
-            # list of lists, node ids in each landslide
             innL.append(np.hstack(self._grid.nodes)[ls_mask])
-        
-        # if nps is a single value (rather than list of values for each mass wasting event)
-        # this still may work, can be set to 1 pulse, no delay for landslide area failures
-        if (len(self.nps) ==1) & (len(self.nps) < len(innL)):
-            self.nps = np.ones(len(innL))*self.nps
-        
-        # if nid is a single value (rather than list of values for each mass wasting event)            
-        if (len(self.nid) ==1) & (len(self.nid) < len(innL)):
-            self.nid = np.ones(len(innL))*self.nid
-        
-        
-        # data containers for saving model images and behavior statistics    
-        self.arndn_r = {}
-        if self.save:
-            cL = {} 
-            self.df_evo_maps = {} # copy of dem after each routing iteration
-            self.topo_evo_maps = {}
-            self.enL = [] # entrainment depth / regolith depth
-            self.DpL = [] # deposition depth
-            self.dfdL = [] # incoming debris flow thickness (qsi)
-            self.TdfL = [] # basal shear stress 
-            self.slopeL = [] # slope
-            self.velocityL = [] # velocity (if any)
-            self.pd_r = {}
-            self.st_r = {}
-            self.tss_r ={}
-            self.frn_r = {}
-            self.frp_r = {}
-            self.arv_r = {}
-            self.arn_r = {}
-            self.arpd_r = {}
-            
-            
+               
         # For each mass wasting event in list:
         for mw_i,inn in enumerate(innL):
                          
             mw_id = self.mw_ids[mw_i]
-            self._lsvol = self._grid.at_node['soil__thickness'][inn].sum()*self._grid.dx*self._grid.dy # set volume
+            self._lsvol = self._grid.at_node['soil__thickness'][inn].sum()*self._grid.dx*self._grid.dy
             
             if self.qsi_max == None:
                 self.qsi_max = self._grid.at_node['soil__thickness'][inn].max()
             
-            # prep data containers
-            self.arndn_r[mw_id] = []
+            # prepare temporary data containers for each mass wasting event mw_i
             if self.save:
-                cL[mw_i] = []
-                self.df_evo_maps[mw_i] = {}
-                self.topo_evo_maps[mw_i] = {}
-                self.DEMdfD = {}
-                self.pd_r[mw_id] = []
-                self.st_r[mw_id] = []
-                self.tss_r[mw_id] = []
-                self.frn_r[mw_id] = []
-                self.frp_r[mw_id] = []            
-                self.arv_r[mw_id] = []
-                self.arn_r[mw_id] = []
-                self.arpd_r[mw_id] = []   
-                
+                self.saver.prep_mw_data_containers(mw_i, mw_id)
             
-            # prepare initial mass wasting material (precipitons) for release 
+            # Algorithm 1, prepare initial mass wasting material (debritons) for release 
             self._prep_initial_mass_wasting_material(inn, mw_i)
 
-            self.arndn_r[mw_id].append(self.arndn)
+            # self.arndn_r[mw_id].append(self.arndn)
             if self.save:
-                # save first set of data
-                self.df_evo_maps[mw_i][0] = self._grid.at_node['energy__elevation'].copy()
-                self.topo_evo_maps[mw_i][0] = self._grid.at_node['topographic__elevation'].copy()
-                self.DEMdfD[0] = {'DEMdf_r':0}            
-                if self.VaryDp:
-                    self.pd_r[mw_id].append(self._grid.at_node['particle__diameter'].copy())
-                self.st_r[mw_id].append(self._grid.at_node['soil__thickness'].copy())
-                self.tss_r[mw_id].append(self._grid.at_node['topographic__steepest_slope'].copy())
-                self.frn_r[mw_id].append(self._grid.at_node['flow__receiver_node'].copy())
-                self.frp_r[mw_id].append(self._grid.at_node['flow__receiver_proportions'].copy())
-                self.arv_r[mw_id].append(self.arv)
-                self.arn_r[mw_id].append(self.arn)
-                self.arpd_r[mw_id].append(self.arpd)
+                # save first set of data to reflect scar created by landslide
+                self.saver.save_conditions_before_runout(mw_i, mw_id)
+
+            # Algorith 2, now loop through each receiving nodes, 
+            # determine next set of recieving nodes,
+            # repeat until no more receiving nodes (material deposits)             
+            self.c = 0 # model iteration counter
+            while len(self.arn)>0 and self.c < self.itL:
                 
-        
-            # now loop through each receiving node in list rni, 
-            # determine next set of recieving nodes
-            # repeat until no more receiving nodes (material deposits)                
-            c = 0 # model iteration counter
-            c_dr = 0 # mass wasting event delayed-release counter
-            self.sloshed = 0 # number of times model has sloshed
-            
-            while len(self.arn)>0 and c < self.itL:
-                self.c = c
+                # set qsc: the qsc constraint does not fully apply until runout 
+                # has traveled dist_to_full_qsc_constraint
                 if self.d_it == 0:
-                    self.SD_v = self.SD
+                    self.qsc_v = self.qsc
                 else:
-                    self.SD_v = self.SD*(min(c/self.d_it,1))
-                # release the initial landslide volume
-                # if first iteration, receiving cell = initial receiving list
-                # initial volume = volume/nps
-                if c == 0: 
-                    c_dr+=1
-                    
-                # for following iterations, add initial volume/nps every nid iterations
-                # until the volume has been added nps times
-                elif self.nps[mw_i]>1:
-                    if ((c)%self.nid[mw_i] == 0) & (c_dr<=self.nps[mw_i]-1):
-                        self.arn = np.concatenate((self.arn, self.rni))
-                        self.arv = np.concatenate((self.arv, self.rvi))
-                        self.arpd = np.concatenate((self.arpd, self.rpdi))
-                        # update pulse counter
-                        c_dr+=1        
+                    self.qsc_v = self.qsc*(min(self.c/self.d_it,1))
+
+                # temporary data containers for each iteration of the while loop, 
+                # that store receiving node, flux and attributes to become the 
+                # input for the next iteration
+                self.arndn_ns = np.array([]) # next iteration donor nodes
+                self.arn_ns = np.array([]) # next iteration receiver nodes
+                self.arqso_ns = np.array([]) # next iteration flux to receiver nodes
+                self.arnL = [] # list of receiver nodes
+                self.arqsoL = [] # list of flux out
+                self.arndnL = [] # list of donor nodes
+                if self.track_attributes:
+                    self.aratt_ns = dict.fromkeys(self._tracked_attributes, np.array([])) #
+                    self.arattL = dict.fromkeys(self._tracked_attributes, [])
                 
-                # receiving node, volume and particle diameter temporary arrays
-                # that become the arrays for the next model step (iteration)
-                self.arndn_ns = np.array([])
-                self.arn_ns = np.array([])
-                self.arv_ns = np.array([])
-                self.arpd_ns = np.array([])
+                # for each unique node in receiving node list self.arn
+                self.arn_u = np.unique(self.arn).astype(int)  # unique arn list
                 
-                self.arnL = []
-                self.arvL = []
-                self.arpdL = []
-                self.arndnL = []
+                # determine the incoming flux to each node in self.arn_u
+                self._determine_qsi()
                 
-                # for each unique cell in receiving node list self.arn
-                arn_u = np.unique(self.arn).astype(int)  # unique arn list
-                
-                # determine the incoming volume and depth to each node in arn_u
-                self.vqdat = self._vin_qsi(arn_u) ##
-                
-                # update energy elevation as node elevation plus incoming flow thickness
+                # update node elevation plus incoming flow thickness
                 # this happens even if using topographic__elevation to route so that 
                 # the thickness of the debris flow is tracked for plotting
                 self._update_E_dem()
                 
-                if self.routing_surface == "energy__elevation":                              
-                    # if considering the energy surface in flow routing, 
-                    # update the receiving nodes (self.rn) to represent the 
-                    # the flow surface
-                    self._update_energy_slope()   
-                    self.rp = self._grid.at_node['flow__receiver_proportions'].copy() # not using self.rp, only need rn for constraint
-                    self.rn = self._grid.at_node['flow__receiver_node'].copy()
-                    # scour function uses the underlying topography. Grid fields need to
-                    # be updated for before deposition or scour caused by material 
-                    # after it enters node n
-                    self._update_topographic_slope()
+                # determine erosion, aggradation, qso and attributes, 
+                # arranged in array nudat
+                self._E_A_qso_determine_attributes()                
 
-                # determine scour, entrain, deposition and outflow depths and
-                # the outflowing particle diameter, arranged in array nudat
-                self.nudat = self._scour_entrain_deposit_updatePD()                
-
-                # determine the receiving nodes, volumes and grain size
-                self._determine_rnp_attributes()                               
+                # from qso and flow direction at node, determine flux and attributes
+                # sent to each receiver node
+                self._determine_rn_proportions_attributes()                               
                 
                 # update grid field: topographic__elevation with the values in 
                 # nudat. Do this after directing flow, because assume deposition 
                 # does not impact flow direction
                 self._update_dem()
                
-                ### update topographic slope field for deposition to detemine where
-                # settling will occur - move this innto settle_deposit
-                               
+                # update topographic slope field
                 self._update_topographic_slope()  
-                # set receiving nodes (self.rn) and proportions (self.rp) based on underlying topography                 
-                self.rp = self._grid.at_node['flow__receiver_proportions'].copy()
-                self.rn = self._grid.at_node['flow__receiver_node'].copy()
+
+                # update tracked attribute grid fields
+                if self._tracked_attributes:
+                    for key in self._tracked_attributes:
+                        self._update_attribute_at_node(key)
                 
-                ### update grid field: particle__diameter with the values in 
-                # nudat
-                if self.VaryDp:
-                    self._update_channel_particle_diameter()
-                              
-                self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
-                
-                # not sure if settle_deposit is useful or needed
-                if self.settle_deposit:
-                    
-                    ### settle unrealistically tall mounds in the deposit                    
-                    self._settle(arn_u)
+                # optional settlment of deposits and redistribution of attributes
+                if self.settle_deposit:             
+                    self._settle()
                     self._update_topographic_slope()
-                    self.rp = self._grid.at_node['flow__receiver_proportions'].copy()
-                    self.rn = self._grid.at_node['flow__receiver_node'].copy()
 
-                # self.dif  = self._grid.at_node['topographic__elevation']-self._grid.at_node['topographic__initial_elevation']
-                self._update_disturbance_map()  
-
-                # once all cells in iteration have been evaluated, temporary receiving
-                # node, node volume and node particle diameter arrays become arrays 
-                # for next iteration
+                # once all nodes in this iteration have been processed, the lists of receiving
+                # nodes (arn), donor nodes (arndn, which are the recieving nodes of this step), 
+                # outgoing node flux (arqso) and node attributes (artt) are updated 
+                # for the next iteration
                 self.arndn = self.arndn_ns.astype(int)
                 self.arn = self.arn_ns.astype(int)
-                self.arv = self.arv_ns #   
-                self.arpd = self.arpd_ns
+                self.arqso = self.arqso_ns #
+                if self.track_attributes:
+                    self.aratt = self.aratt_ns
 
                 if self.save:
+                    self.saver.save_conditions_after_one_iteration(mw_i, mw_id)
 
-                    cL[mw_i].append(c)
-                    
-                    DEMf = self._grid.at_node['topographic__elevation'].copy()
-                    
-                    DEMdf_r = DEMf-self._grid.at_node['topographic__initial_elevation']
-            
-                    self.DEMdfD[c+1] = {'DEMdf_r':DEMdf_r.sum()*self._grid.dx*self._grid.dy}     
-                    self.df_evo_maps[mw_i][c+1] = self._grid.at_node['energy__elevation'].copy()
-                    ### save maps for video
-                    self.df_evo_maps[mw_i][c+1] = self._grid.at_node['energy__elevation'].copy()
-                    self.topo_evo_maps[mw_i][c+1] = self._grid.at_node['topographic__elevation'].copy()
-                    # data for tests
-                    if self.VaryDp:
-                        self.pd_r[mw_id].append(self._grid.at_node['particle__diameter'].copy())
-                    self.st_r[mw_id].append(self._grid.at_node['soil__thickness'].copy())
-                    self.tss_r[mw_id].append(self._grid.at_node['topographic__steepest_slope'].copy())
-                    self.frn_r[mw_id].append(self._grid.at_node['flow__receiver_node'].copy())
-                    self.frp_r[mw_id].append(self._grid.at_node['flow__receiver_proportions'].copy())
-                    self.arv_r[mw_id].append(self.arvL)
-                    self.arn_r[mw_id].append(self.arnL)
-                    self.arpd_r[mw_id].append(self.arpdL)     
-                    self.arndn_r[mw_id].append(self.arndn)
-
-                
-                
-                
                 # update iteration counter
-                c+=1
+                self.c+=1
                 
-                if c%self._check_frequency ==0:
-                    print(c)  
-                    
-                    if self._anti_sloshing:
-                        self._sloshing_count(mw_id,mw_i)
-
-    def _sloshing_count(self,mw_id,mw_i):
-
-        if self.c>self._check_frequency:
-            # check for small change in deposition
-            sumdif = []
-            irR = max(self.df_evo_maps[mw_i].keys()); irL = irR-self._check_frequency
-            for w in np.linspace(irL,irR,self._check_frequency+1):                  
-                dif = self.df_evo_maps[mw_i][w]-self._grid.at_node['topographic__initial_elevation']
-                sumdif.append(dif[dif>0].sum())
-            sumdif = np.array(sumdif)    
-            difs = sumdif[:-1]-sumdif[1:]
-        
-            self.difsmn = np.abs((np.nanmean(difs)*self._grid.dx*self._grid.dy)/self._lsvol)
-            print('difsmn:{}'.format(self.difsmn))
-            
-            # check for repeat delivery nodes
-            a1 = self.arndn_r[mw_id][-1]; a2 = self.arndn_r[mw_id][-5]
-            l_m = (len(a1)+len(a2))/2
-            rnr = len(np.intersect1d(a1,a2))/l_m # ratio of number of matching nodes in the dn and rn lists to the length of the rn and dn lists
-            # print('repeat node ratio{},a1:{}, a2:{}'.format(rnr, a1, a2))
-            
-            if self.difsmn < 0.001 or rnr > 0.3:
-                 self.sloshed = self.sloshed+1
-                 print('##############################################   SLOSHEDDDDDDDDDDDDDD')
-                 
-             
-    def _update_disturbance_map(self):
-        """map of boolian values indicating if a node has been disturbed (changed 
-        topographic__elevation) at any point in the model run"""
-        self._grid.at_node['disturbance_map'][np.abs(self.dif>0)] = True 
-
-        
+                                            
     def _prep_initial_mass_wasting_material(self, inn, mw_i):
-        """from an initial source area (landslide) prepare the initial lists 
-        of receiving nodes and incoming volumes and particle diameters per precipiton,
-        remove the source material from the topographic elevation dem"""
+        """ Algorithm 1 - from an initial source area (landslide), prepare the 
+        initial lists of receiving nodes and incoming fluxes and attributes 
+        and remove the source material from the DEM
         
-        # lists of initial recieving node, volume and particle diameter
+        Parameters
+        ----------
+        inn: np.array 
+             node id's that make up the area of the initial mass wasting area
+        mw_i: int
+            index of the initial mass wasting area (e.g., if there are two landslides
+                                                    the first landslide will be mw_i = 0,
+                                                    the second will be mw_i = 0)
+        """
+        # data containers for initial recieving node, outgoing flux and attributes
         rni = np.array([])
-        rvi = np.array([])
+        rqsoi = np.array([])
         rpdi = np.array([])
+        if self._tracked_attributes:
+           att = dict.fromkeys(self._tracked_attributes, np.array([]))
         
-        # order lowest to highest
+        # order source area nodes from lowest to highest elevation
         node_z = self._grid.at_node.dataset['topographic__elevation'][inn]
         zdf = pd.DataFrame({'nodes':inn,'z':node_z})
         zdf = zdf.sort_values('z')            
         
         for ci, ni in enumerate(zdf['nodes'].values):
             
-            # soil thickness at node
+            # regolith (soil) thickness at node. soil thickness in source area
+            # represents landslide thickness
             s_t = self._grid.at_node.dataset['soil__thickness'].values[ni]
             
             # remove soil (landslide) thickness at node
@@ -624,279 +584,250 @@ class MassWastingRunout(Component):
             self._grid.at_node['soil__thickness'][ni] = (
                 self._grid.at_node['soil__thickness'][ni]-s_t)
             
-            if ci>0: # use slope based on surface for first node to start landslide 
-                # (don't update slope to reflect change in elevation), but topography 
-                # of failure surface after remove entire soil depth from node 
-                # (regardless of release parameters) update slope to reflect node 
-                # material removed from DEM
+            if ci>0: # use surface slope for first node to start movement of landslide 
+                # for all other nodes, update slope to reflect material removed from DEM
                 self._update_topographic_slope()
              
             # get receiving nodes of node ni in mw index mw_i
             rn = self._grid.at_node.dataset['flow__receiver_node'].values[ni]
             rn = rn[np.where(rn != -1)]
             
-
             # receiving proportion of qso from cell n to each downslope cell
             rp = self._grid.at_node.dataset['flow__receiver_proportions'].values[ni]
             rp = rp[np.where(rp > 0)] # only downslope cells considered
-            
 
+            # initial mass wasting thickness
+            imw_t =s_t
+            # get flux out of node ni   
+            qso = imw_t
+            # divide into proportions going to each receiving node
+            rqso = rp*qso
             
-            # initial mass wasting thickness, (total thickness/number of pulses)  
-            imw_t =s_t/self.nps[mw_i]
-            # get volume (out) of node ni   
-            vo = imw_t*self._grid.dx*self._grid.dy# initial volume 
-            # divide into proportion going to each receiving node
-            rv = rp*vo
-            
-            if self.VaryDp:
-                # get initial mass wasting particle diameter (out) of node ni
-                pd_out = self._grid.at_node.dataset['particle__diameter'].values[ni]
-            else:
-                pd_out = self.Dp
-            # particle diameter to each recieving node
-            rpd = np.ones(len(rv))*pd_out
+            if self._tracked_attributes:
+                # get initial mass wasting attributes moving (out) of node ni
+                att_out = {}
+                self.att_ar_out = {}
+                for key in self._tracked_attributes:
+                    att_val = self._grid.at_node.dataset[key].values[ni]
+                    # particle diameter to each recieving node
+                    self.att_ar_out[key] = np.ones(len(rqso))*att_val
+                    
+                    # attribute value is zero at node after reglith leaves
+                    self._grid.at_node[key][ni] = 0
+
+                    att[key] = np.concatenate((att[key],self.att_ar_out[key]), axis = 0) 
        
-            # append receiving node ids, volumes and particle diameters to initial lists
+            # append receiving node ids, fluxes and attributes to initial lists
             rni = np.concatenate((rni,rn), axis = 0) 
-            rvi = np.concatenate((rvi,rv), axis = 0) 
-            rpdi = np.concatenate((rpdi,rpd), axis = 0) 
-            
-
+            rqsoi = np.concatenate((rqsoi,rqso), axis = 0) 
         
-        # set receiving nodes (self.rn) and proportions (self.rp) based on underlying topography                 
-        self.rp = self._grid.at_node['flow__receiver_proportions'].copy()
-        self.rn = self._grid.at_node['flow__receiver_node'].copy()
-
-        # landslide release nodes, volumes and diameters - saved for incremental release
-        self.rni = rni
-        self.rvi = rvi
-        self.rpdi = rpdi
-        
-        self.arndn = np.ones([len(rni)])*np.nan # TODO: set this to node id
+        self.arndn = np.ones([len(rni)])*np.nan
         self.arn = rni
-        self.arv = rvi
-        self.arpd = rpdi
+        self.arqso = rqsoi
+        if self._tracked_attributes:
+            self.aratt = att
 
         
-    def _scour_entrain_deposit_updatePD(self):
-        """ mass conservation at a grid cell: determines the erosion, deposition
-        change in topographic elevation and flow out of a cell as a function of
-        debris flow friction angle, particle diameter and the underlying DEM
-        slope
-        
-        
-        slpn needs to be topographic__elevation determined
-        rn can be either topographic__elevation or energy__elevation
-        rp can be either topographic__elevation or energy__elevation
+    def _E_A_qso_determine_attributes(self):
+        """ mass conservation at a grid cell, implemented using the EAqA 
+        function below.
         """
-        
-        # list of deposition depths, used in settlement algorithm
-        self.D_L = []
-        def SEDU(vq_r):
-            """function for iteratively determing scour, entrainment and
-            deposition depths using node id to look up incoming flux and
-            downslope nodes and slopes"""            
+        self.D_L = [] # list of deposition depths, if the _settle function is
+        # implemented, this is used to determine settlement after deposition
+        def EAqA(qsi_r):
+            """function for iteratively determining Erosion and Aggradiation depths, 
+            the outgoing flux (qso) and Attribute values at each affected node and 
+            attribute values of the outgoing flux.
+            
+            thoughts for speeding this up: use cython or try to restructure 
+            EAqA function so that it can be applied with vector operations, 
+            then filter all changes to correct cells where computations 
+            should not have occurred
+            
+            Parameters
+            ----------
+            qsi_r: np array
+                a row of the self.qsi_dat array
 
-            n = vq_r[0]; vin = vq_r[1]; qsi = vq_r[2]; 
+            """            
+
+            n = qsi_r[0]; qsi = qsi_r[1]; 
             
             # maximum slope at node n
             slpn = self._grid.at_node['topographic__steepest_slope'][n].max()
             
-            # proportion of flow in steepest direction
-            pn = self._grid.at_node['flow__receiver_proportions'][n].max()            
-            
-            # get incoming flow rate
             if self.effecitve_qsi:
-                qsi_ = min(qsi*pn,self.qsi_max)
+                qsi_ = min(qsi,self.qsi_max)
             else:
-                qsi_ = qsi*pn
-            
+                qsi_ = qsi
+
             dn = self.arndn[self.arn == n]
 
             # get adjacent nodes
             adj_n = np.hstack((self._grid.adjacent_nodes_at_node[n],
             self._grid.diagonal_adjacent_nodes_at_node[n]))
             
-            
             # look up critical slope at node n
-            if len(self.mw_dict['critical slope'])>1: # if option 1, critical slope is not constant but depends on location
+            if self.variable_slpc: # if option 1, critical slope is not constant but depends on location
                 self.slpc = self.a*self._grid.at_node['drainage_area'][n]**self.b                      
-            # incoming particle diameter (weighted average)
-            pd_in = self._particle_diameter_in(n,vin) # move
-
+            
+            # incoming attributes (weighted average)
+            if self._tracked_attributes:
+                att_in = self._attributes_in(n,qsi)
+            else:
+                att_in = None 
            
-            # rn_g: receiver nodes based on the pre-flow underlying topographic slope at node n
             rn_g = self._grid.at_node.dataset['flow__receiver_node'].values[n]
             rn_g = rn_g[np.where(rn_g != -1)]
-            # rn_g = rn_g[~np.isin(rn_g,dn)]
-            # if qsi less than the vegetation SD in an undisturbed cell
-            if (qsi <=(self.SD_v*self.veg_factor)):# and (self._grid.at_node['disturbance_map'][n] == False)):# or ((len(rn) == 1) and ([n] == [rn])):
-                D = qsi 
+
+            # if qsi less qsc (equation 1)
+            if qsi <=(self.qsc_v):
+                A = qsi 
                 qso = 0
                 E = 0 
-                deta = D 
-                pd_up = 0
-                Tbs = 0
+                deta = A 
+                if self._tracked_attributes:
+                    att_up = dict.fromkeys(self._tracked_attributes, 0)
+                else:
+                    att_up = None
+                Tau = 0
                 u = 0
  
             else:
-                D = min(qsi, self._deposit(qsi_, slpn, n)) # function of qsi and topographic elevation before settle/scour by qsi                
-                # print('it:{}, DEPOSTION:{}'.format(self.c, D))
-                # scour a function of steepes topographic slope at node, determined before settle/scour by qsi
-
-                
-                # MAY NOT NEED THIS, CHECK
-                if D > 0 and self._E_constraint:#0.33*qsi: 
+                # aggradation
+                A = min(qsi, self._aggradation(qsi, slpn, n))                               
+                if A > 0 and self.E_constraint:
                     E = 0
-                    pd_up = 0
-                else:
-                    if self.VaryDp:   
-                        opt = 2
+                    if self._tracked_attributes:
+                        att_up = dict.fromkeys(self._tracked_attributes, 0)
                     else:
-                        opt = 1
-                        
-                    E, pd_up, Tbs, u = self._scour(n, qsi_, slpn, opt = opt, pd_in = pd_in)   
-                    # model behavior tracking
-                    if self.save:
-                        self.TdfL.append(Tbs)
-                        self.velocityL.append(u) # velocity (if any)
-
-                ## flow out
-                qso = qsi-D+E                
+                        att_up = None
+                    Tau = 0; u = 0
+                else:
+                    
+                    # erosion
+                    E, att_up, Tau, u = self._erosion(n, qsi_, slpn, att_in = att_in)   
+                    
+                ## flux out
+                qso = qsi-A+E                
                 # small qso are considered zero
                 qso  = np.round(qso,decimals = 8)
-                # print('qso:'+str(qso))
-                # chage elevation
-                deta = D-E 
                 
-                # print('Mass Continuity -it:{}, qsi:{}, D:{}, E:{}, qso:{}'.format(self.c, qsi,D,E,qso))
-            # qso  = np.round(qso,decimals = 8)   
-            # print(qso)
+                # chage elevation
+                deta = A-E 
             
             # model behavior tracking
             if self.save:
-                self.enL.append(E)
-                self.DpL.append(D)
-                self.dfdL.append(qsi)
-                self.slopeL.append(slpn) # slope
+                self.saver.save_flow_stats(E,A,qsi,slpn,Tau,u)
 
-
-            # if n in np.array([  8,  25,  42,  59,  76,  93, 110, 127, 144, 161, 178, 195, 212,
-            #        229, 246, 263, 280, 297, 314, 331, 348, 365, 382, 399, 416, 433, 450]):
-            # print('it:{}, node:{}, rn:{}, slope:{}, depostion:{}, entrainment:{}, outflow:{}'.format(self.c, n, rn, slpn, D, E, qso))
-
-            # updated node particle diameter (weighted average)
-            n_pd = self._particle_diameter_node(n,pd_in,E,D)
+            # updated attribute values at node
+            if self._tracked_attributes:
+                n_att = self._attributes_node(n,att_in,E,A)
+            else:
+                n_att = None
             
             # list of deposition depths at cells in iteration 
-            self.D_L.append(D)            
-
-            return deta, qso, n_pd, pd_up, pd_in, qsi, E, D
-    
-        
-        # apply SEDU function to all unique nodes in arn (arn_u)
-        # create nudat, an np.array of data for updating fields at each node
-        # that can be applied using vector operations
-        ll=np.array([SEDU(r) for r in self.vqdat],dtype=object)     
-        arn_ur = np.reshape(self.vqdat[:,0],(-1,1))
-        nudat = np.concatenate((arn_ur,ll),axis=1)
-        # print(nudat)
-        return nudat # qso, rn not used
-
-
-    def _determine_rnp_attributes(self):
-        """ after mass conservation at the cell determined use pre-deposition/scour
-        slope (before results of mass conservation applied to dem) to determine
-        how outgoing volume is partioned to downslope cells and attributes of each
-        paritioned volume"""
-        
-        def rn_rp(nudat_r):
-            n = nudat_r[0]; qso = nudat_r[2]; pd_up = nudat_r[4]; pd_in = nudat_r[5]
-            qsi = nudat_r[6]; E = nudat_r[7]; D = nudat_r[8]
+            self.D_L.append(A)
             
-            # nodes that sent material to node n
+            # n_att, att_up, att_in are dictionaries of values of each attribute at
+            # the node after erosion and deposition, in the eroded material before depostion 
+            # and incoming material in qsi respectively            
+            return deta, qso, qsi, E, A, n_att, att_up, att_in
+        
+        # apply EAqA function to all unique nodes in arn (arn_u)
+        # create nudat, an np.array of data for updating fields at each node
+        ll=np.array([EAqA(r) for r in self.qsi_dat],dtype=object)     
+        arn_ur = np.reshape(self.qsi_dat[:,0],(-1,1))
+        self.nudat = np.concatenate((arn_ur,ll),axis=1)
+
+
+    def _determine_rn_proportions_attributes(self):
+        """ determine how outgoing flux is partioned to downslope cells and 
+        attributes of each parition"""
+        
+        def rn_proportions_attributes(nudat_r):
+            n = nudat_r[0]; qso = nudat_r[2];
+            qsi = nudat_r[3]; E = nudat_r[4]; A = nudat_r[5]
+            
+            att_up = nudat_r[7]; att_in = nudat_r[8]
+            
+            # get donor node ids
             dn = self.arndn[self.arn == n]
             
-            # nodes that receive material from node n
-            # rn = self.rn[n]
-
-            rn = self._grid.at_node.dataset['flow__receiver_node'].values[n] #   #  defining rn from the energy elevation causes flow to slosh
+            # get receiver node idds
+            rn = self._grid.at_node.dataset['flow__receiver_node'].values[n]
             rn_ = rn.copy()
+            
+            # remove node n and delivery nodes from the receiver node list
             rn_ = rn_[np.where(rn_ != -1)]
             rn_ = rn_[~np.isin(rn_,dn)]
             
-            
+            # these constraints needed to avoid infinite loop
             if qso>0 and n not in self._grid.boundary_nodes: 
-                # move this out of funciton, need to determine rn and rp after material is in cell, not before
-                vo = qso*self._grid.dx*self._grid.dy # convert qso to volume
-                # receiving proportion of qso from cell n to each downslope cell
-                if len(rn_)<1:
+                if len(rn_)<1: # if no receiver nodes, flux stays at node n
                     rp = np.array([1])
                     rn = np.array([n])
-                    rv = rp*vo
-                else:
+                    rqso = rp*qso
+                else: # flux is proportioned to remaining receiver nodes
                     rp = self._grid.at_node.dataset['flow__receiver_proportions'].values[n]
                     rp = rp[np.isin(rn,rn_)]
                     rp = rp/rp.sum()
                     rn = rn_
-                    rv = rp*vo
+                    rqso = rp*qso
 
+                # create donor node array, all values are donor node, 
+                # length equal to number of receiver nodes
+                rndn = (np.ones(len(rn))*n).astype(int) 
 
-                rndn = (np.ones(len(rn))*n).astype(int) # receiving node delivery node (list of node n, length eqaul to number of proportions of qso sent to receiving cells)
-
-                # particle diameter out (weighted average)
-                pd_out = self._particle_diameter_out(pd_up,pd_in,qsi,E,D)    
-                rpd = np.ones(len(rv))*pd_out
-
-                # store receiving nodes and volumes in temporary arrays
-                self.arndn_ns = np.concatenate((self.arndn_ns, rndn), axis = 0) # next step delivery nodes
-                self.arn_ns = np.concatenate((self.arn_ns, rn), axis = 0) # next step receiving node list
-                self.arv_ns = np.concatenate((self.arv_ns, rv), axis = 0) # next step receiving node incoming volume list
-                self.arpd_ns = np.concatenate((self.arpd_ns, rpd), axis = 0) # next step receiving node incoming particle diameter list
-
-   
+                # outgoing attributes
+                if self._tracked_attributes:
+                    att_out = self._attribute_out(att_up,att_in,qsi,E,A) 
+                    
+                    rpd_ns = {}
+                    for key_n, key in enumerate(self._tracked_attributes):
+                        ratt = np.ones(len(rqso))*att_out[key]
+                        self.aratt_ns[key] = np.concatenate((self.aratt_ns[key], ratt), axis = 0) # next step receiving node incoming particle diameter list
+                        self.arattL[key].append(ratt)
+                        
+                # store receiving nodes and fluxes in temporary arrays
+                self.arndn_ns = np.concatenate((self.arndn_ns, rndn), axis = 0) # next iteration donor nodes
+                self.arn_ns = np.concatenate((self.arn_ns, rn), axis = 0) # next iteration receiving nodes
+                self.arqso_ns = np.concatenate((self.arqso_ns, rqso), axis = 0) # next iteration qsi
                 self.arnL.append(rn)
-                self.arvL.append(rv)
-                self.arpdL.append(rpd)
+                self.arqsoL.append(rqso)           
                 self.arndnL.append(rndn)
 
         nudat_ = self.nudat[self.nudat[:,2]>0] # only run on nodes with qso>0
-        ll = np.array([rn_rp(r) for r in self.nudat],dtype=object)
+        ll = np.array([rn_proportions_attributes(r) for r in self.nudat],dtype=object)
 
 
-    def _vin_qsi(self,arn_u):
-        """determine volume and depth of incoming material
-        returns vqdat: np array of receiving nodes [column 0], 
-        vin [column 1] and qsi [column 2]"""
-
-        def VQ(n):           
-            # total incoming volume
-            # print('arv:{}, arn:{}'.format(self.arv,self.arn))
-            vin = np.sum(self.arv[self.arn == n])
-            # convert to flux/cell width
-            qsi = vin/(self._grid.dx*self._grid.dx)
-            return vin, qsi
-
-        ll=np.array([VQ(n) for n in arn_u], dtype=object)     
-        arn_ur = np.reshape(arn_u,(-1,1))
-        vqdat = np.concatenate((arn_ur,ll),axis=1)
+    def _determine_qsi(self):
+        """determine flux of incoming material (qsi) to a node.
+        returns self.qsi_dat: np array of receiving nodes [column 0], 
+        and qsi to those nodes [column 1]
+        """
+        def _qsi(n):           
+            """ sum the incoming flux to node n"""
+            qsi = np.sum(self.arqso[self.arn == n])
+            return qsi
+        ll=np.array([_qsi(n) for n in self.arn_u], dtype=object)
+        ll = np.reshape(ll,(-1,1))
+        arn_ur = np.reshape(self.arn_u,(-1,1))
+        self.qsi_dat = np.concatenate((arn_ur,ll),axis=1)
     
-        return vqdat
     
     def _update_E_dem(self):
         """update energy__elevation"""
-    
-        n = self.vqdat[:,0].astype(int); qsi = self.vqdat[:,2];         
-        # energy slope is equal to the topographic elevation potential energy
+        n = self.qsi_dat[:,0].astype(int); qsi = self.qsi_dat[:,1];         
+        # energy elevation is equal to the topographic elevation plus qsi
         self._grid.at_node['energy__elevation'] = self._grid.at_node['topographic__elevation'].copy()
-        # plus the pressure potential energy
         self._grid.at_node['energy__elevation'][n] = self._grid.at_node['energy__elevation'].copy()[n]+qsi
 
 
     def _update_energy_slope(self):
-        """updates the topographic__slope and flow directions fields using the 
-        energy__elevation field"""
+        """updates the topographic__slope and flow directions grid fields using the 
+        energy__elevation field. This function is presently not used but may be useful
+        for future implementations of MWR"""
         fd = FlowDirectorMFD(self._grid, surface="energy__elevation", diagonals=True,
                 partition_method = self.routing_partition_method)
         fd.run_one_step()
@@ -905,11 +836,8 @@ class MassWastingRunout(Component):
     def _update_dem(self):
         """updates the topographic elevation of the landscape dem and soil 
         thickness fields"""
-               
         n = self.nudat[:,0].astype(int); deta = self.nudat[:,1]
-
         self._grid.at_node['soil__thickness'][n] = self._grid.at_node['soil__thickness'][n]+deta   
-        # topographic dem
         self._grid.at_node['topographic__elevation'][n] = self._grid.at_node['topographic__elevation'][n]+deta
 
 
@@ -921,27 +849,32 @@ class MassWastingRunout(Component):
         fd.run_one_step()
 
     
-    def _update_channel_particle_diameter(self):
-        """ for each unique node in receiving node list, update the grain size
-        using the grain size determined in _scour_entrain_deposit
-        """
+    def _update_attribute_at_node(self, key):
+        """ for each unique node in receiving node list, update the attribute
+        using attribute value determined in the _E_A_qso_determine_attributes method
 
-        n = self.nudat[:,0].astype(int); new_node_pd = self.nudat[:,3]
+        Parameters
+        ----------
+        key: string
+            one of the tracked attributes        
+        """
+        n = self.nudat[:,0].astype(int); 
+        new_node_pd = np.array([d[key] for d in  self.nudat[:,6]])
         if np.isnan(np.sum(new_node_pd)):
-            raise ValueError("particle diameter is {}".format(new_node_pd))
+            raise ValueError("{} is {}".format(key, new_node_pd))
+        self._grid.at_node[key][n] = new_node_pd
         
-            
-        self._grid.at_node['particle__diameter'][n] = new_node_pd 
-                
          
-    def _settle(self, arn_u):
-        """ for each unique node in receiving node list, after entrainment, deposition 
+    def _settle(self):
+        """ for each unique node in receiving node list, after erosion, aggradation 
         and change in node elevation have been determined, check that the height of the node 
         is not greater than permitted by angle of repose/critical slope as evaluated from 
-        the lowest cell. Note slope is not updated in this function so that it can be applied
-        simultaneously to all nodes that settle during the iteration. 
+        the lowest cell. Note, slope is not updated in this function. It is updated
+        simultaneously at a later stage during the iteration. 
         """
-        for ii, n in enumerate(arn_u): # for each node in the list, use the slope field, computed from the previous iteration, to compute settlment and settlment direction to adjacent cells
+        # for each node in the list, use the slope field, computed from the previous 
+        # iteration, to compute settlment and settlment direction to adjacent cells
+        for ii, n in enumerate(self.arn_u): 
             if self.D_L[ii] >0: # only settle if node has had deposition...use dif?
                 rn = self._grid.at_node.dataset['flow__receiver_node'].values[n]
                 # slope to all receiving cells
@@ -952,42 +885,37 @@ class MassWastingRunout(Component):
                 rn = rn[np.where(rn != -1)]  
                          
                 # critical slope
-                if len(self.mw_dict['critical slope'])>1:
+                if self.variable_slpc:
                     self.slpc = self.a*self._grid.at_node['drainage_area'][n]**self.b
                 
                 # only consider all cells that slope > Sc
                 rn = rn[slpn>self.slpc]
                 slpn = slpn[slpn>self.slpc]            
-    
-                # only consider areas of depsoition (steep areas in original dem are excluded)
-                # rndif = self.dif[rn]
-                # slpn = slpn[abs(rndif)>0]  
-                # rn = rn[abs(rndif)>0]
-    
+  
                 # if slope to downlsope nodes > Sc, adjust elevation of node n
                 if len(rn)>=1:
                     
-                    # destribute material to downslope nodesbased on weighted
+                    # destribute material to downslope nodes based on weighted
                     # average slope (same as multiflow direciton proportions, 
                     # but here only determined for downslope nodes in which
                     # S  > Sc )
-                             
                     sslp = sum(slpn)
                     pp = slpn/sslp
                     
-                    # determine the total flux / unit width sent to S > Sc downslope cells
+                    # determine the total flux sent to S > Sc downslope cells
                     # mean/min downslope cell elevation
                     zo = self._grid.at_node['topographic__elevation'][rn].min()
                     
                     # node n elevation
                     zi = self._grid.at_node['topographic__elevation'][n]
                     
-                    # height of node n using Sc*dx above mean downslope elevation
+                    # height of node n using Sc*dx above min downslope elevation
                     slp_h = self.slpc*self._grid.dx             
-                
-                    qso_s = (zi - (zo+slp_h))/2 # out going sediment depth
                     
-                    if qso_s < 0: # no negative 
+                    # out going sediment depth, determined as half the depth above the critical slope
+                    qso_s = (zi - (zo+slp_h))/2
+                    
+                    if qso_s < 0: # no negative (this shouldn't be needed because only nodes greater than slpc considered)
                         # print("negative outlflow settling, n, {}, rn, {}, qso_s, {}".format(n,rn,qso_s))
                         qso_s = 0
                     
@@ -995,10 +923,7 @@ class MassWastingRunout(Component):
                         qso_s= self.D_L[ii]
                     
                     qso_s_i = qso_s*pp # proportion sent to each receiving cell                
-                    
-                    # print("qso_s, {}".format(qso_s))
-                    # print("qso_s_i, {}".format(qso_s_i))
-                    
+
                     # update the topographic elevation
                     self._grid.at_node['topographic__elevation'][n]=self._grid.at_node['topographic__elevation'][n]-qso_s
                     self._grid.at_node['topographic__elevation'][rn]=self._grid.at_node['topographic__elevation'][rn]+qso_s_i
@@ -1007,90 +932,139 @@ class MassWastingRunout(Component):
                     self._grid.at_node['soil__thickness'][n] = self._grid.at_node['soil__thickness'][n]-qso_s
                     self._grid.at_node['soil__thickness'][rn] = self._grid.at_node['soil__thickness'][rn]+qso_s_i
                     
-                    # update properties, try to vectorize this, will loop
-                    # for each property...right now just for pd                   
-                    pd_ = self._grid.at_node['particle__diameter'][n]                    
-                    for v, n_ in enumerate(rn):
-                        D = qso_s_i[v]
-                        self._grid.at_node['particle__diameter'][n_] = self._particle_diameter_node(n_,pd_,0,D)
-    
+                    # update tracked attributes for sediment movement during settlement
+                    if self._tracked_attributes:
+                        # create the att_in dict, this is the same for each of the rn
+                        att_in = {}
+                        for key in self._tracked_attributes:
+                            att_in[key] = self._grid.at_node[key][n]
+                        for v, n_ in enumerate(rn):
+                            A = qso_s_i[v]
+                            n_att_d_ = self._attributes_node(n_,att_in,0,A)
+                            for key in self._tracked_attributes:
+                                self._grid.at_node[key][n_] = n_att_d_[key]
 
-    def _scour(self, n, depth, slope, opt = 1, pd_in = None):
-        """determines the scour depth based on user selected method
-        check for required inputs at beginning of class
-        """
-            
-
-        # depth-slope product approximation of hydrostaic/quasi-static 
-        # shear stress on channel bed [Pa]
-        theta = np.arctan(slope) # convert tan(theta) to theta
-        Dp = pd_in # mass wasting particle diameter is Dp
+    def _erosion(self, n, depth, slpn, att_in = None):
+        """if self.grain_shear is True, determines the erosion depth using 
+        equation (13), otherwise uses equation (12).
         
-        if opt ==1:
-            # following Frank et al., 2015, approximate erosion depth as a linear
-            # function of total stress under uniform flow conditions
+        Parameters
+        ----------
+        n : int
+            node id
+        depth : float
+            erosion depth
+        slpn : float
+            slope in [l/L] 
+        att_in: dict
+            dictionary of the value of each attribute, this function
+            only uses particle__diameter
             
-            # erosion depth,:
-            Tbs = self.rodf*self.g*depth*(np.sin(theta))
-            Ec = self.cs*(Tbs)**self.eta
-            u = 5
-        if opt == 2:
+        Returns
+        -------
+        E : float
+            erosion depth [L]
+        att_up : dict
+            dictionary of the value of each attribute at node n
+        Tau : float
+            basal shear stress [Pa]
+        u : float
+            flow velocity [m/s]
+        """
+        theta = np.arctan(slpn) # convert tan(theta) to theta
+        # attributes of eroded material
+        if self._tracked_attributes:
+            att_up = {}
+            for key in self._tracked_attributes:
+                att_up[key] = self._grid.at_node[key][n]
+        else:
+            att_up = None
+
+        
+        if self.grain_shear:
+            # shear stress approximated as a power function of inertial shear stress
+            Dp = att_in['particle__diameter']
             if depth < Dp: # grain size dependent erosion breaks if depth<Dp
                 Dp = depth*.99
-            # shear stress apprixmated as a power functino of inertial shear stress
-            # phi = np.arctan(self.slpc) # approximate phi [radians] from criticle slope [L/L]
-            phi = np.arctan(0.32)
+            u = flow_velocity(Dp,depth,slpn,self.g)
             
-            # inertial stresses
-            us = (self.g*depth*slope)**0.5
-            u = us*5.75*np.log10(depth/Dp)
-            
-            dudz = u/depth
-            Tcn = np.cos(theta)*self.vs*self.ros*(Dp**2)*(dudz**2)
-            Tbs = Tcn*np.tan(phi)
+            Tau = shear_stress_grains(self.vs,
+                                      self.ros,
+                                      Dp,
+                                      depth,
+                                      slpn,
+                                      self.g)
 
-            Ec = (self.cs*Tbs**self.eta)        
-       
-        dmx = self._grid.at_node['soil__thickness'][n]
-        
-        # particle size of scoured material
-        if opt == 2:
-            pd_up = self._grid.at_node['particle__diameter'][n]
+            Ec = self._grid.dx*erosion_rate(self.k,
+                                            Tau,
+                                            self.eta,
+                                            self._grid.dx)
+
         else:
-            pd_up = self.Dp
+            # quasi-static approximation
+            Tau = self.ro_mw*self.g*depth*(np.sin(theta))
+            Ec = self.k*(Tau)**self.eta
+            u = np.nan
         
-        E = min(dmx, Ec) # convert Tb to kPa
-
-        # model behavior tracking
-        # self.TdfL.append(Tbs)
-        # self.slopeL.append(slope) # slope
-        # self.velocityL.append(u) # velocity (if any)
+        dmx = self._grid.at_node['soil__thickness'][n]
+                
+        E = min(dmx, Ec)
         
-        return(E, pd_up, Tbs, u)
+        return(E, att_up, Tau, u)
 
                 
-    def _deposit(self,qsi,slpn,n):
-        """determine deposition depth as the minimum of L*qsi and
-        an angle of repose determined depth. Where L is computed following
-        Campforts, et al., 2020 but is flux per unit contour width (rather than flux), 
-        and L is (1-(slpn/slpc)**2) rather than dx/(1-(slpn/slpc)**2)"""
-        if self.sloshed < self.slosh_limit:
-            if self.deposition_rule == "L_metric":
-                D = self._deposit_L_metric(qsi, slpn)
-            elif self.deposition_rule == "critical_slope":
-                D = self._deposit_friction_angle(qsi, n)
-            elif self.deposition_rule == "both":
-                DL = self._deposit_L_metric(qsi, slpn)
-                Dc = self._deposit_friction_angle(qsi, n) 
-                D = min(DL,Dc)
-        else: 
-            D = qsi
-        return(D)
+    def _aggradation(self,qsi,slpn,n):
+        """determine aggradation depth as a function of a threshold-slope, 
+        L*qsi or a function of both. Where the L metric is computed following
+        Campforts, et al., 2020 but is expressed as 1-(slpn/slpc)**2 rather 
+        than dx/(1-(slpn/slpc)**2)
+        
+        Parameters
+        ----------
+        qsi : float
+            incoming flux [l3/iteration/l2]
+        slpn : float
+            slope at node in [L/L]
+        n : int
+            node id
+            
+        Returns
+        -------
+        A : float
+            aggradation depth [L]
+        """
+
+        if self.deposition_rule == "L_metric":
+            A = self._deposit_L_metric(qsi, slpn)
+        elif self.deposition_rule == "critical_slope":
+            A = self._deposit_friction_angle(qsi, n)
+        elif self.deposition_rule == "both":
+            A_L = self._deposit_L_metric(qsi, slpn)
+            A_f = self._deposit_friction_angle(qsi, n) 
+            A = min(A_L,A_f)
+
+        return(A)
 
 
     def _determine_zo(self, n, zi, qsi):
         """determine the minimum elevation of the adjacent nodes. If all adjacent
-        nodes are higher than the elevation of the node + qsi, zo is set to zi"""
+        nodes are higher than the elevation of the node + qsi, zo is set to zi
+        
+        Parameters
+        ----------
+        n : int
+            node id
+        zi : float
+            topographic elevation at node n (eta_n)
+        qsi : float
+            incoming flux [l3/iteration/l2]
+            
+        Returns
+        -------
+        zo : float
+            topographic elevation of the lowest elevation node [l], 
+            adjacent to node n      
+        """
         
         # get adjacent nodes
         adj_n = np.hstack((self._grid.adjacent_nodes_at_node[n],
@@ -1102,129 +1076,212 @@ class MassWastingRunout(Component):
         # elevation of flow surface at node... may not need this
         ei = qsi+zi
         
-        # nodes below incoming energy surface
+        # nodes below elevation of node n
         rn_e = adj_n[self._grid.at_node['topographic__elevation'][adj_n]<ei]
  
         if len(rn_e) > 0: 
-                       
             zo = self._grid.at_node['topographic__elevation'][rn_e].min()
             
-        else:  # a pit in the energy elevation surface
-            zo = zi#None # TODO: change to "zi" 
-            
+        else:  # an obstruction in the DEM
+            zo = zi 
         return zo
+
 
     def _deposit_L_metric(self, qsi, slpn):
         """
+        determine the L metric similar to Campforts et al. (2020)
+        
+        Parameters
         ----------
         qsi : float
             in coming flux per unit contour width
         slpn : float
             slope of node, measured in downslope direction (downslope is postive)
+            
+        Returns
+        -------
+        A_L : float
+            aggradation depth [L]        
         """
-        
         Lnum = np.max([(1-(slpn/self.slpc)**2),0])
+        A_L = qsi*Lnum
         
-        DL = qsi*Lnum
-        
-        return(DL)
+        return(A_L)
     
 
     def _deposit_friction_angle(self, qsi, n):
+        """ determine deposition depth following equations 4 though 9
         
+        Parameters
+        ----------
+        qsi : float
+            incoming flux [l3/iteration/l2]
+        n : int
+            node id
+            
+        Returns
+        -------
+        A_f : float
+            aggradation depth [L]           
+        """         
         slp_h = self.slpc*self._grid.dx
-        
-            # elevation at node n
-        zi = self._grid.at_node['topographic__elevation'][n]
-        
-        zo = self._determine_zo(n, zi, qsi )
+        zi = self._grid.at_node['topographic__elevation'][n]       
+        zo = self._determine_zo(n, zi, qsi)
+        rule = ((zi-zo)<=(slp_h))
+        def eq(qsi, zo, zi, slp_h):
+            dx = self._grid.dx
+            sc = self.slpc
+            s = (zi-zo)/dx
+            sd = sc-s              
+            D1 = sc*dx/2
+            a = 0.5*dx*sd
+            b = D1-0.5*dx*sd
+            c = -qsi
+            N1 = -b+(((b**2)-4*a*c)**0.5)/(2*a)
+            N2 = -b-(((b**2)-4*a*c)**0.5)/(2*a)
+            ndn = np.round(max([N1,N2,1])) # aggradation on at least one node
+            A = min((1/ndn)*qsi+((ndn-1)/2)*dx*sd, qsi)
+            return A 
 
-        if self._deposit_style == 'downslope_deposit_sc10':
-            # print('zi:{}, zo:{}, slp_h:{}'.format(zi,zo,slp_h))
-            rule = ((zi-zo)<=(slp_h))#rule = ((zi-zo)<=(slp_h))# deposition occurs if slope*dx is less than downslope deposit thickness
-            def eq(qsi, zo, zi, slp_h):
-                dx = self._grid.dx
-                sc = self.slpc
-                s = (zi-zo)/dx
-                sd = sc-s              
-                D1 = sc*dx/2
-                a = 0.5*dx*sd
-                b = D1-0.5*dx*sd
-                c = -qsi
-                N1 = -b+(((b**2)-4*a*c)**0.5)/(2*a)
-                N2 = -b-(((b**2)-4*a*c)**0.5)/(2*a)
-                ndn = np.round(max([N1,N2,1]))
-                D = min((1/ndn)*qsi+((ndn-1)/2)*dx*sd, qsi)
-                return D 
-                                                
-                
-        elif self._deposit_style == 'no_downslope_deposit_sc':
-            rule = ((zi-zo)<=(slp_h))
-            def eq(qsi, zo, zi, slp_h):
-                D = min(zo-zi+slp_h,qsi)
-                return np.round(D,decimals = 5)
-        # elif self._deposit_style == "nolans_rule":
-        
         if rule:
-            Dc = eq(qsi,zo,zi, slp_h)
+            A_f = eq(qsi,zo,zi,slp_h)
         else:
-            Dc = 0
+            A_f = 0
         
-        if Dc <0:
-            print("negative deposition!! n {}, qsi{}, D {}, zo{}, zi{}".format(n,qsi,Dc,zo,zi))
+        if A_f <0:
+            print("negative aggradation!! n {}, qsi{}, A {}, zo{}, zi{}".format(n,qsi,A_f,zo,zi))
             # raise(ValueError)            
-
-        return(Dc)
+        return(A_f)
 
         
-    def _particle_diameter_in(self,n,vin):
-        """determine the weighted average particle diameter of the incoming
-        flow"""       
-        if (vin == 0):
-            pd_in = 0
-        elif (np.isnan(vin)) or (np.isinf(vin)):
-            msg = "in-flowing volume is nan or inf"
+    def _attributes_in(self,n,qsi):
+        """determine the weighted average attribute value of the incoming
+        flow
+        
+        Parameters
+        ----------
+        n : int
+            node id
+        qsi : float
+            incoming flux [l3/iteration/l2]
+        
+        Returns
+        -------
+        att_in: dict
+            dictionary of each attribute value flowing into the node      
+        """       
+        if (qsi == 0):
+            att_in = dict.fromkeys(self._tracked_attributes, 0)
+        elif (np.isnan(qsi)) or (np.isinf(qsi)):
+            msg = "in-flowing flux is nan or inf"
             raise ValueError(msg)
-        else:           
-            pd_in = np.sum((self.arpd[self.arn == n])*(self.arv[self.arn == n])/vin)        
-        return pd_in
-
-
-    def _particle_diameter_node(self,n,pd_in,E,D):
-        """determine the weighted average particle diameter of deposited +
-        in-situ deposit"""
-
-        if (D+self._grid.at_node['soil__thickness'][n]-E > 0):
-            
-            if self.VaryDp:
-                inpd = self._grid.at_node['particle__diameter'][n]
-            else:
-                inpd = self.Dp
-            
-            n_pd = (inpd* (self._grid.at_node['soil__thickness'][n]-E)+ 
-            pd_in*D)/(D+self._grid.at_node['soil__thickness'][n]-E)
-        
         else:
+            att_in = {}
+            for key in self._tracked_attributes:
+                att_in[key] = np.sum((self.aratt[key][self.arn == n])*(self.arqso[self.arn == n])/qsi)        
+        return att_in
+
+
+    def _attributes_node(self,n,att_in,E,A):
+        """determine the weighted average attributes of the newly aggraded material
+        + the inplace regolith
         
-            n_pd = 0
+        Parameters
+        ----------
+        n : int
+            node id       
+        att_in: dict
+            dictionary of the value of each attribute flowing into the node 
+        E : float
+            erosion depth [L]
+        A : float
+            aggradation depth [L] 
+
+        Returns
+        -------
+        n_att_d: dict
+            dictionary of each attribute value at the node after erosion
+            and aggradation
+        """
+        def weighted_avg_at_node(key):
+            """ determine weighted average attribute at the node. If all soil 
+            is eroded, attribute value is zero"""             
+            if (A+self._grid.at_node['soil__thickness'][n]-E > 0):                 
+                inatt = self._grid.at_node[key][n]                
+                n_att = (inatt* (self._grid.at_node['soil__thickness'][n]-E)+ 
+                att_in[key]*A)/(A+self._grid.at_node['soil__thickness'][n]-E)            
+            else:         
+                n_att = 0                
+            if (n_att <0) or (np.isnan(n_att)) or (np.isinf(n_att)):
+                msg = "node particle diameter is negative, nan or inf"
+                raise ValueError(msg)                      
+            return n_att
+ 
+        n_att_d = {}
+        for key in self._tracked_attributes:
+            n_att_d[key] = weighted_avg_at_node(key)
+        
+        return n_att_d
+
+
+    def _attribute_out(self,att_up,att_in,qsi,E,A):
+        """determine the weighted average attributes of the outgoing
+        flux
+        
+        Parameters
+        ----------
+        att_up: dict
+            dictionary of each attribute value at the node before erosion
+            or aggradation
+        att_in: dict
+            dictionary of each attribute value flowing into the node
+        qsi : float
+            incoming flux [l3/iteration/l2]        
+        E : float
+            erosion depth [L]
+        A : float
+            aggradation depth [L]    
             
-        if (n_pd <0) or (np.isnan(n_pd)) or (np.isinf(n_pd)):
-            msg = "node particle diameter is negative, nan or inf"
-            # print("n_pd{}, pd_in{}, E{}, D{}, n{}".format(n_pd, pd_in, E, D, n))
-            raise ValueError(msg)        
-        return n_pd
+        Returns
+        -------
+        att_out: dict
+            dictionary of each attribute value flowing out of the node
+        """
+        att_out = {}
+        for key in self._tracked_attributes:
+            att_out[key] = np.sum((att_up[key]*E+att_in[key]*(qsi-A))/(qsi-A+E))
+            check_val = att_out[key]    
+            if (check_val <=0) or (np.isnan(check_val)) or (np.isinf(check_val)):
+                msg = "out-flowing {} is zero, negative, nan or inf".format(key)
+                raise ValueError(msg)
+        return att_out
 
 
-    @staticmethod
-    def _particle_diameter_out(pd_up,pd_in,qsi,E,D):
-        """determine the weighted average particle diameter of the outgoing
-        flow"""
+def flow_velocity(Dp,h,s,g):
+    us = (g*h*s)**0.5
+    u = us*5.75*np.log10(h/Dp)
+    return u
+
+def shear_stress_grains(vs,ros,Dp,h,s,g):
+    theta = np.arctan(s)
+    phi = np.arctan(0.32)   
+    u = flow_velocity(Dp,h,s,g)
+    dudz = u/h
+    Tcn = np.cos(theta)*vs*ros*(Dp**2)*(dudz**2)
+    tau = Tcn*np.tan(phi)
+    return tau
+
+def shear_stress_static(vs,ros,rof,h,s,g):
+    theta = np.arctan(s)
+    rodf = vs*ros+(1-vs)*rof
+    tau = rodf*g*h*(np.sin(theta))
+    return tau
+
+def erosion_rate(k,tau,eta,dx):
+    E_l = (k*tau**eta)/dx
+    return E_l
         
-        pd_out = np.sum((pd_up*E+pd_in*(qsi-D))/(qsi-D+E))
-                
-        if (pd_out <=0) or (np.isnan(pd_out)) or (np.isinf(pd_out)):
-            msg = "out-flowing particle diameter is zero, negative, nan or inf"
-            print("pd_up{}, pd_in{}, qsi{}, E{}, D{}".format(pd_up, pd_in, qsi, E, D))
-            raise ValueError(msg)
+def erosion_coef_k(E_l,tau,eta,dx):
+    k = E_l*dx/(tau**eta)
+    return k     
         
-        return pd_out

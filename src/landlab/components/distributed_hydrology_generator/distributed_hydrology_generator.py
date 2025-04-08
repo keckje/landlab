@@ -1347,7 +1347,7 @@ class DistributedHydrologyGenerator(Component):
                 fx[i] = (np.exp(-(np.log(x) - mu_lognormal)**2 / (2 * sigma_lognormal**2)) \
                  / (x * sigma_lognormal * np.sqrt(2 * np.pi)))
                 
-            Fx = sc.integrate.cumtrapz(fx[0], x1, initial=0)
+            Fx = sc.integrate.cumulative_trapezoid(fx[0], x1, initial=0)
                  
         
         if dist == 'LP3':
@@ -1402,7 +1402,7 @@ class DistributedHydrologyGenerator(Component):
                 fx[i] = fp*sp
             
             # cdf created by summing area under pdf
-            Fx = sc.integrate.cumtrapz(fx[0], x1, initial=0)
+            Fx = sc.integrate.cumulative_trapezoid(fx[0], x1, initial=0)
             
         
        
