@@ -3,11 +3,11 @@ import pandas as pd
 from collections import OrderedDict
 
 from landlab import Component, FieldError
-from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFinderAndRouter,FlowDirectorSteepest)
+from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFinderAndRouter, FlowDirectorSteepest)
 from landlab import imshow_grid, imshow_grid_at_node
 
 from landlab.components.mass_wasting_router.landslide_mapper import LandslideMapper as LM
-from landlab.components.mass_wasting_runout import MassWastingRunout as MWRu # before v7 can be used, need to modify MWR to create landslide ID field
+from landlab.components.mass_wasting_runout import MassWastingRunout as MWRu
 from landlab.components.mass_wasting_router.mass_wasting_eroder import MassWastingEroder as MWE
 from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsMapper
 
