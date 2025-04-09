@@ -16,8 +16,8 @@ class MassWastingRouter(Component):
     
 
     '''a component that redistributes mass wasting derived sediment through a 
-    watershed and determines what portion of and where the sediment enters 
-    the channel network
+    watershed by determining what portion of and where the mass wasting sediment 
+    enters and travels through the channel network
 
     This component is designed to couple a mass-wasting model with a fluvial sediment
     transport model. It was developed using the LandslideProbability component 
@@ -44,20 +44,14 @@ class MassWastingRouter(Component):
     This component is unit sensitive. Units specific to each required field are
     listed below.
 
-
     author: Jeff Keck
-
     '''
-
-
-
     _name = 'MassWastingRouter'
 
     _unit_agnostic = False
 
     _version = 1.0
 
-    
     _info = {
         
         'mass__wasting_events': {
@@ -77,7 +71,6 @@ class MassWastingRouter(Component):
             "mapping": "node",
             "doc": "initial mass wasting volumes",
             },
-        
         
         'topographic__elevation': {            
             "dtype": float,
@@ -178,42 +171,12 @@ class MassWastingRouter(Component):
             minimum number of adjacent cells needed for a group of cell to be 
             considered a landslide
         
+        
         MASS WASTING RUNOUT
         
-        mw_dict : dictionary
-        a dictionary of parameters that control 
-        the behavoir of the cellular-automata debris flow model formatted as follows:
-                mw_dict = {
-                    'critical slope':0.07, 'minimum flux':0.3,
-                    'scour coefficient':0.02}
-            
-            where: 
-                critical slope: float
-                    angle of repose of mass wasting material , L/L
-                minimum-flux: float
-                    minimum volumetric flux, i.e., volume/grid.dx per iteration, (L^2)/T.
-                    flux below this threshold stops at the cell as a deposit
-                scour coefficient: float
-                    coefficient that converts the depth-slope approximation of
-                    total shear stress from the debris flow to a entrainment and
-                    scour depth
-                                
+        mw_dict : dictionary of key word arguements and values for MassWastingRunout
                     
-        release_dict : dictionary
-            a dictionary of parameters that control the release of the mass wasting 
-            material into the watershed            
-                    mw_release_dict = {
-                        'number of pulses': 8, 
-                        'iteration delay': 5
-                        }   
-                    
-                   where:
-                       number of pulses: int
-                           number of pulses that are used to release the total mass
-                           wasting volume
-                       iteration delay: int
-                           number of iterations between each pulse
-                    
+        
         MASS WASTING ERODER
         
         fluvial_erosion_rate: list of lists
@@ -227,9 +190,6 @@ class MassWastingRouter(Component):
             larger parcels [m3]
         """
 
-
-        # call __init__ from parent classes
-        # super().__init__(grid, nmgrid, Ct, BCt)
         super().__init__(grid)
 
         if 'topographic__elevation' in grid.at_node:  # redundant
@@ -251,13 +211,11 @@ class MassWastingRouter(Component):
                         at='node',
                         copy = True,clobber=True)
 
-        # receivers = self.frnode #receiver nodes (node that receives runoff from node) = self.frnode #receiver nodes (node that receives runoff from node)
-
         # nodes, reshaped in into m*n,1 array like other mg fields
         self.nodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1],1)
         self.rnodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1]) #nodes in single column array
 
-        ### NM Grid characteristics
+        ### network model grid characteristics
         self._nmgrid = nmgrid
         self.nmg_nodes = nmgrid.nodes
 
@@ -265,8 +223,7 @@ class MassWastingRouter(Component):
         self.Ct = Ct # Channel initiation threshold [m2]   
         self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
 
-
-        ### prep MassWastingRunout
+        ### prep time
         self._time_idx = 0 # index
         self._time = 0.0 # duration of model run (hours, excludes time between time steps)
         # TODO need to keep track of actual time (add difference between date of each iteration)
@@ -281,16 +238,14 @@ class MassWastingRouter(Component):
         self.FENodes_all = {} # all fluvial erosion nodes
         self.parcelDF_dict = {} #  parcels dataframe, created from aggregated fluvial erosion nodes
 
-        
         ### initial values
         self._grid.at_node['mass__wasting_events'] = np.zeros(self.nodes.shape[0]).astype(int)
         self._grid.at_node['mass__wasting_volumes'] = np.zeros(self.nodes.shape[0])
-
-        
+      
         # instantiate channel network grid tools
         self.gt = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid, Ct = Ct, BCt = BCt)
 
-        ## define channel and fluvial channel networks in the raster model grid
+        ## define colluvial and fluvial channel networks in the raster model grid
         self.gt.extract_channel_nodes(Ct,BCt)        
 
         ## create the nmg to rmg node mapper
@@ -299,11 +254,7 @@ class MassWastingRouter(Component):
         ## define nmg node elevation based on rmg channel nodes
         self.gt.transfer_rmg_node_field_to_nmg_node_field()
 
-
-        ### class instance of LandslideMapper
-        # self.gt.ChannelNodes(Ct,BCt)
-        # self.gt.min_distance_to_network(loc[c],  ChType = 'debrisflow') 
-       
+        ### class instance of LandslideMapper      
         self.Landslides = LM(self._grid,
              Ct = Ct, 
              BCt  = BCt,
@@ -311,12 +262,12 @@ class MassWastingRouter(Component):
              mass_wasting_threshold = mass_wasting_threshold, 
              min_mw_cells = min_mw_cells,
              )
-        
         print('instantiated LM')
+        
         ### class instance of MassWastingRunout
-
+        # add grid to mw_dict
         mw_dict['grid'] = self._grid
-        mw_dict['grain_shear'] = False
+        # save needs to be on when run with MWRo
         mw_dict['save'] = True
         # set initial mass wasting id
         self._grid.at_node['mass__wasting_id'] = np.zeros(self._grid.number_of_nodes).astype(int)
@@ -460,7 +411,6 @@ class MassWastingRouter(Component):
         ## (clumping and down-slope distance computations require d-8 flow direction)
         self._d8flowdirector()
         # print('reset flow directions to d8')
-
 
         self._time += dt  # cumulative modeling time (not time or time stamp)
         self._time_idx += 1  # update iteration index
