@@ -405,7 +405,7 @@ class MassWastingRunout(Component):
 
             # if using grain size dependent erosion, check
             # particle_diameter is included as an attribute
-            if (
+            if (                                    ##### NEED TO MOVE THIS CHECK OUT OF ABOVE IF STATEMENT
                 self.grain_shear
                 and "particle__diameter" not in self._tracked_attributes
             ):

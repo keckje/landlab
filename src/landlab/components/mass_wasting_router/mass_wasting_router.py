@@ -7,7 +7,7 @@ from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFind
 from landlab import imshow_grid, imshow_grid_at_node
 
 from landlab.components.mass_wasting_router.landslide_mapper import LandslideMapper as LM
-from landlab.components.mass_wasting_router.mass_wasting_runout import MassWastingRunout as MWRu # before v7 can be used, need to modify MWR to create landslide ID field
+from landlab.components.mass_wasting_runout import MassWastingRunout as MWRu # before v7 can be used, need to modify MWR to create landslide ID field
 from landlab.components.mass_wasting_router.mass_wasting_eroder import MassWastingEroder as MWE
 from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsMapper
 
@@ -140,11 +140,9 @@ class MassWastingRouter(Component):
             terrace_width = 1,
             mass_wasting_threshold = 0.75, 
             min_mw_cells = 1,
-            release_dict = {'number of pulses':[1], # mass wasting runout
-                            'iteration delay':[1] },
-            mw_dict = {'critical slope':[0.1], 
-                       'minimum flux':0.03,
-                       'scour coefficient':0.02},
+            mw_dict = {'critical_slope':[0.1], 
+                       'threshold_flux':0.03,
+                       'erosion_coefficient':0.02},
             fluvial_erosion_rate = [[0.03,-0.43], [0.01,-0.43]], # mass wasting eroder
 
             parcel_volume = 0.2, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
@@ -316,26 +314,17 @@ class MassWastingRouter(Component):
         
         print('instantiated LM')
         ### class instance of MassWastingRunout
-        # self.DebrisFlows = MWRu(self._grid,
-        #                         release_dict,
-        #                         df_dict, 
-        #                         save = True,
-        #                         routing_surface = "energy__elevation", 
-        #                         settle_deposit = True)
 
-        self.DebrisFlows = MWRu(self._grid,
-                                release_dict,
-                                mw_dict, 
-                                save = True,
-                                veg_factor = 1,
-                                dist_to_full_flux_constraint = 0,
-                                routing_surface = "topographic__elevation",
-                                settle_deposit = False,
-                                deposition_rule = "critical_slope",
-                                deposit_style = "downslope_deposit_sc10",
-                                effective_qsi = True)
-        
+        mw_dict['grid'] = self._grid
+        mw_dict['grain_shear'] = False
+        mw_dict['save'] = True
+        # set initial mass wasting id
+        self._grid.at_node['mass__wasting_id'] = np.zeros(self._grid.number_of_nodes).astype(int)
+        # set initial recieiver nodes
+        self._grid.at_node['flow__receiver_proportions'] = np.zeros((self._grid.number_of_nodes,8))
+        self.DebrisFlows = MWRu(**mw_dict)       
         print('instantiated MWRunout')
+
         ### class instance of MassWastingEroder
         self.DepositEroder = MWE(
                     self._grid,
@@ -449,8 +438,8 @@ class MassWastingRouter(Component):
             # print('multiflowdirection')
             
             ## route debris flows, update dem           
-            self.DebrisFlows.run_one_step(dt)
-            self.DFcells_dict[self._time_idx] = self.DebrisFlows.arn_r
+            self.DebrisFlows.run_one_step()
+            self.DFcells_dict[self._time_idx] = self.DebrisFlows.saver.arn_r
             self.StormDEM_dict[self._time_idx] = self.DebrisFlows._grid.at_node['topographic__elevation'].copy()                
             # print('scour and deposition')
        
