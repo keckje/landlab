@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 from landlab import RasterModelGrid, Component
 from landlab.components import SinkFillerBarnes, FlowAccumulator, FlowDirectorMFD
-from landlab.components.mass_wasting_router import MassWastingRunout
+from landlab.components.mass_wasting_runout import MassWastingRunout
 from landlab import imshow_grid
 
 from landlab import imshow_grid_at_node

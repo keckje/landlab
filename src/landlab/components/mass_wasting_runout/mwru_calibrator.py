@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from landlab import RasterModelGrid
 from landlab.components import SinkFillerBarnes, FlowAccumulator, FlowDirectorMFD
-from landlab.components.mass_wasting_router.mass_wasting_runout import (MassWastingRunout,
+from landlab.components.mass_wasting_runout.mass_wasting_runout import (MassWastingRunout,
                                                                        shear_stress_grains,
                                                                        shear_stress_static,
                                                                        erosion_rate,
