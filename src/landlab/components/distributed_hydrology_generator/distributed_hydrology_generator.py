@@ -149,10 +149,10 @@ class DistributedHydrologyGenerator(Component):
             raise FieldError(
                 'A flow__receiver_node field is required as a component input!')  
 
-        
+        self._seed = seed
         
         # set the seed of the np random generator
-        self._maker(seed)
+        self._maker()
         
         # initial parcels
         if parcels != None:
@@ -383,10 +383,10 @@ class DistributedHydrologyGenerator(Component):
         self._constant_channel_tau()
         
     
-    def _maker(self,seed):
+    def _maker(self):
         """prepares the np random generator"""
         
-        self.maker = np.random.RandomState(seed=seed)
+        self.maker = np.random.RandomState(self._seed)
 
     
     def _storm_date_maker(self):

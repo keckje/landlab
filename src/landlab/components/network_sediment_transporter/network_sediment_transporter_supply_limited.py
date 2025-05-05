@@ -397,8 +397,8 @@ class NetworkSedimentTransporter(Component):
         self._calculate_mean_D_and_rho()
 
         self._partition_active_and_storage_layers()
-        # self._adjust_node_elevation() #/jk/
-        # self._update_channel_slopes() #/jk/
+        #self._adjust_node_elevation() #/jk/
+        self._update_channel_slopes() 
 
     @property
     def time(self) -> float:
@@ -486,50 +486,50 @@ class NetworkSedimentTransporter(Component):
             self._parcels.dataset["volume"].values[:, -1],
             size=self._grid.number_of_links,
         )
+        #/jk/ comment out this section
+        # if self._active_layer_method == "WongParker":
+        #     # Wong et al. (2007) approximation for active layer thickness.
+        #     # NOTE: calculated using grain size and grain density calculated for
+        #     # the active layer grains in each link at the **previous** timestep.
+        #     # This circumvents the need for an iterative scheme to determine grain
+        #     # size of the active layer before determining which grains are in the
+        #     # active layer.
 
-        if self._active_layer_method == "WongParker":
-            # Wong et al. (2007) approximation for active layer thickness.
-            # NOTE: calculated using grain size and grain density calculated for
-            # the active layer grains in each link at the **previous** timestep.
-            # This circumvents the need for an iterative scheme to determine grain
-            # size of the active layer before determining which grains are in the
-            # active layer.
+        #     # calculate tau
+        #     tau = (
+        #         self._fluid_density
+        #         * self._g
+        #         * self._grid.at_link["channel_slope"]
+        #         * self._grid.at_link["flow_depth"]
+        #     )
 
-            # calculate tau
-            tau = (
-                self._fluid_density
-                * self._g
-                * self._grid.at_link["channel_slope"]
-                * self._grid.at_link["flow_depth"]
-            )
+        #     # calcuate taustar
+        #     taustar = np.zeros_like(tau)
+        #     np.divide(
+        #         tau,
+        #         (self._rhos_mean_active - self._fluid_density)
+        #         * self._g
+        #         * self._d_mean_active,
+        #         where=self._rhos_mean_active > self._fluid_density,
+        #         out=taustar,
+        #     )
 
-            # calcuate taustar
-            taustar = np.zeros_like(tau)
-            np.divide(
-                tau,
-                (self._rhos_mean_active - self._fluid_density)
-                * self._g
-                * self._d_mean_active,
-                where=self._rhos_mean_active > self._fluid_density,
-                out=taustar,
-            )
+        #     # calculate active layer thickness (in units of m)
+        #     self._active_layer_thickness = (
+        #         0.515
+        #         * self._d_mean_active
+        #         * (3.09 * (taustar - 0.0549).clip(0.0, None) ** 0.56)
+        #     )
 
-            # calculate active layer thickness (in units of m)
-            self._active_layer_thickness = (
-                0.515
-                * self._d_mean_active
-                * (3.09 * (taustar - 0.0549).clip(0.0, None) ** 0.56)
-            )
+        # elif self._active_layer_method == "GrainSizeDependent":
+        #     # Set all active layers to a multiple of the lnk mean grain size
+        #     self._active_layer_thickness = (
+        #         self._d_mean_active * self._active_layer_d_multiplier
+        #     )
 
-        elif self._active_layer_method == "GrainSizeDependent":
-            # Set all active layers to a multiple of the lnk mean grain size
-            self._active_layer_thickness = (
-                self._d_mean_active * self._active_layer_d_multiplier
-            )
-
-        elif self._active_layer_method == "Constant10cm":
-            # Set all active layers to 10 cm thickness.
-            self._active_layer_thickness = 0.1 * np.ones_like(self._d_mean_active) #/jk/
+        # elif self._active_layer_method == "Constant10cm":
+        #     # Set all active layers to 10 cm thickness.
+        self._active_layer_thickness = 0.1 * np.ones_like(self._d_mean_active) #/jk/ keep this line, remove from if statement, change from 0.1 to 10
 
         # If links have no parcels, we still need to assign them an active layer
         # thickness..
@@ -545,7 +545,7 @@ class NetworkSedimentTransporter(Component):
         capacity = (
             self._grid.at_link["channel_width"]
             * self._grid.at_link["reach_length"]
-            * self._active_layer_thickness*1e100 #/jk/
+            * self._active_layer_thickness*1e100 ##/jk/ all parcels are active
         )  # in units of m^3
 
         active_inactive = _INACTIVE * np.ones(self._num_parcels)
@@ -785,7 +785,7 @@ class NetworkSedimentTransporter(Component):
         self._grid.at_link["sediment__active__volume"] = self._vol_act
         self._grid.at_link["sediment__active__sand_fraction"] = frac_sand
 
-    def _move_parcel_downstream(self, dt: float) -> None:
+    def _move_parcel_downstream(self, dt: float) -> None: #/jk/ note, parcel velocity is updated when _calc_transport_wilcock_crowe is run in _run_one_step
         """Update parcel location for each parcel in the active layer."""
 
         # determine where parcels are starting
@@ -822,7 +822,7 @@ class NetworkSedimentTransporter(Component):
         active_parcel_ids = np.nonzero(in_network * active)[0]
 
         distance_left_to_travel = distance_to_travel_this_timestep.copy()
-        while np.any(distance_left_to_travel > 0.0): #np.any((distance_left_to_travel > 0.0) & (~np.isnan(location_in_link))):
+        while np.any((distance_left_to_travel > 0.0) & (~np.isnan(location_in_link))): #/jk/, for now, I have replaced np.any(distance_left_to_travel > 0.0): with this line to prevent getting stuck in while loop 
             # Step 1: Move parcels downstream.
             on_network = current_link != self.OUT_OF_NETWORK
 
@@ -843,7 +843,7 @@ class NetworkSedimentTransporter(Component):
 
             # Deal with those staying in the current link.
             if np.any(rest_this_link):
-                print('  {x} coming to rest'.format(x=np.sum(rest_this_link)))
+                # print('  {x} coming to rest'.format(x=np.sum(rest_this_link)))
 
                 # for those staying in this link, calculate the location in link
                 # (note that this is a proportional distance). AND change
@@ -865,7 +865,7 @@ class NetworkSedimentTransporter(Component):
                 * (distance_left_to_travel > 0.0)
             )
             if np.any(moving_downstream):
-                print('  {x} next link'.format(x=np.sum(moving_downstream)))
+                # print('  {x} next link'.format(x=np.sum(moving_downstream)))
                 # change location in link to 0
                 location_in_link[moving_downstream] = 0.0
 
@@ -887,14 +887,12 @@ class NetworkSedimentTransporter(Component):
                 moved_oon = downstream_link == self._grid.BAD_INDEX
 
                 if np.any(moved_oon):
-                    print('  {x} exiting network'.format(x=np.sum(moved_oon)))
+                    # print('  {x} exiting network'.format(x=np.sum(moved_oon)))
 
                     current_link[moved_oon] = self.OUT_OF_NETWORK
                     # assign location in link of np.nan to those which moved oon
                     location_in_link[moved_oon] = np.nan
                     distance_left_to_travel[moved_oon] = 0.0
-                
-                self._distance_left_to_travel = distance_left_to_travel
 
         # Step 2: Parcel is at rest... Now update its information.
 
@@ -977,8 +975,8 @@ class NetworkSedimentTransporter(Component):
 
         if self._this_timesteps_parcels.any():
             self._partition_active_and_storage_layers()
-            # self._adjust_node_elevation()
-            # self._update_channel_slopes()
+            #self._adjust_node_elevation()  #/jk/
+            # self._update_channel_slopes() #/jk/
             self._update_transport_time()
             self._move_parcel_downstream(dt)
 

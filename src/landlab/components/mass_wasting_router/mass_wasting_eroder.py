@@ -174,8 +174,8 @@ class MassWastingEroder(Component):
                                     active_links = self._nmgrid.active_links,
                                     nmgx = self.nmgridx, nmgy = self.nmgridy)
     
-            self.Lnodelist = out[0]
-            self.Ldistlist = out[1]
+            self.Lnodelist = out[0] # all nodes that coincide with link
+            self.Ldistlist = out[1] # the downstream distance of each node that coincide with link
             self.xyDf = pd.DataFrame(out[2])
 
         ## define fluvial erosion rates of channel and terrace nodes (no fluvial erosion on hillslopes)
@@ -422,7 +422,7 @@ class MassWastingEroder(Component):
 
             '''
             # return row['link_downstream_distance [m]']/self.linklength[int(row['link_#'])]
-            return row['normalized_downstream_distance']/self.linklength[int(row['link_#'])]
+            return row['link_downstream_distance']/self.linklength[int(row['link_#'])]
         if len(self.FENodes) == 0:
             FEDn = []
             parcelDF = pd.DataFrame([])
@@ -458,7 +458,7 @@ class MassWastingEroder(Component):
                         link_d = self.Ldistlist[i]
                         ld = link_d[en]
                         linkID = i
-                        mwlink = OrderedDict({'mw_unit':h,'pulse_volume':self.FEV[h],'raster_grid_cell_#':FEDn,'link_#':linkID,'link_cell_#':search,'raster_grid_to_link_offset [m]':offset,'normalized_downstream_distance':ld})
+                        mwlink = OrderedDict({'mw_unit':h,'pulse_volume':self.FEV[h],'raster_grid_cell_#':FEDn,'link_#':linkID,'link_cell_#':search,'raster_grid_to_link_offset [m]':offset,'link_downstream_distance':ld})
                         # mwlink = OrderedDict({'mw_unit':h,'vol [m^3]':self.FEV[h],'raster_grid_cell_#':FEDn,'link_#':linkID,'link_cell_#':search,'raster_grid_to_link_offset [m]':offset,'link_downstream_distance [m]':ld})
                         Lmwlink.append(mwlink)
                         break #for now use the first link found - later, CHANGE this to use largest order channel
@@ -469,7 +469,7 @@ class MassWastingEroder(Component):
 
             parcelDF = pd.DataFrame(Lmwlink)
             pLinkDistanceRatio = parcelDF.apply(LDistanceRatio,axis=1)
-            pLinkDistanceRatio.name = 'link_downstream_distance'
+            pLinkDistanceRatio.name = 'normalized_downstream_distance'
             self.parcelDF = pd.concat([parcelDF,pLinkDistanceRatio],axis=1)
 
 

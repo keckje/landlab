@@ -397,8 +397,8 @@ class NetworkSedimentTransporter(Component):
         self._calculate_mean_D_and_rho()
 
         self._partition_active_and_storage_layers()
-        # self._adjust_node_elevation() #/jk/
-        # self._update_channel_slopes() #/jk/
+        self._adjust_node_elevation()
+        self._update_channel_slopes()
 
     @property
     def time(self) -> float:
@@ -529,7 +529,7 @@ class NetworkSedimentTransporter(Component):
 
         elif self._active_layer_method == "Constant10cm":
             # Set all active layers to 10 cm thickness.
-            self._active_layer_thickness = 0.1 * np.ones_like(self._d_mean_active) #/jk/
+            self._active_layer_thickness = 0.1 * np.ones_like(self._d_mean_active)
 
         # If links have no parcels, we still need to assign them an active layer
         # thickness..
@@ -545,7 +545,7 @@ class NetworkSedimentTransporter(Component):
         capacity = (
             self._grid.at_link["channel_width"]
             * self._grid.at_link["reach_length"]
-            * self._active_layer_thickness*1e100 #/jk/
+            * self._active_layer_thickness
         )  # in units of m^3
 
         active_inactive = _INACTIVE * np.ones(self._num_parcels)
@@ -790,7 +790,7 @@ class NetworkSedimentTransporter(Component):
 
         # determine where parcels are starting
         current_link = self._parcels.dataset.element_id.values[:, -1].astype(int)
-        self.current_link = current_link
+        self.current_link = current_link #/jk/ current link id of parcel
 
         # determine location within link where parcels are starting.
         location_in_link = self._parcels.dataset.location_in_link.values[:, -1]
@@ -822,21 +822,25 @@ class NetworkSedimentTransporter(Component):
         active_parcel_ids = np.nonzero(in_network * active)[0]
 
         distance_left_to_travel = distance_to_travel_this_timestep.copy()
-        while np.any(distance_left_to_travel > 0.0): #np.any((distance_left_to_travel > 0.0) & (~np.isnan(location_in_link))):
+        c_ =0
+        self.on_network_dict ={}
+        self.traveling_initial = np.sum(distance_left_to_travel > 0.0)
+        while np.any((distance_left_to_travel > 0.0) & (~np.isnan(location_in_link))):
+            # print ('  {} traveling'.format(np.sum(distance_left_to_travel > 0.0)))
             # Step 1: Move parcels downstream.
             on_network = current_link != self.OUT_OF_NETWORK
-
+            self.on_network_dict[c_] = [on_network.copy(),current_link.copy(),location_in_link.copy(),distance_left_to_travel.copy()] # do these change each iteration? after 1st it, all others always the same
             # Get current link lengths:
             current_link_lengths = self._grid.at_link["reach_length"][current_link]
 
             # Determine where they are in the current link.
-            distance_to_exit_current_link = current_link_lengths * (
+            distance_to_exit_current_link = current_link_lengths * ( #/jk/ if location in link is nan, distance to exit current link is nan
                 1.0 - location_in_link
             )
 
             # Identify which ones will come to rest in the current link.
             rest_this_link = (
-                (distance_left_to_travel < distance_to_exit_current_link)
+                (distance_left_to_travel < distance_to_exit_current_link) #/jk/ if distance to exit is nan, conditional doesn't apply
                 * on_network
                 * (distance_left_to_travel > 0.0)
             )
@@ -860,7 +864,7 @@ class NetworkSedimentTransporter(Component):
 
             # Deal with those moving to a downstream link.
             moving_downstream = (
-                (distance_left_to_travel >= distance_to_exit_current_link)
+                (distance_left_to_travel >= distance_to_exit_current_link) #/jk/ if distance_to_exit is nan, conditional doesn't apply
                 * on_network
                 * (distance_left_to_travel > 0.0)
             )
@@ -877,7 +881,7 @@ class NetworkSedimentTransporter(Component):
                 # change current link to the downstream link.
 
                 # get the downstream link at link:
-                downstream_node = self._fd.downstream_node_at_link()[current_link]
+                downstream_node = self._fd.downstream_node_at_link()[current_link] #/jk/ # move this block out of if statement?
                 downstream_link = self._fd.link_to_flow_receiving_node[downstream_node]
 
                 # assign new values to current link.
@@ -893,9 +897,10 @@ class NetworkSedimentTransporter(Component):
                     # assign location in link of np.nan to those which moved oon
                     location_in_link[moved_oon] = np.nan
                     distance_left_to_travel[moved_oon] = 0.0
-                
-                self._distance_left_to_travel = distance_left_to_travel
-
+            # if c_>self.traveling_initial:
+                # break
+            c_ +=1
+            # print(c_)
         # Step 2: Parcel is at rest... Now update its information.
 
         # transport dependent abrasion - update alphas for xport dependence
