@@ -20,8 +20,7 @@ class MassWastingEroder(Component):
     listed below.
 
 
-    TODO: need a more reliable method for differentiating between eroded and landslide eroded cells
-          erode channel node elevations using flow rate at grid cell
+    TODO: erode channel node elevations using flow rate at grid cell
           record datetime of each timestep
           add parameter for using different router and option to have no terrace cells (for models with larger grid cells)
 
@@ -187,17 +186,11 @@ class MassWastingEroder(Component):
         ### create initial values
         # self.parcelDF = pd.DataFrame([]) # initial parcel DF
         self.dem_initial = self._grid.at_node['topographic__initial_elevation'].copy() # set initial elevation
-        self.dem_previous_time_step_fe = self._grid.at_node['topographic__initial_elevation'].copy() # set previous time step elevation
-        self.dem_previous_time_step_mw = self._grid.at_node['topographic__initial_elevation'].copy() # set previous time step elevation
-        
-        self.dem_fe_dzdt = self.dem - self.dem_initial
-        self.dem_mw_dzdt = self.dem - self.dem_initial # initial cells of deposition and scour - none, TODO, make this an optional input
+        self.dem_previous_time_step = self._grid.at_node['topographic__initial_elevation'].copy() # set previous time step elevation
+        self.dem_dz_cumulative = self.dem - self.dem_initial
+        self.dem_mw_dzdt = self.dem_dz_cumulative.copy() # initial cells of deposition and scour - none, TODO, make this an optional input
         self.DistNodes = np.array([])
         self.FED = np.array([])
-        
-        self.TN = self.gti.TerraceNodes
-        self.CN = self.gti.ChannelNodes
-        self.channel_nodes = np.unique(np.concatenate((self.TN,self.CN)))
         
     def _DefineErosionRates(self):
         '''defines the coefficient and exponent of a negative power function that
@@ -233,6 +226,36 @@ class MassWastingEroder(Component):
 
         self.fluvial_erosion_rate = np.array(coefL,dtype = 'float')
 
+
+    def _TerraceNodes(self):
+        """MWR
+        
+        """
+     
+        for i in range(self.TerraceWidth):
+            if i == 0:
+                # diagonal adjacent nodes to channel nodes
+                AdjDN =np.ravel(self._grid.diagonal_adjacent_nodes_at_node[self.BedloadChannelNodes])  
+                # adjacent nodes to channel nodes
+                AdjN = np.ravel(self._grid.adjacent_nodes_at_node[self.BedloadChannelNodes])
+            elif i>0:
+                # diagonal adjacent nodes to channel nodes
+                AdjDN = self._grid.diagonal_adjacent_nodes_at_node[TerraceNodes] 
+                # adjacent nodes to channel nodes
+                AdjN = self._grid.adjacent_nodes_at_node[TerraceNodes]            
+            
+            # all adjacent nodes to channel nodes
+            AllNodes = np.concatenate((AdjN,AdjDN))
+            # unique adjacent nodes
+            AllNodes = np.unique(AllNodes)
+            # unique adjacent nodes, excluding all channel nodes.
+            TerraceNodes = AllNodes[np.in1d(AllNodes,self.ChannelNodes,invert = True)]
+        
+        t_x = self._grid.node_x[TerraceNodes]
+        t_y = self._grid.node_y[TerraceNodes]
+        self.xyDf_t = pd.DataFrame({'x':t_x, 'y':t_y})
+        self.TerraceNodes = TerraceNodes
+        
         
     def _dem_dz(self):
         """determine change in dem since the last time step
@@ -242,12 +265,8 @@ class MassWastingEroder(Component):
         None.
 
         """
-        # dem_previous_time_step_mw is recorded after fluvial erosion. Only mass wasting
-        # modifications to dem show up in dem_mw_dzdt
-        self.dem_mw_dzdt = self._grid.at_node['topographic__elevation'] - self.dem_previous_time_step_mw
-        # dem_previous_time_step_fe is recorded before fluvial erosion. Fluvial erosion
-        # and mass wasting modifications to dem show up in dem_fe_dzdt
-        self.dem_fe_dzdt = self._grid.at_node['topographic__elevation'] - self.dem_previous_time_step_fe
+
+        self.dem_mw_dzdt = self._grid.at_node['topographic__elevation'] - self.dem_previous_time_step
         # print('max change dem due to debris flows')
         # print(self.dem_mw_dzdt.max())
 
@@ -255,19 +274,13 @@ class MassWastingEroder(Component):
     def _find_recently_disturbed(self):
         """create a boolean mask, True values represent grid cells that were 
         disturbed between this and the last model iteration"""
-
-        # add a check for duplicate nodes, is len(CN)+len(TN) same as np.unique(np.concatenate((TN,CN)))
-        
-        self.recently_disturbed_mw = np.abs(self.dem_mw_dzdt) > 0.0
-        print('number of mass wasting disturbed cells: {}'.format(sum(self.recently_disturbed_mw)))
-        self.disturbed_fe = np.abs(self.dem_fe_dzdt) > 0.01
-        print('number of fluvially eroding cells: {}'.format(sum(self.disturbed_fe)))
+        self.recently_disturbed = np.abs(self.dem_mw_dzdt) > 0
 
     def _TimeSinceDisturbance(self, dt):
         """Years since a cell was disturbed advance in time increases period of
         time since the storm event and the last storm event (ts_n - ts_n-1)
-        if disturbance caused by mass wasting proceeses, then time since disturbance
-        is set to 0 (fluvial erosion does not count)
+        if landslides, time since disturbance in any cell that has a change
+        in elevation caused by the debris flows is set to 0 (fluvial erosion does not count)
         
         dt: float
             number of years since the last storm event
@@ -275,11 +288,10 @@ class MassWastingEroder(Component):
         """
         # all grid cells advance forward in time by amount dt
         self.years_since_disturbance+=dt
-        # find cells whose elevation changed bdetween this and the last model iteration
-        # as a result of mass wasting processes. 
+        # find cells whose elevation changed bdetween this and the last model iteration, 
         # set time to disturbance to a small number in units of years, 13 days selected 
         # to match max observed single day sediment transport following disturbance
-        self.years_since_disturbance[self.recently_disturbed_mw] = 13/365
+        self.years_since_disturbance[self.recently_disturbed] = 13/365
 
     def _NoLongerDisturbed(self):
         """remove nodes from DistNodes array (list of node ids who represent 
@@ -288,7 +300,7 @@ class MassWastingEroder(Component):
             disturbed_node_mask = self.years_since_disturbance[self.DistNodes] < self._no_longer_disturbed_year
         
         elif self._disturbance_rule == 'minimum_erosion':
-            disturbed_node_mask = np.abs(self.dem_fe_dzdt[self.DistNodes]) > 0.01
+            disturbed_node_mask = np.abs(self.dem_mw_dzdt[self.DistNodes]) > 0.01
         
         
         self.DistNodes = self.DistNodes[disturbed_node_mask]
@@ -323,29 +335,21 @@ class MassWastingEroder(Component):
             # if np.any(np.abs(self.dem_mw_dzdt) > 0): # if there are no disturbed cells
                 # disturbance (dz>0) mask
             # DistMask = np.abs(self.dem_mw_dzdt) > 0 # # find cells whose elevation changed bdetween this and the last model iteratio,these are the cell that will fluvially erode
-            # print('number of mw disturbed cells: {}'.format(self.recently_disturbed_mw.sum()))
+            print('number of disturbed cells: {}'.format(self.recently_disturbed.sum()))
+            NewDistNodes = self.rnodes[self.recently_disturbed] # all node ids that have disturbance larger than minimum value
 
-            # two options for determining disturbed nodes:
-            # 1. new deposit and scour cell ids are appeneded to list of disturbed cells # just use cells that have change
-            # only consider disturbed nodes from last landslide event
-            self.DistNodes = np.unique(np.concatenate((self.rnodes[self.recently_disturbed_mw],self.rnodes[self.disturbed_fe]))) # # nodes that have not been disturbed for a while are never removed from DistNodes
-
-            # 2. include previously disturbed nodes and new landslide disturbed nodes
-            # NewDistNodes = self.rnodes[self.recently_disturbed] # all node ids that have disturbance larger than minimum value
-            # self.DistNodes = np.unique(np.concatenate((self.DistNodes, NewDistNodes))).astype(int)
+            #new deposit and scour cell ids are appeneded to list of disturbed cells # just use cells that have change
+            self.DistNodes = np.unique(np.concatenate((self.DistNodes, NewDistNodes))).astype(int) # nodes that have not been disturbed for a while are never removed from DistNodes
             
-            # create a mask to only keep the channel nodes
-            cnodes_mask = np.isin(self.DistNodes,self.channel_nodes)
-            self.DistNodes = self.DistNodes[cnodes_mask]
             # get the fluvial erosion rate parameters of each disturbed cells
-            self.FERateC  = self.fluvial_erosion_rate[self.DistNodes]
+            FERateC  = self.fluvial_erosion_rate[self.DistNodes] 
             
             # remove non-channel nodes from list of erosion rates # this should be done before determing the recently_distrubed cells
-            # cnd_msk = FERateC[:,0] > 0 # channel nodes coefficient are greater than 0
-            # self.FERateC = FERateC[cnd_msk] 
+            cnd_msk = FERateC[:,0] > 0 # channel nodes coefficient are greater than 0
+            self.FERateC = FERateC[cnd_msk] 
             
             # array of all fluvial erosion nodes
-            self.FENodes = self.DistNodes#[cnd_msk]
+            self.FENodes = self.DistNodes[cnd_msk]
             # print('no disturbed cells')
 
             # if there are fluvial erosion nodes, erode them
@@ -511,14 +515,13 @@ class MassWastingEroder(Component):
 
         """
 
-        # subtract previous storm dem from this dem, which may be modified by MWR
+        # subtract previous storm dem from this dem
         self._dem_dz()
 
         # find which cell changed in elevation due to landslide processes
         self._find_recently_disturbed()
         
-        # determine time since disturbance, cells modified by landslide process have
-        # time set to ~0, all other dt is added to their time since disturbance
+        # determine time since each cell was disturbed by mass wasting process
         self._TimeSinceDisturbance(dt)
         # print('determed time since last mass wasting disturbance')
         # fluvially erode any recently disturbed cells, create lists of
@@ -527,26 +530,23 @@ class MassWastingEroder(Component):
         # remove cells that have are no longer disturbed (TimeSinceDisturbance>threshold)
         # only run this if there are DistNodes
         # if len(self.DistNodes) != 0:
-            # self._NoLongerDisturbed()
+        #     self._NoLongerDisturbed()
         
-        # before fluvial erosion of DEM, make a copy
-        self.dem_previous_time_step_fe = self._grid.at_node['topographic__elevation'].copy()
-        
-        # erode based on time since disturbance
         self._FluvialErosion()
         # print('fluvial erosion')
 
         # self._parcelAggregator()
         # # print('aggregating parcels')
-
+        
+        self.dem_previous_time_step = self._grid.at_node['topographic__elevation'].copy()
+        
+        self.dem_dz_cumulative = self._grid.at_node['topographic__elevation'] - self.dem_initial
+        
         # convert list of cells and volumes to a dataframe compatiable with
         # the sediment pulser utility
         self._parcelDFmaker()
         
-        # after fluvial erosion of DEM, make a copy, disturbed cells identified next 
-        # iteration are any cells that changed elevation following MWR
-        self.dem_previous_time_step_mw = self._grid.at_node['topographic__elevation'].copy()
-        
-        # self.dem_dz_cumulative = self._grid.at_node['topographic__elevation'] - self.dem_initial
-        
+
+        print(self.FED)
+        print('number of cells with change el: {}'.format((np.abs(self.dem_mw_dzdt)>0).sum()))
 

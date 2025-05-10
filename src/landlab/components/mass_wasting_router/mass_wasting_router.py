@@ -234,6 +234,7 @@ class MassWastingRouter(Component):
         # self.DF_DEM_dif_dict = {} # dem differening during DF for plots
         self.DFcells_dict = {} # all precipitions during the debris flow routing algorithm
         self.StormDEM_dict = {} # DEM following debris flow and landslides
+        self.dem_dz_dict = {} # change in DEM elevation for each model iteration
         self.FED_all = {} # all fluvial erosion depths
         self.FENodes_all = {} # all fluvial erosion nodes
         self.parcelDF_dict = {} #  parcels dataframe, created from aggregated fluvial erosion nodes
@@ -401,11 +402,13 @@ class MassWastingRouter(Component):
             ## reset landslide probability field
             self._grid.at_node['MW__probability'] = np.zeros(self._grid.at_node['topographic__elevation'].shape[0])
 
-        ## determine time since each cell was disturbed by mass wasting process, erode deposits       
+        ## determine time since each cell was disturbed by mass wasting process, erode deposits  
+        print('iteration {}, ready to run eroder'.format(self._time_idx))
         self.DepositEroder.run_one_step(dt)
         self.FED_all[self._time_idx] = self.DepositEroder.FED
         self.FENodes_all[self._time_idx] = self.DepositEroder.FENodes
         self.parcelDF_dict[self._time_idx] = self.DepositEroder.parcelDF.copy()
+        self.dem_dz_dict[self._time_idx] = self.DepositEroder.dem_mw_dzdt
         
         ## re-run d8flowdirector
         ## (clumping and down-slope distance computations require d-8 flow direction)

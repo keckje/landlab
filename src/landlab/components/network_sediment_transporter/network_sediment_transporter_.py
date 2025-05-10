@@ -847,7 +847,7 @@ class NetworkSedimentTransporter(Component):
 
             # Deal with those staying in the current link.
             if np.any(rest_this_link):
-                print('  {x} coming to rest'.format(x=np.sum(rest_this_link)))
+                # print('  {x} coming to rest'.format(x=np.sum(rest_this_link)))
 
                 # for those staying in this link, calculate the location in link
                 # (note that this is a proportional distance). AND change
@@ -869,7 +869,7 @@ class NetworkSedimentTransporter(Component):
                 * (distance_left_to_travel > 0.0)
             )
             if np.any(moving_downstream):
-                print('  {x} next link'.format(x=np.sum(moving_downstream)))
+                # print('  {x} next link'.format(x=np.sum(moving_downstream)))
                 # change location in link to 0
                 location_in_link[moving_downstream] = 0.0
 
@@ -891,7 +891,7 @@ class NetworkSedimentTransporter(Component):
                 moved_oon = downstream_link == self._grid.BAD_INDEX
 
                 if np.any(moved_oon):
-                    print('  {x} exiting network'.format(x=np.sum(moved_oon)))
+                    # print('  {x} exiting network'.format(x=np.sum(moved_oon)))
 
                     current_link[moved_oon] = self.OUT_OF_NETWORK
                     # assign location in link of np.nan to those which moved oon
