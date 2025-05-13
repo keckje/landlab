@@ -389,10 +389,12 @@ class MassWastingRouter(Component):
             self._multidirectionflowdirector()
             # print('multiflowdirection')
             
-            ## route debris flows, update dem           
+            ## route debris flows, update dem   
+            self.dem_before_MWR = self.DebrisFlows._grid.at_node['topographic__elevation'].copy()
             self.DebrisFlows.run_one_step()
             self.DFcells_dict[self._time_idx] = self.DebrisFlows.saver.arn_r
-            self.StormDEM_dict[self._time_idx] = self.DebrisFlows._grid.at_node['topographic__elevation'].copy()                
+            self._grid.at_node['MW__disturbed'] = np.abs(self.dem_before_MWR - self.DebrisFlows._grid.at_node['topographic__elevation'])>0 # may not need to call dem from MWR here
+            self.StormDEM_dict[self._time_idx] = self.DebrisFlows._grid.at_node['topographic__elevation'].copy()  # copy of DEM before fluvial erosion              
             # print('scour and deposition')
        
             ## update NMG node elevation
@@ -401,6 +403,9 @@ class MassWastingRouter(Component):
                
             ## reset landslide probability field
             self._grid.at_node['MW__probability'] = np.zeros(self._grid.at_node['topographic__elevation'].shape[0])
+        else:
+            self.StormDEM_dict[self._time_idx] = self.DebrisFlows._grid.at_node['topographic__elevation'].copy()
+            self._grid.at_node['MW__disturbed'] = np.zeros(self._grid.at_node['topographic__elevation'].shape[0], dtype=bool)
 
         ## determine time since each cell was disturbed by mass wasting process, erode deposits  
         print('iteration {}, ready to run eroder'.format(self._time_idx))

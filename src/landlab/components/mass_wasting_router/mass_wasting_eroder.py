@@ -20,8 +20,11 @@ class MassWastingEroder(Component):
     listed below.
 
 
-    TODO: need a more reliable method for differentiating between eroded and landslide eroded cells
-          erode channel node elevations using flow rate at grid cell
+    TODO: 
+            need a more reliable method for differentiating between eroded and landslide eroded cells
+            mass wasting disturbed cells are provided outside of eroder, 
+            update erosion equations to: min(ax^b-c, 0) that scales with flow rate.
+            erode channel node elevations using flow rate at grid cell
           record datetime of each timestep
           add parameter for using different router and option to have no terrace cells (for models with larger grid cells)
 
@@ -67,7 +70,7 @@ class MassWastingEroder(Component):
             Ct = 5000,
             BCt = 100000,
             TerraceWidth = 1,
-            fluvial_erosion_rate = [[1,1], [1,1]], # [[0.03,-0.43], [0.01,-0.43]], # Fluvial erosion rate parameters
+            fluvial_erosion_rate = [[0.03,-0.43, 0.01], [0.01,-0.43, 0.005]], # Fluvial erosion rate parameters
             parcel_volume = 0.2, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
             gti = None,
             **kwds):
@@ -157,8 +160,10 @@ class MassWastingEroder(Component):
         ### fluvial erosion
         self.C_a = fluvial_erosion_rate[0][0]
         self.C_b = fluvial_erosion_rate[0][1]
+        self.C_c = fluvial_erosion_rate[0][2]
         self.T_a = fluvial_erosion_rate[1][0]
         self.T_b = fluvial_erosion_rate[1][1]
+        self.T_c = fluvial_erosion_rate[1][2]
         self._no_longer_disturbed_year = 5
         self._disturbance_rule = 'minimum_erosion'#'maximum_time'#'minimum_erosion'
         # minimum parcel size (parcels smaller than this are aggregated into a single parcel this size)
@@ -224,14 +229,14 @@ class MassWastingEroder(Component):
 
         for i in self.rnodes:
             if i in self.gti.TerraceNodes:
-                coefL.append(np.array([self.T_a, self.T_b]))
+                coefL.append(np.array([self.T_a, self.T_b, self.T_c]))
             elif i in self.gti.ChannelNodes:
-                coefL.append(np.array([self.C_a, self.C_b]))
+                coefL.append(np.array([self.C_a, self.C_b, self.C_c]))
             else:
-                coefL.append(np.array([0, 0]))
+                coefL.append(np.array([0, 0, 0]))
 
 
-        self.fluvial_erosion_rate = np.array(coefL,dtype = 'float')
+        self.fluvial_erosion_rate = np.array(coefL,dtype = 'float') # array of coefficients for each raster model grid node
 
         
     def _dem_dz(self):
@@ -246,7 +251,8 @@ class MassWastingEroder(Component):
         # modifications to dem show up in dem_mw_dzdt
         self.dem_mw_dzdt = self._grid.at_node['topographic__elevation'] - self.dem_previous_time_step_mw
         # dem_previous_time_step_fe is recorded before fluvial erosion. Fluvial erosion
-        # and mass wasting modifications to dem show up in dem_fe_dzdt
+        # and mass wasting modifications to dem show up in dem_fe_dzdt, so mask of fluvially eroded zones contains MW eroded zones too,
+        # use np.unique to not double count cells. 
         self.dem_fe_dzdt = self._grid.at_node['topographic__elevation'] - self.dem_previous_time_step_fe
         # print('max change dem due to debris flows')
         # print(self.dem_mw_dzdt.max())
@@ -258,9 +264,9 @@ class MassWastingEroder(Component):
 
         # add a check for duplicate nodes, is len(CN)+len(TN) same as np.unique(np.concatenate((TN,CN)))
         
-        self.recently_disturbed_mw = np.abs(self.dem_mw_dzdt) > 0.0
+        self.recently_disturbed_mw = self._grid.at_node['MW__disturbed']#np.abs(self.dem_mw_dzdt) > 0.0 # landslide disturbed are indicated by boolean mask, updated outside of eroder
         print('number of mass wasting disturbed cells: {}'.format(sum(self.recently_disturbed_mw)))
-        self.disturbed_fe = np.abs(self.dem_fe_dzdt) > 0.01
+        self.disturbed_fe = np.abs(self.dem_fe_dzdt) > 0.0 # change to zero, modify erosion equation as shown below
         print('number of fluvially eroding cells: {}'.format(sum(self.disturbed_fe)))
 
     def _TimeSinceDisturbance(self, dt):
@@ -281,17 +287,17 @@ class MassWastingEroder(Component):
         # to match max observed single day sediment transport following disturbance
         self.years_since_disturbance[self.recently_disturbed_mw] = 13/365
 
-    def _NoLongerDisturbed(self):
-        """remove nodes from DistNodes array (list of node ids who represent 
-        recently disturbed cells whose time since disturbance exceeds a threshold duration"""
-        if self._disturbance_rule == 'maximum_time':
-            disturbed_node_mask = self.years_since_disturbance[self.DistNodes] < self._no_longer_disturbed_year
+    # def _NoLongerDisturbed(self):
+    #     """remove nodes from DistNodes array (list of node ids who represent 
+    #     recently disturbed cells whose time since disturbance exceeds a threshold duration"""
+    #     if self._disturbance_rule == 'maximum_time':
+    #         disturbed_node_mask = self.years_since_disturbance[self.DistNodes] < self._no_longer_disturbed_year
         
-        elif self._disturbance_rule == 'minimum_erosion':
-            disturbed_node_mask = np.abs(self.dem_fe_dzdt[self.DistNodes]) > 0.01
+    #     elif self._disturbance_rule == 'minimum_erosion':
+    #         disturbed_node_mask = np.abs(self.dem_fe_dzdt[self.DistNodes]) > 0.01
         
         
-        self.DistNodes = self.DistNodes[disturbed_node_mask]
+    #     self.DistNodes = self.DistNodes[disturbed_node_mask]
 
 
     def _FluvialErosion(self, erosion_model = 'time'):
@@ -358,7 +364,8 @@ class MassWastingEroder(Component):
                 # print('years since disturbance: {}'.format(self.YSD))
                 
                 # compute the erosion depth at each FE node  #TODO: apply this to terrace cells only
-                self.FED = FERateCs[:,0]*self.YSD**FERateCs[:,1]#(times the ratio of the flow rate to the 2 year flow rate)
+                FED = (FERateCs[:,0]*self.YSD**FERateCs[:,1])-FERateCs[:,2]
+                self.FED = np.where(FED<0,0,FED) # no negative erosion rates
 
                 # # force cells that have not been disturbed longer than ___ years to have no erosion
                 # self.FED[self.YSD>3] = 0

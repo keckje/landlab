@@ -232,7 +232,7 @@ class DistributedHydrologyGenerator(Component):
 
             # initialize time
             self._time_idx = 0 # index
-            self._time = self.storm_dates[0]  # duration of model run (hours, excludes time between time steps)
+            # self._time = self.storm_dates[0]  # duration of model run (hours, excludes time between time steps)
 
         elif self._method == 'time_series':
             self.storm_dates = self.map_dates
@@ -889,7 +889,7 @@ class DistributedHydrologyGenerator(Component):
                     
         # depth is normal depth in trapezoidal channel geometry - very slow
         # d = depth_trapezoid(Q, S = S, b = b, m1 = 1, m2 = 1, n = 0.05)               
-        d = db*(Q/Qb)**0.3 # approximation for flow depth               
+        d = db*(Q/Qb)**0.3 # approximation for flow depth, uses hydraulic geometry and scales based on flow rate relative to bank full flow. If entire time series of flow is increased by the same proportion, flow depth will not change because the ratio of flow to bankfull flow is still the same.               
         q = Q/(b+d/2)               
             
         # roughness and effective stress
@@ -1112,20 +1112,21 @@ class DistributedHydrologyGenerator(Component):
             
             # (3) DTW only
             elif self.opt == 3: 
-                self._run_one_step_DTW(ts)  
-                    
+                self._run_one_step_DTW(ts)                    
                 
             # UPDATE TIME FOR NEXT ITERATION
-            if self._time_idx < len(self.storm_dates): 
+            if self._time_idx < len(self.storm_dates)-1: 
                 
                 # date of storm
                 self._time = self.storm_dates[self._time_idx] 
                 
-                # time between storms
-                self._dtime = self.storm_dates[self._time_idx]-self.storm_dates[self._time_idx-1]        
-            
+                # time between storms -  not used, can be derived from storm dates
+                # self._dtime = self.storm_dates[self._time_idx]-self.storm_dates[self._time_idx-1]    
+                
                 # update time       
-                self._time_idx +=1 # index        
+                self._time_idx +=1 # index 
+            
+       
         
         
         else:
