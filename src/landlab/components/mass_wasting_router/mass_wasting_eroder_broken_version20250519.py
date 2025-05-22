@@ -21,9 +21,9 @@ class MassWastingEroder(Component):
 
 
     TODO: 
-            need a more reliable method for differentiating between eroded and landslide eroded cells
-            mass wasting disturbed cells are provided outside of eroder, 
-            update erosion equations to: min(ax^b-c, 0) that scales with flow rate.
+            done - need a more reliable method for differentiating between eroded and landslide eroded cells
+            done - mass wasting disturbed cells are provided outside of eroder, 
+            done - update erosion equations to: min(ax^b-c, 0) that scales with flow rate.
             erode channel node elevations using flow rate at grid cell
           record datetime of each timestep
           add parameter for using different router and option to have no terrace cells (for models with larger grid cells)
@@ -225,6 +225,8 @@ class MassWastingEroder(Component):
         coefL = []
 
         # coeficients of fluvial erosion/storm as a function of time
+
+
         for i in self.rnodes:
             if i in self.gti.TerraceNodes:
                 coefL.append(np.array([self.T_a, self.T_b, self.T_c]))
@@ -361,44 +363,39 @@ class MassWastingEroder(Component):
                 self.YSD = self.years_since_disturbance[self.FENodes]
                 # print('years since disturbance: {}'.format(self.YSD))
                 
-                # compute the erosion depth at each FE node 
+                # compute the erosion depth at each FE node  #TODO: apply this to terrace cells only
+                # maximum erosion rate, based on time since deposition
                 FED = (FERateCs[:,0]*self.YSD**FERateCs[:,1])-FERateCs[:,2]
-                FED = np.where(FED<0,0,FED) # no negative erosion rates
+                FED = np.where(FED<0,0,FED)
                 
-                # flow-rate based erosion rate, for disturbed cells that are channel nodes, presently updated outside of eroder:
-                # FENodes includes channel and terrace nodes, terrace nodes have zero fluvial erosion depth, change in dem_fe_dzdt is 0, which makes them undisturbed
-                # need to only include channel nodes
-                # terrace node mask of the FE nodes:
-                tn_mask = np.isin(self.FENodes,self.TN)
-                fr_FED = self._grid.at_node['daily_erosion_depth'][self.FENodes]
+                # make array of FED for all nodes in rmg
+                FED_ = np.zeros(self._grid.number_of_nodes)
+                FED_[self.FENodes] = FED
                 
-                # max erosion rate is FED, if less than FED, then fluvial erosion rate
-                FED_ = np.where(fr_FED>FED,FED,fr_FED)#FED #  
+                # flow-rate based erosion rate, for all nodes in rmg:
+                fr_FED = self._grid.at_node['daily_erosion_depth']
                 
-                # set terrace nodes to time-based erosion rate
-                FED_[tn_mask] = FED[tn_mask]
-                
-                self.FED = FED_
+                self.FED = FED_ #np.where(fr_FED>FED_,FED_,fr_FED) # time based maximum erosion rate if fluvial erosion rate is higher
 
                 # # force cells that have not been disturbed longer than ___ years to have no erosion
                 # self.FED[self.YSD>3] = 0
 
                 # Where FED larger than regolith thickness, FED equals regolith thickness (fresh bedrock is not eroded)
-                MxErMask = self._grid.at_node['soil__thickness'][self.FENodes]< self.FED
-                self.FED[MxErMask] = self._grid.at_node['soil__thickness'][self.FENodes][MxErMask]
+                MxErMask = self._grid.at_node['soil__thickness']< self.FED
+                self.FED[MxErMask] = self._grid.at_node['soil__thickness'][MxErMask]
 
                 # update regolith depth :
-                self._grid.at_node['soil__thickness'][self.FENodes] = self._grid.at_node['soil__thickness'][self.FENodes].copy()-self.FED
+                self._grid.at_node['soil__thickness'] = self._grid.at_node['soil__thickness'].copy()-self.FED
 
                 # update dem
-                self._grid.at_node['topographic__elevation'][self.FENodes] = self._grid.at_node['topographic__elevation'][self.FENodes].copy()-self.FED
+                self._grid.at_node['topographic__elevation'] = self._grid.at_node['topographic__elevation'].copy()-self.FED
 
 
                 # self.FED_all[self._time_idx] = self.FED
                 # self.FENodes_all[self._time_idx] = self.FENodes
 
 
-                # convert depth to volume, volume of erosion for each node in FENodes
+                # convert depth to volume
                 self.FEV = self.FED*self._grid.dx*self._grid.dx
 
             else:
@@ -473,27 +470,21 @@ class MassWastingEroder(Component):
 
         else:
             Lmwlink = []
-            #for each node in FENodes, find the closest link and the distance on 
-            #that link that the node is closest to. This is achieved by using the 
-            # raster model grid cells that underly the network model grid, which
-            # may not be the same as the raster model grid cells representing the
-            # channel. The node of erosion is matched to a one of the underlying 
-            # nodes. From that node, its position interms of the link ID and distance
-            # on link are looked up.
-            for h, FEDn in enumerate(self.FENodes): 
-            
-                #deposition location x and y coordinate
-                depXY = [self._grid.node_x[FEDn],self._grid.node_y[FEDn]] 
+            for h, FEDn in enumerate(self.FENodes): #for each cell deposit
+
+                depXY = [self._grid.node_x[FEDn],self._grid.node_y[FEDn]] #deposition location x and y coordinate
 
                 #search cells of links to find closest link grid
+
+
                 #compute distance between deposit and all network cells
                 def Distance(row):
                     return ((row['x']-depXY[0])**2+(row['y']-depXY[1])**2)**.5
 
-                nmg_dist = self.xyDf.apply(Distance,axis=1) #xyDf is the dataframe of nodes that are coincident with the link locations
+                nmg_dist = self.xyDf.apply(Distance,axis=1)
 
                 offset = nmg_dist.min()
-                mdn = self.xyDf[nmg_dist == offset] #minimum distance node # check that this works-
+                mdn = self.xyDf[nmg_dist == offset] #minimum distance node
 
 
                 #find link that contains raster grid cell

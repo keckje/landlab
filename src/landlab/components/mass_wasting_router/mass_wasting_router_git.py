@@ -308,11 +308,9 @@ class MassWastingRouter(Component):
             RMG_node = self.gt.NMGtoRMGnodeMapper[i]
             self._nmgrid.at_node['topographic__elevation'][i] = self._grid.at_node['topographic__elevation'][RMG_node]
 
-        # update slope # may need to turn off because this can lead to negative slope, which throws off NST and flow_resistance_RR in DHG
-        # doesn't seem to work
-        nmg_fd = FlowDirectorSteepest(self._nmgrid, "topographic__elevation") 
+        # update slope
+        nmg_fd = FlowDirectorSteepest(self._nmgrid, "topographic__elevation")
         nmg_fd.run_one_step()
-        
 
     
     def _multidirectionflowdirector(self):

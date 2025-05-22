@@ -301,7 +301,7 @@ class DistributedHydrologyGenerator(Component):
         self.streamflowonly_nmg()
         
         # determine dhsvm network mg links that correspond to the landlab network mg
-        # self.gtm.map_nmg_links_to_rmg_channel_nodes(self.xyDf_d)   # not needed? Use
+        self.gtm.map_nmg_links_to_rmg_channel_nodes(self.xyDf_d)   # not needed? Use
         
         # compute partial duration series and bankful flow rate for each nmgrid_d link
         # used by the nmgrid        
@@ -659,8 +659,6 @@ class DistributedHydrologyGenerator(Component):
             Teff_ = []               
             Teffr_ = []
             deff_ = []
-            Teff_s_ = []
-            daily_erosion_depth_ = []
             
             # determine hydraulic conditions for each link in nmgrid
             # not because some nmgrid links may be mapped to the same nmgrid_d link
@@ -668,7 +666,7 @@ class DistributedHydrologyGenerator(Component):
             
             for Link in self.LinkMapper.keys(): # for each link in nmgrid
                                      
-                Q,q,d,T,U,Uo,nt,no,Teff,Teffr,deff,Teff_s,daily_erosion_depth = self.channel_hydraulics(Link)
+                Q,q,d,T,U,Uo,nt,no,Teff,Teffr,deff = self.channel_hydraulics(Link)
                 
                 Q_.append(Q)
                 q_.append(q)
@@ -681,8 +679,6 @@ class DistributedHydrologyGenerator(Component):
                 Teff_.append(Teff)               
                 Teffr_.append(Teffr)
                 deff_.append(deff)
-                Teff_s_.append(Teff_s)
-                daily_erosion_depth_.append(daily_erosion_depth)
                 
             # update nmgrid link fields for time ts
             self._nmgrid.at_link["flow"] = np.array(Q_)
@@ -696,8 +692,7 @@ class DistributedHydrologyGenerator(Component):
             self._nmgrid.at_link['effective_stress'] = np.array(Teff_)             
             self._nmgrid.at_link['effective_stress_b'] = np.array(Teffr_)  
             self._nmgrid.at_link['effective_flow_depth'] = np.array(deff_)         
-            self._nmgrid.at_link['effective_stress_s'] = np.array(Teff_s_)  
-            self._nmgrid.at_link['daily_erosion_depth'] = np.array(daily_erosion_depth_)                                                                                 
+                                                                                
     
     def _constant_channel_tau(self):
         """
@@ -721,14 +716,12 @@ class DistributedHydrologyGenerator(Component):
         Teff_dict = {}               
         Teffr_dict = {}
         deff_dict = {}
-        Teff_s_dict = {}
-        daily_erosion_depth_dict = {}
         
 
         for Link in self.LinkMapper.keys(): # for each link in nmgrid
                                             
 
-            Q,q,d,T,U,Uo,nt,no,Teff,Teffr,deff,Teff_s,daily_erosion_depth = self.channel_hydraulics(Link)
+            Q,q,d,T,U,Uo,nt,no,Teff,Teffr,deff = self.channel_hydraulics(Link)
 
 
             Q_dict[Link] = Q
@@ -742,8 +735,6 @@ class DistributedHydrologyGenerator(Component):
             Teff_dict[Link] = Teff               
             Teffr_dict[Link] = Teffr
             deff_dict[Link] = deff
-            Teff_s_dict[Link] = Teff_s
-            daily_erosion_depth_dict[Link] = daily_erosion_depth           
 
             print(Link)                
         
@@ -760,9 +751,6 @@ class DistributedHydrologyGenerator(Component):
         Teff_df = pd.DataFrame.from_dict(Teff_dict, orient='columns').T            
         Teffr_df = pd.DataFrame.from_dict(Teffr_dict, orient='columns').T
         deff_df = pd.DataFrame.from_dict(deff_dict, orient='columns').T
-        Teff_s_df = pd.DataFrame.from_dict(Teff_s_dict, orient='columns').T
-        daily_erosion_depth_df = pd.DataFrame.from_dict(daily_erosion_depth_dict, orient='columns').T
-        
         
         # convert to dataarray
         Q_da = xr.DataArray(Q_df,name = 'flow',dims = ['link','date'],
@@ -786,15 +774,11 @@ class DistributedHydrologyGenerator(Component):
         Teffr_da = xr.DataArray(Teffr_df,name = 'effective_stress_b',dims = ['link','date'],
                             attrs = {'units':'Pa'})
         deff_da = xr.DataArray(deff_df,name = 'effective_flow_depth',dims = ['link','date'],
-                            attrs = {'units':'m'})  
-        Teff_s_da = xr.DataArray(Teff_s_df,name = 'effective_stress_s',dims = ['link','date'],
-                            attrs = {'units':'Pa'})
-        daily_erosion_depth_da = xr.DataArray(daily_erosion_depth_df,name = 'daily_erosion_depth',dims = ['link','date'],
                             attrs = {'units':'m'})              
         
         # combine dataarrays into one dataset, save as instance variable                      
         self.dataset = xr.merge([Q_da, q_da, d_da, T_da, U_da, Uo_da, nt_da, no_da, 
-                                 Teff_da, Teffr_da, deff_da, Teff_s_da, daily_erosion_depth_da])
+                                 Teff_da, Teffr_da, deff_da])
             
     def D50_parcels(self, Link):
         
@@ -839,7 +823,7 @@ class DistributedHydrologyGenerator(Component):
                 a = user_D50[0]
                 n = user_D50[1]
                 D50  = a*drainage_area**n
-            if len(user_D50) == 1: # d50 is constance across basin
+            if len(user_d50) == 1: # d50 is constance across basin
                 D50 = np.full_like(element_id, user_D50[0], dtype=float)
         else:
             msg = "user defined D50 must be a list of length 1 or 2"
@@ -882,9 +866,6 @@ class DistributedHydrologyGenerator(Component):
         
         if self.parcels:
             D50 = self.D50_parcels(Link)
-            if np.isnan(D50): # if no parcels on link, D50 is nan and flow RR equations 
-                                # wont work, assume bedrock or debris, size similar to hydraulic geometry determined D50.
-                D50 = self.D50_hydraulic_geometry(CA)
         else:
             D50 = self.D50_hydraulic_geometry(CA)
                 
@@ -912,10 +893,10 @@ class DistributedHydrologyGenerator(Component):
         q = Q/(b+d/2)               
             
         # roughness and effective stress
-        # print("q:{},d:{},S:{},D65:{},D84:{}".format(q,d,S,D65,D84))
-        U,Uo,nt,no,T,Teff,Teffr,deff,Teff_s1,Teff_s2,daily_erosion_depth = self.flow_resistance_RR(q,d,S,D65,D84)
+
+        U,Uo,nt,no,T,Teff,Teffr,deff,Teff_s1,Teff_s2 = self.flow_resistance_RR(q,d,S,D65,D84)
         
-        return (Q, q, d, T, U, Uo, nt, no, Teff, Teffr, deff, Teff_s1, daily_erosion_depth)
+        return (Q, q, d, T, U, Uo, nt, no, Teff, Teffr, deff)
     
         
     def RI_flows(self):
@@ -1612,12 +1593,7 @@ class DistributedHydrologyGenerator(Component):
     
         deff = d*(Teff_s1/T) # equivalent depth of effective flow  
         
-        # estimate a daily erosion depth given a daily maximum or mean flow
-        tao_c = 20
-        Teff_s1_0 = np.where(Teff_s1-tao_c<0,0,Teff_s1-tao_c)
-        daily_erosion_depth = 0.001*(Teff_s1_0)**1.2 # m
-        # print('fo: {}, ft: {}, Teff_s1:{}, daily erosion depth: {}'.format(fo, ft, Teff_s1, daily_erosion_depth))
-        return (U,Uo,nt,no,T,Teff_w,Teff_e,deff,Teff_s1, Teff_s2, daily_erosion_depth)
+        return (U,Uo,nt,no,T,Teff_w,Teff_e,deff,Teff_s1, Teff_s2)
     
     
     
