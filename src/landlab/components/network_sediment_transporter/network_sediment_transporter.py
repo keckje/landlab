@@ -397,8 +397,8 @@ class NetworkSedimentTransporter(Component):
         self._calculate_mean_D_and_rho()
 
         self._partition_active_and_storage_layers()
-        # self._adjust_node_elevation() #/jk/
-        # self._update_channel_slopes() #/jk/
+        self._adjust_node_elevation() #/jk/
+        self._update_channel_slopes() #/jk/
 
     @property
     def time(self) -> float:
@@ -529,7 +529,7 @@ class NetworkSedimentTransporter(Component):
 
         elif self._active_layer_method == "Constant10cm":
             # Set all active layers to 10 cm thickness.
-            self._active_layer_thickness = 0.1 * np.ones_like(self._d_mean_active) #/jk/
+            self._active_layer_thickness = 0.1 * np.ones_like(self._d_mean_active)
 
         # If links have no parcels, we still need to assign them an active layer
         # thickness..
