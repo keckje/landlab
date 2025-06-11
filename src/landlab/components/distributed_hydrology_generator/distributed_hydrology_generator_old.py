@@ -425,7 +425,7 @@ class DistributedHydrologyGenerator(Component):
         YEAR = self.begin_year+np.floor(yrs)
 
         # next assign a month and day to each event by randomly sampling from
-        # an empirical cdf of the day of year large events occur        
+        # an emperical cdf of the day of year large events occur        
         doy = []
         for i,y in enumerate(YEAR):
             # inital random date
@@ -471,7 +471,7 @@ class DistributedHydrologyGenerator(Component):
                 
        
     def _storm_dates_emperical_cdf(self):
-        """creates empirical cdf from partial duration series of precipitation events
+        """creates emperical cdf from partial duration series of precipitation events
         """
         try: 
             pds_doy = self.PDS.index.dayofyear #convert PDS dates to day-of-year equivalent
@@ -479,7 +479,7 @@ class DistributedHydrologyGenerator(Component):
             pds_doy = self.PDS_s.index.dayofyear
             
         fig, ax = plt.subplots(figsize=(3, 3))
-        n, bins, patches = plt.hist(pds_doy, 30, density=True, histtype='step', # empirical cdf
+        n, bins, patches = plt.hist(pds_doy, 30, density=True, histtype='step', # emperical cdf
                            cumulative=True, label='Empirical')
         plt.xlabel('day of year')
         plt.ylabel('quantile')
@@ -501,8 +501,8 @@ class DistributedHydrologyGenerator(Component):
             Q_l = self._streamflowonly_ag[Link]
             
             PDS_Q_l = self.partial_duration_series(Q_l, self.sed_ri)
-            # Q_l_Fx, Q_l_x1, _, _, _  = self.fit_probability_distribution(AMS=PDS_Q_l['value'], dist = 'LP3')#Q_l_T, Q_l_Ty, Q_l_Q_ri  = self.fit_probability_distribution(AMS=PDS_Q_l['value'], dist = 'LP3')
-            Q_l_Fx, Q_l_x1, _, _  = self.fit_probability_distribution_new(MS=PDS_Q_l['value'], dist = 'LP3', visually_check_fit = True)
+            Q_l_Fx, Q_l_x1, _, _, _  = self.fit_probability_distribution(AMS=PDS_Q_l['value'], dist = 'LP3')#Q_l_T, Q_l_Ty, Q_l_Q_ri  = self.fit_probability_distribution(AMS=PDS_Q_l['value'], dist = 'LP3')
+            # Q_l_Fx, Q_l_x1, _, _  = self.fit_probability_distribution_new(MS=PDS_Q_l['value'], dist = 'LP3', visually_check_fit = True)
             self.Q_l_dist[Link] = [Q_l_Fx, Q_l_x1]
             
             if c%3 == 0:
@@ -518,11 +518,11 @@ class DistributedHydrologyGenerator(Component):
         self.PDS = self.partial_duration_series(Q_l, self.sed_ri)
         # self.AMS = self.partial_duration_series(Q_l, 1)
         
-        # self.Q_Fx, self.Q_x1, self.Q_T, self.Q_Ty, self.u_Q_ri  = self.fit_probability_distribution(AMS=self.PDS['value'],
-        #                                                                                  min_ri = self.PDS['RI [yr]'].min(), dist = 'LP3')
+        self.Q_Fx, self.Q_x1, self.Q_T, self.Q_Ty, self.u_Q_ri  = self.fit_probability_distribution(AMS=self.PDS['value'],
+                                                                                         min_ri = self.PDS['RI [yr]'].min(), dist = 'LP3')
         
-        self.Q_Fx, self.Q_x1, self.Q_T, self.Q_Ty  = self.fit_probability_distribution_new(MS=self.PDS['value'],
-                                                                                         min_ri = self.PDS['RI [yr]'].min(), dist = 'LP3', visually_check_fit=True)
+        # self.Q_Fx, self.Q_x1, self.Q_T, self.Q_Ty  = self.fit_probability_distribution_new(MS=self.PDS['value'],
+        #                                                                                  min_ri = self.PDS['RI [yr]'].min(), dist = 'LP3', visually_check_fit=True)
         # fit distribution to annual maximum series, used to determine return interval in year
         # self.Pam_Fx, self.Pam_x1, self.Pam_T, self.Pam_Q_ri  = self.fit_probability_distribution(AMS=self.AMS['value'], dist = 'LP3')
                
@@ -592,8 +592,8 @@ class DistributedHydrologyGenerator(Component):
         relative wetness (staturated zone thickness / soil thickness)"""        
 
         self.PDS_s = pd.Series(data = self.rw_l_an.mean(axis=1), index = pd.to_datetime(self.map_dates))
-        # self.Fx_s, self.x1_s, self.T_s, self.Ty_s, self.Q_ri_s = self.fit_probability_distribution(self.PDS_s,dist = 'LN')
-        self.Fx_s, self.x1_s, self.T_s, self.Ty_s = self.fit_probability_distribution_new(MS = self.PDS_s,dist = 'LN',visually_check_fit = True)
+        self.Fx_s, self.x1_s, self.T_s, self.Ty_s, self.Q_ri_s = self.fit_probability_distribution(self.PDS_s,dist = 'LN')
+        # self.Fx_s, self.x1_s, self.T_s, self.Ty_s = self.fit_probability_distribution_new(MS = self.PDS_s,dist = 'LN',visually_check_fit = True)
                  
    
     def _saturated_zone_thickness_cdf(self):
@@ -1376,7 +1376,7 @@ class DistributedHydrologyGenerator(Component):
             
             x1 = np.linspace(s.min(), s.max(), 10000)
             
-            #for comparison to empirical estimate using plotting position
+            #for comparison to emperical estimate using plotting position
             x2 = np.sort(AMS.values, axis=0) # values in AMS, sorted small to large (pp is quantile)
         
             X = [x1,x2]
@@ -1426,7 +1426,7 @@ class DistributedHydrologyGenerator(Component):
                 x1=np.linspace(np.exp(xi),max(AMS)*1.5,num = 10000) 
              
            
-            #for comparison to empirical estimate using plotting position
+            #for comparison to emperical estimate using plotting position
             x2 = np.sort(AMS, axis=0) # values in AMS, sorted small to large (pp is quantile)
             
             X = [x1,x2]
@@ -1495,7 +1495,7 @@ class DistributedHydrologyGenerator(Component):
                plt.plot([-.5,1.5],[Q_ri[v],Q_ri[v]],'k--',linewidth = 1+5/len(ri)*i,alpha = 1-1/len(ri)*i, label = str(ri[i]))
             
             plt.plot(Fx,x1,'r',label = 'fitted distribution');
-            plt.plot(PP,x2,'.', label ='empirical estimate');
+            plt.plot(PP,x2,'.', label ='emperical estimate');
             plt.ylim([min(x2)*0.5,max([Q_ri[v],x2.max()])*1.05])
             plt.xlim([-0.02,1.02])
             ax.legend(loc = 'upper center')
@@ -1591,7 +1591,7 @@ class DistributedHydrologyGenerator(Component):
             ax[0].set_xlim(0,1.5*max(MS))
             # plt.show()
             ax[1].plot(Fx,x,'r',label = 'fitted distribution');
-            ax[1].plot(PP,x2,'.', label ='empirical (Wiebull) estimate');
+            ax[1].plot(PP,x2,'.', label ='emperical (Wiebull) estimate');
             ax[1].set_ylim([min(x2)*0.5,x2.max()*1.05])
             ax[1].set_xlim([-0.02,1.02])
             ax[1].legend(loc = 'best')
