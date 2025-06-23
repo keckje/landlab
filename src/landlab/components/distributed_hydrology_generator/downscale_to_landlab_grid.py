@@ -12,12 +12,14 @@ from landlab.io import read_esri_ascii
 from landlab import RasterModelGrid
 
 class downscale_to_landlab_grid():
-    """given the raw appended gridded hydrology outputs from a distributed hydrology model, 
-    esri ascii files of the DHSVM dem and dem wetness index and the landlab DEM and wetness 
-    index, interpolates depth to water table at the landlab grid scale
-    
-    TODO: add soil thickness as input parameter, create topmodel lambda in downscaler (get ca, slope using landlab)
-    
+    """Takse a time series of raw gridded hydrology output from a distributed hydrology 
+    model and resamples to the finer landslide raster model grid using a linear 
+    interpolation method built into xarray. Both grids must be referenced to the 
+    same coordinate system. For depth-to-watertable, if wetness index maps are 
+    provided, will resample using the wetness index following Burton & Bathurst 
+    et al. (1998). Note, if the wetness index apporach is used, the contributing 
+    area to each cell used to compute the wetness index must be 1 cell or larger. 
+
     Parameters
     ----------
     DSHVM_grid : string
@@ -29,11 +31,12 @@ class downscale_to_landlab_grid():
     landlab_lambda : string
         file path to an esri ascii file of the landlab DEM wetness index
     appended_maps : string
-        file path to the appended depth to water table maps ascii file. The ascii
-        file is a text version of the binary file output by DHSVM.To convert to 
-        ascii, use myconvert.c. See DHSVM documentation for use of myconvert.c
+        file path to the time series of raw gridded hydrology data. The time series
+        of gridded data needs to be an ascii file, with each time step of data
+        represented by one map of values, appended at the end of the map of values
+        from the previous time step.
     map_dates : list
-        list the map dates text from DHSVM
+        list the map dates coorisponding to each map in the appended maps.
     
     Returns the following xarray data array class variables.
     ---------- 

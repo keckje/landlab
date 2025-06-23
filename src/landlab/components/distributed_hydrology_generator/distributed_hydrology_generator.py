@@ -28,28 +28,29 @@ from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsMapper
 class DistributedHydrologyGenerator(Component):
 
     """Generate a time series of flow rates and/or soil water conditions using
-    the output from an external distribute hydrology model
+    the output from an externally-run distribute hydrology model
     
-    The DistributedHydrologyGenerator(DHG) component takes the raw modeled flow 
-    and depth from a distributed hydrlogy model. From the modeled flow, it 
-    parameterizes a probability distribution function (pdf) of flow rates at each
-    link in a network model grid representation of the channel network.
-    From the mapped depth to soil water file, it parameterizes a pdf of the depth 
-    to soil water at each node in the raster model grid representaiton of the watershed.
+    The DistributedHydrologyGenerator(DHG) component ingests time series of modeled flow 
+    and modeled saturated thickness from an externally run distributed hydrlogy model. 
+    From those values, it parameterizes a log-Pearson III distribution to flow and a 
+    log-normal distribution to saturated thickness. A distribution is parameterized 
+    at each reach of the channel network and each grid cell of the terrain.
     
-    The external model channel network and grid do not need to match the landlab model exactly.
-    Mapping functions determine which DHSVM network model grid links match
-    with the network model grid links and which DHSVM grid cells match the landlab
-    raster model grid cells. NOTE: to map between raster model grids, the Topmodel
-    wetness index for both the Landlab grid and the DHSVM grid is needed. For the
-    external model grid (which is assumed to be coarser), use a minimum contributing 
-    cell number of 1 cell.
+    The channel network of the externally run hyrology model does not need to
+    match the landlab representation exactly. Provided that both channel networks 
+    are referenced to the same coordinate system, mapping functions in DHG match
+    each reach of the externally run hydrology model channel network to individual
+    links of the Landlab network model grid. If the grid of the externally run hydrology 
+    model does not match the landlab raster model grid, the utility downscale_to_landlab_grid 
+    can be used to resample to the landlab grid.
     
-    The run one step function randomly picks a storm intensity (return interval) and 
-    storm date and updates the raster model grid depth to water table field and/or 
-    network model grid flow depth fields. The return interval of the flow and 
-    soil-water condition at each link and/or grid cell is assumed uniform accross 
-    the basin.
+    The run one step function randomly picks a storm date and storm intensity, 
+    as represented by annual non-exceedance probability. Then, for each
+    reach and grid cell, it picks a flow and saturated thickness value cooresponding
+    to the selected non-exceedance probability. In this way, the hydrologic
+    conditions (flow and saturated thickness) of the model domain are updated assuming
+    that the return interval of the flow and soil-water condition are uniform 
+    accross the model domain.
     
     NOTE: untested changes on flow may not work, last working draft is dhsvm_to_landlab_g.py
     TO DO: remove network mapping functions, turn into a utility
@@ -577,15 +578,7 @@ class DistributedHydrologyGenerator(Component):
         self.dtw_l_an = np.array(dtw_l_an) 
         self.st_l_an = np.array(st_l_an)
         self.rw_l_an = np.array(rw_l_an)
-           
-
-    # def _mean_saturated_zone_thickness_cdf(self):
-    #     """parammeterize a pdf to a partial duration series of the basin mean 
-    #     saturated zone thickness - NOT USED"""
-        
-    #     self.PDS_s = pd.Series(data = self.dtw_l_an.mean(axis=1), index = pd.to_datetime(self.map_dates))
-    #     self.Fx_s, self.x1_s, self.T_s, self.Ty_s, self.Q_ri_s = self.fit_probability_distribution(self.PDS_s,dist = 'LN', print_figs = print_figs)
-                 
+              
 
     def _mean_relative_wetness_cdf(self):
         """parammeterize a pdf to a partial duration series of the basin mean 
@@ -666,6 +659,7 @@ class DistributedHydrologyGenerator(Component):
             f = sc.interpolate.interp1d(x,y)   
             y1 = f(x1)
         return y1
+    
     
     def _variable_channel_tau(self):
 
@@ -1045,17 +1039,7 @@ class DistributedHydrologyGenerator(Component):
         
         # convert saturated thickness to depth to water table
         dtw = soild-st.values
-        
-        # # apply constraints
-        # # depth to water table cannot be less than zero
-        # dtw[dtw<0]  = 0
-    
-        # # depth to water table cannot be greater than soil thickness
-        # dtw[dtw>soild] = soild[dtw>soild]
-        
-        # update
-        #self._grid.at_node['depth__to_water_table'][self._grid.core_nodes] = dtw
-        
+               
         dtw_field = (np.ones(self._grid.at_node['soil__thickness'].shape[0])*np.nan).astype(float)
         dtw_field[self._grid.core_nodes] = dtw
         
@@ -1280,237 +1264,6 @@ class DistributedHydrologyGenerator(Component):
         PDS = PDS[PDS['RI [yr]'] > RI_cutoff] # truncate to include all values >= to RI_cutoff
         
         return PDS
-
-    
-    
-    def fit_probability_distribution(self, AMS, min_ri = 1, dist = 'LN', 
-                       RI=[1.5], plotting_position = 'Weibull',
-                       print_figs = False):
-        """
-        TODO: use scipy functions lognorm.ppf(quantile,s= std, scale = exp(mean))
-        and pearson3.ppf(quantile, skew, scale = exp(mean))
-        apply to an array or dataarray, whichever faster
-        
-        Fits distribution to annual maximum series or partial duration series of
-        data using built in numpy function and methods described in: 
-       
-             Maidment, 1992, Handbook of Hydrology, Chapter 18
-             
-        NOTE on interpreation of the fit distribution: 
-        
-        IF the distribution is fit to an annual maximum series, the resultant pdf 
-        gives the annual liklihood, the likelihood of a given magnitude occuring 
-        during a single year. 
-        
-        If the distribution is fit to a partial duration series that lists magnitudes
-        less than a return interval of 1, then the resultant pdf gives the event likelihood, 
-        the likelihood of a given magnitude occuring during any event larger than the 
-        minimum return interval included in the partial duration series. 
-        e.g., if the partial duration series includes is fit to events as small as 
-        the 0.25 year event,then the fit distribtuion gives the likelihood of a given 
-        flow magnitude during any 0.25 year and larger storm. 
-        
-        To convert the event return period to an annual return period, divide the 
-        event return period by the minimum return interval included in the partial
-        duration series (min_ri)
-           
-        Parameters
-        ----------
-        AMS : pd series, index is pd.datetime
-            annual maximum series (or partial duration series)
-        min_ri: float
-            minimum return period included in the partial duration series. 
-            If annual maximum series, this valueis 1.
-        dist : string
-            can be 'LN' or 'LP3'.  default is 'LN'
-            
-            type of distribution fit to AMS. Can be either: lognormal or 
-            log-Pearson type III.
-            
-            NOTE: distributions may not fit data
-        
-        RI : list of float
-            flow magnitude is returned for all return interval values listed in RI 
-            return interval values must be greater than 1
-            The default is [1.5,2,5,25,50,100].
-        
-        plotting_position : string
-            plotting position forumula. Default is 'Cunnane'
-        
-        Returns
-        -------
-        Fx : np.array
-            cdf quantile (domain of cdf, 0 to 1)
-        x1 : np.array
-            cdf value
-        T : np.array
-            quantile value converted to an event return interval [event] 
-        Ty : np.array
-            annual return interval equivalent to quantile value [years]
-        Q_ri : dictionary
-            key is each value in RI, value is magnitude        
-        """
-        # compute moments
-        
-        mn = AMS.values.mean() # m1
-        vr = AMS.var() # m2
-        cs = sc.stats.skew(AMS.values) 
-        m2 = lm(AMS.values,moment = 2)
-        m3 = lm(AMS.values,moment = 3)
-        m4 = lm(AMS.values,moment = 4)
-        lskew = m3
-        L3 = m3*m2 #third Lmoment
-        lkurt = m4
-        L4 = m4*m2 #fourth Lmoment    
-    
-        
-        if dist == 'LN':
-        
-            mu = mn
-            sigma = vr**0.5
-    
-            mu_lognormal = np.log((mu ** 2)/ np.sqrt(sigma ** 2 + mu ** 2))
-            
-            sigma_lognormal = np.sqrt(np.log((sigma ** 2) / (mu ** 2) + 1))
-            s = self.maker.lognormal(mu_lognormal, sigma_lognormal, 10000)
-            
-            x1 = np.linspace(s.min(), s.max(), 10000)
-            
-            #for comparison to empirical estimate using plotting position
-            x2 = np.sort(AMS.values, axis=0) # values in AMS, sorted small to large (pp is quantile)
-        
-            X = [x1,x2]
-        
-            fx = {}
-            for i,x in enumerate(X):
-                fx[i] = (np.exp(-(np.log(x) - mu_lognormal)**2 / (2 * sigma_lognormal**2)) \
-                 / (x * sigma_lognormal * np.sqrt(2 * np.pi)))
-                
-            Fx = sc.integrate.cumulative_trapezoid(fx[0], x1, initial=0)
-                 
-        
-        if dist == 'LP3':
-            # natural log of flow data is pearson type 3 distributed
-            x = np.log(AMS.values)
-            
-            mn = x.mean() #compute first three moments of log(data)
-            vr = x.var()
-            cs = sc.stats.skew(x)
-            
-            #parameters
-            alphap = 4/cs**2#18.20
-            betap = 2/((vr**0.5)*cs)
-            xi = mn-alphap/betap
-            
-            E3 = np.exp(3*xi)*(betap/(betap-3))**alphap #18.33
-            E2 = np.exp(2*xi)*(betap/(betap-2))**alphap
-            muq = np.exp(1*xi)*(betap/(betap-1))**alphap
-            vrq= np.exp(2*xi)*(((betap/(betap-2))**alphap)-(betap/(betap-1))**(2*alphap))
-            csq = (E3-3*muq*E2+2*muq**3)/((vrq**.5)**3)
-            
-            alphapq = 4/csq**2
-            alphapq = alphapq
-            
-            betapq = 2/((vrq**.5)*csq)
-            betapq=betapq
-            
-            xiq = muq-alphapq/betapq
-            xiq=xiq
-            
-            if betap <0:
-                if 1.5*max(AMS) < np.exp(xi):
-                    x1=np.linspace(1,1.5*max(AMS),num = 10000)
-                else:
-                    x1=np.linspace(1,np.exp(xi),num = 10000) #table 18.2.1
-            if betap >0:
-                x1=np.linspace(np.exp(xi),max(AMS)*1.5,num = 10000) 
-             
-           
-            #for comparison to empirical estimate using plotting position
-            x2 = np.sort(AMS, axis=0) # values in AMS, sorted small to large (pp is quantile)
-            
-            X = [x1,x2]
-            
-            fx = {}
-            for i,x in enumerate(X):
-                
-                fp = (1/x)*np.absolute(betap)*(betap*(np.log(x)-xi))**(alphap-1)
-                fp[np.isnan(fp)] = 0 # replace nan with 0
-                sp = np.exp(-betap*(np.log(x)-xi))/((gamma(alphap)))
-                sp[np.isnan(sp)] = 0
-                fx[i] = fp*sp
-            
-            # cdf created by summing area under pdf
-            Fx = sc.integrate.cumulative_trapezoid(fx[0], x1, initial=0)
-            
-        
-       
-        if print_figs:
-            # normalized histogram of data with parameterized pdf
-            fig, ax=plt.subplots(1,1,figsize=(6,6))
-            plt.hist((AMS), bins='auto')  # arguments are passed to np.histogram
-            plt.plot(x1, fx[0],'b-',markersize=8,linewidth=3)
-            plt.title("normalized histogram and fit distribution")
-            plt.xlim(0,1.5*max(AMS))
-            plt.show()
-                
-    
-            fig, ax=plt.subplots(1,1,figsize=(6,6))
-            plt.title('cdf equivalent of fit distribution')
-            plt.plot(x1,Fx) #examine cdf
-            plt.show()
-        
-    
-        #summary plot
-        n = AMS.shape[0]
-        ranks = np.array(range(1,n+1))
-        #pp = (ranks-.4)/(n+0.2) #Cunnane
-        # plottting position (exceedance probability if ordered large to small)
-        if plotting_position == 'Cunnane':
-            PP = (ranks-.4)/(n+.2) #compute plotting position 
-        elif plotting_position == 'Weibull':
-            PP = ranks/(n+1)
-        elif plotting_position == 'Blom':
-            PP = (ranks - (3/8))/(n+(1/4))
-        else:
-            PP = ranks/(n+1)
-        
-        T = 1/(1-Fx) # return interval [event] from non-exceedance probability
-        
-        x = T
-        y = x1
-        
-        f = sc.interpolate.interp1d(x,y) 
-        
-        ri = RI
-        Q_ri = {}
-        
-        for i in ri:
-            Q_ri[i] = f(i)
-        
-        if print_figs:
-            fig, ax=plt.subplots(1,1,figsize=(12,6))
-            for i,v in enumerate(ri):
-                
-               plt.plot([-.5,1.5],[Q_ri[v],Q_ri[v]],'k--',linewidth = 1+5/len(ri)*i,alpha = 1-1/len(ri)*i, label = str(ri[i]))
-            
-            plt.plot(Fx,x1,'r',label = 'fitted distribution');
-            plt.plot(PP,x2,'.', label ='empirical estimate');
-            plt.ylim([min(x2)*0.5,max([Q_ri[v],x2.max()])*1.05])
-            plt.xlim([-0.02,1.02])
-            ax.legend(loc = 'upper center')
-            plt.show()
-    
-        # if events with a return interval less than 1 year included in partial
-        # duration series, convert return period per minimum event to annual return period
-        
-        if min_ri < 1:
-            Ty = T/(1/min_ri) # return period [yrs]
-        else:
-            Ty = T
-    
-        return Fx, x1, T, Ty, Q_ri 
-                
 
 
     def fit_probability_distribution_new(self, MS, min_ri = 1, dist = 'LN', 
