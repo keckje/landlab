@@ -11,7 +11,7 @@ from landlab.components import(FlowDirectorD8,
                                 FlowDirectorDINF, 
                                 FlowDirectorMFD, 
                                 FlowDirectorSteepest)
-# from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools # note, this was referencing old ChannelNetworkGridTools, before commit 77aff9f
+
 from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsInterpretor
 
 
@@ -22,19 +22,11 @@ class LandslideMapper(Component):
     probability and returns a table and raster model grid fields that indicate
     the location and summarize the attributes of each mapped landslide
     
-    TODO: make modify DEM and soil thickness in mapper? a run option
-    
-    TODO: look into replaceing pandas dataframe and pd.merge(inner) with np.in1d(array1,array2)
-        and pd.erge(outer) call with np.unique(), get rid of dataframe operations
-        
-    TODO: look at replacing the NotDivergent function with the landlab convergence function
-    
-    TODO: see if image procesing packages can be used to clump
-    
-    TODO: rethink how to combine clumps and remove them from the initial clump list
-    
-    author: Jeff Keck
-    
+    TODO:   1.look into replaceing pandas dataframe and pd.merge(inner) with np.in1d(array1,array2)
+            and pd.erge(outer) call with np.unique(), get rid of dataframe operations
+            2.look at replacing the NotDivergent function with the landlab convergence function
+            3.rethink how to combine clumps and remove them from the initial clump list
+
     """
 
     _name = 'LandslideMapper'
@@ -694,8 +686,9 @@ class LandslideMapper(Component):
                 mw_event_ids[nds] = mw_id
                 # mw_id+=1
                 
-            self._grid.at_node["mass__wasting_id"] = mw_event_ids
-
+            self._grid.at_node["mass__wasting_id"] = mw_event_ids.astype(int) # need to check for clumps, update mass__wasting_id with zeros if no clumps
+        else:
+            self._grid.at_node["mass__wasting_id"] =  np.zeros(self._grid.number_of_nodes).astype(int)
 
     def run_one_step(self):
         """map hillslope scale landslides from the grid of landslide potential
@@ -707,8 +700,9 @@ class LandslideMapper(Component):
 
 
         if self._this_timesteps_landslides.any():
-
+            print('new landslides')
             # determine extent of landslides
             self._MassWastingExtent()
-            print('masswastingextent')
-
+            print('mapped landslides')
+        else:
+            print('no cells meet mass wasting threshold')

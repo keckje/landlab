@@ -147,58 +147,60 @@ class LandslideProbabilityRecharge(LandslideProbabilityBase):
                          seed)
         
         self._groundwater__recharge_distribution = groundwater__recharge_distribution
-        self._prep_recharge()
+        self._prep_recharge(groundwater__recharge_mean, 
+                            groundwater__recharge_standard_deviation)
         
         
-        def _prep_recharge(self):
-            # Uniform distribution
-            if self._groundwater__recharge_distribution == "uniform":
-                self._recharge_min = groundwater__recharge_min_value
-                self._recharge_max = groundwater__recharge_max_value
-                self._Re = np.random.uniform(
-                    self._recharge_min, self._recharge_max, size=self._n
-                )
-                self._Re /= 1000.0  # Convert mm to m
-            # Lognormal Distribution - Uniform in space
-            elif self._groundwater__recharge_distribution == "lognormal":
-                assert (
-                    groundwater__recharge_mean is not None
-                ), "Input mean of the distribution!"
-                assert (
-                    groundwater__recharge_standard_deviation is not None
-                ), "Input standard deviation of the distribution!"
-                self._recharge_mean = groundwater__recharge_mean
-                self._recharge_stdev = groundwater__recharge_standard_deviation
-                self._mu_lognormal = np.log(
-                    (self._recharge_mean**2)
-                    / np.sqrt(self._recharge_stdev**2 + self._recharge_mean**2)
-                )
-                self._sigma_lognormal = np.sqrt(
-                    np.log((self._recharge_stdev**2) / (self._recharge_mean**2) + 1)
-                )
-                self._Re = np.random.lognormal(
-                    self._mu_lognormal, self._sigma_lognormal, self._n
-                )
-                self._Re /= 1000.0  # Convert mm to m
-            # Lognormal Distribution - Variable in space
-            elif self._groundwater__recharge_distribution == "lognormal_spatial":
-                assert groundwater__recharge_mean.shape[0] == (
-                    self._grid.number_of_nodes
-                ), "Input array should be of the length of grid.number_of_nodes!"
-                assert groundwater__recharge_standard_deviation.shape[0] == (
-                    self._grid.number_of_nodes
-                ), "Input array should be of the length of grid.number_of_nodes!"
-                self._recharge_mean = groundwater__recharge_mean
-                self._recharge_stdev = groundwater__recharge_standard_deviation
-            # Custom HSD inputs - Hydrologic Source Domain -> Model Domain
-            elif self._groundwater__recharge_distribution == "data_driven_spatial":
-                self._HSD_dict = groundwater__recharge_HSD_inputs[0]
-                self._HSD_id_dict = groundwater__recharge_HSD_inputs[1]
-                self._fract_dict = groundwater__recharge_HSD_inputs[2]
-                self._interpolate_HSD_dict()
-            else:
-                msg = "not a recharge distribution option"
-                raise ValueError(msg)
+    def _prep_recharge(self, groundwater__recharge_mean, 
+                       groundwater__recharge_standard_deviation):
+        # Uniform distribution
+        if self._groundwater__recharge_distribution == "uniform":
+            self._recharge_min = groundwater__recharge_min_value
+            self._recharge_max = groundwater__recharge_max_value
+            self._Re = np.random.uniform(
+                self._recharge_min, self._recharge_max, size=self._n
+            )
+            self._Re /= 1000.0  # Convert mm to m
+        # Lognormal Distribution - Uniform in space
+        elif self._groundwater__recharge_distribution == "lognormal":
+            assert (
+                groundwater__recharge_mean is not None
+            ), "Input mean of the distribution!"
+            assert (
+                groundwater__recharge_standard_deviation is not None
+            ), "Input standard deviation of the distribution!"
+            self._recharge_mean = groundwater__recharge_mean
+            self._recharge_stdev = groundwater__recharge_standard_deviation
+            self._mu_lognormal = np.log(
+                (self._recharge_mean**2)
+                / np.sqrt(self._recharge_stdev**2 + self._recharge_mean**2)
+            )
+            self._sigma_lognormal = np.sqrt(
+                np.log((self._recharge_stdev**2) / (self._recharge_mean**2) + 1)
+            )
+            self._Re = np.random.lognormal(
+                self._mu_lognormal, self._sigma_lognormal, self._n
+            )
+            self._Re /= 1000.0  # Convert mm to m
+        # Lognormal Distribution - Variable in space
+        elif self._groundwater__recharge_distribution == "lognormal_spatial":
+            assert groundwater__recharge_mean.shape[0] == (
+                self._grid.number_of_nodes
+            ), "Input array should be of the length of grid.number_of_nodes!"
+            assert groundwater__recharge_standard_deviation.shape[0] == (
+                self._grid.number_of_nodes
+            ), "Input array should be of the length of grid.number_of_nodes!"
+            self._recharge_mean = groundwater__recharge_mean
+            self._recharge_stdev = groundwater__recharge_standard_deviation
+        # Custom HSD inputs - Hydrologic Source Domain -> Model Domain
+        elif self._groundwater__recharge_distribution == "data_driven_spatial":
+            self._HSD_dict = groundwater__recharge_HSD_inputs[0]
+            self._HSD_id_dict = groundwater__recharge_HSD_inputs[1]
+            self._fract_dict = groundwater__recharge_HSD_inputs[2]
+            self._interpolate_HSD_dict()
+        else:
+            msg = "not a recharge distribution option"
+            raise ValueError(msg)
             
 
     def _get_soil_water(self,i):
@@ -220,9 +222,10 @@ class LandslideProbabilityRecharge(LandslideProbabilityBase):
             self._Re /= 1000.0  # Convert mm to m
                    
     
-    def _compute_rel_wetness(self):
+    def _compute_rel_wetness(self, i):
         """compute relative wetness: relative wetness is stochastically determined 
-        from the user selected recharge pdf for each iteration"""
+        from the user selected recharge pdf for each iteration
+        input i is not used in landslide_probability_recharge"""
         self._rel_wetness = ((self._Re) / self._T) * ( 
             self._a / np.sin(np.arctan(self._theta))
         ) 

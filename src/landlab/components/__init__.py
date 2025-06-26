@@ -34,7 +34,10 @@ from .groundwater import GroundwaterDupuitPercolator
 from .hack_calculator import HackCalculator
 from .hand_calculator import HeightAboveDrainageCalculator
 from .lake_fill import LakeMapperBarnes
-from .landslides import LandslideProbability
+from .landslides import (
+    LandslideProbability,
+    LandslideProbabilitySaturatedThickness
+    )
 from .lateral_erosion import LateralEroder
 from .lithology import LithoLayers
 from .lithology import Lithology
