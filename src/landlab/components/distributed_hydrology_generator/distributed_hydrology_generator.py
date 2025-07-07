@@ -67,7 +67,6 @@ class DistributedHydrologyGenerator(Component):
                   nmgrid_d = None, 
                   DHSVM_flow = None,
                   DHSVM_dtw_dict = None, # dtw maps must include at least as many maps as years in hydro time series.
-                  DHSVM_dtw_mapping_dict = None,
                   method = 'storm_generator',
                   flow_aggregation = '24h',
                   begin_year = 2000,
@@ -132,17 +131,6 @@ class DistributedHydrologyGenerator(Component):
             self.map_dates = pd.to_datetime(DHSVM_dtw_dict['map_dates'])
             self.nd = len(self.map_dates)  #number of days(maps)
 
-            if DHSVM_dtw_mapping_dict:
-                self.grid_d = DHSVM_dtw_mapping_dict['DHSVM_grid']
-                self.x_trans = DHSVM_dtw_mapping_dict['x_trans']
-                self.y_trans = DHSVM_dtw_mapping_dict['y_trans']
-                self.f = DHSVM_dtw_mapping_dict['f']
-            else:
-                self.grid_d = None
-                # val = input("DHSVM grid matches landlab grid? (y/n):")
-                # if val != 'y':
-                #     raise ValueError("DHSVM mapping dictionary needed to convert"\
-                #                      " DHSVM grid values to landlab grid values")    
         else:
             val = input("depth to water table maps not provided, continue? (y/n):")
             if val != 'y':
@@ -362,20 +350,14 @@ class DistributedHydrologyGenerator(Component):
         # load depth to water table maps into DHG as a 2-D
         # np array
         
-        # initially set DHSVM grid wetness index as None
-        self.lambda_coarse_wa = None
-        
         # rows per map, used to iterate through appended map .asc file
         self.rpm = self._grid.shape[0]
         
         # range of quantile files used to define cdf at each raster model
         # grid node
         self.quant = np.arange(0,1.01,0.01)
-        
-        if self.grid_d: # if dhsvm gridding scheme does not match landlab
-            self._load_dtw_different_grids()
-        else: # dhsvm and landlab gridding schemes are the same
-            self._load_dtw()
+
+        self._load_dtw()
         
         # determine the minimum return interval of the smallest relative
         # wetness event
