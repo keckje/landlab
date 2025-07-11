@@ -305,9 +305,6 @@ class DistributedHydrologyGenerator(Component):
         # create reduced size streamflow.only file with index according to nmg links
         self.streamflowonly_nmg()
         
-        # determine dhsvm network mg links that correspond to the landlab network mg
-        # self.gtm.map_nmg_links_to_rmg_channel_nodes(self.xyDf_d)   # not needed? Use
-        
         # compute partial duration series and bankful flow rate for each nmgrid_d link
         # used by the nmgrid        
         self.RI_flows()        
@@ -1535,7 +1532,7 @@ def flow_resistance_RR(q,d,S,D65,D84):
     deff = d*(Teff_s1/T) # equivalent depth of effective flow  
     
     # estimate a daily erosion depth given a daily maximum or mean flow
-    # move this to its own function
+    # move this to its own function, in the driver script
     tao_c = 20
     Teff_s1_0 = np.where(Teff_s1-tao_c<0,0,Teff_s1-tao_c)
     daily_erosion_depth = 0.001*(Teff_s1_0)**1.2 # m

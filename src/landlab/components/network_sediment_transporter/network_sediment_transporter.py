@@ -545,7 +545,7 @@ class NetworkSedimentTransporter(Component):
         capacity = (
             self._grid.at_link["channel_width"]
             * self._grid.at_link["reach_length"]
-            * self._active_layer_thickness*1e100 #/jk/
+            * self._active_layer_thickness*1e100 #/jk/ , stored volume is equal to total - active. This sets all volume to active, so no storage. slope chnages based on upstream and downstream stored volume at a node. because no stored volume, slope never changes.
         )  # in units of m^3
 
         active_inactive = _INACTIVE * np.ones(self._num_parcels)

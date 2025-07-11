@@ -356,21 +356,33 @@ class MassWastingEroder(Component):
             if len(self.FENodes)>0:
 
                 FERateCs = np.stack(self.FERateC) # change format..this may not be needed
-
+                
+                #### def erode_as_function_of_time(self): # time based erosion rate function
+                # compute the erosion depth at each FE node as a function of time
                 # get time since distubrance [years] at each fluvial erosion node
                 self.YSD = self.years_since_disturbance[self.FENodes]
                 # print('years since disturbance: {}'.format(self.YSD))
                 
-                # compute the erosion depth at each FE node 
+                
                 FED = (FERateCs[:,0]*self.YSD**FERateCs[:,1])-FERateCs[:,2]
                 FED = np.where(FED<0,0,FED) # no negative erosion rates
+                #### return FED
                 
+                #### def erode_as_function_of_shear_stress# flow rate based erosion rate function
                 # flow-rate based erosion rate, for disturbed cells that are channel nodes, presently updated outside of eroder:
                 # FENodes includes channel and terrace nodes, terrace nodes have zero fluvial erosion depth, change in dem_fe_dzdt is 0, which makes them undisturbed
                 # need to only include channel nodes
                 # terrace node mask of the FE nodes:
+                # compute daily erosion rate given effective stress with something like:
+                       #### this needs to be done before running function: gt.transfer_nmg_link_field_to_rmg_node_field('effective_stress', 'effective_stress', link_node_list)
+                       # fr_tao = self._grid.at_node['effective_stress'][self.FENodes]
+                       # tao_c = 20 # this will be input parameter
+                       # fr_tao = np.where(fr_tao-tao_c<0,0,fr_tao-tao_c)
+                       # fr_FED = 0.001*(fr_tao)**1.2 # m # coefficient and exponent will also be parameters
+
+                    
                 tn_mask = np.isin(self.FENodes,self.TN)
-                fr_FED = self._grid.at_node['daily_erosion_depth'][self.FENodes]
+                fr_FED = self._grid.at_node['daily_erosion_depth'][self.FENodes] # this will be replaced by shear stress aproximation above
                 
                 # max erosion rate is FED, if less than FED, then fluvial erosion rate
                 FED_ = np.where(fr_FED>FED,FED,fr_FED)#FED #  
@@ -453,8 +465,10 @@ class MassWastingEroder(Component):
 
     def _parcelDFmaker(self):
         '''
-        from the list of cell locations of the pulse and the volume of the pulse,
-        convert to a dataframe of pulses (ParcelDF) that is the input for pulser
+        for each channel or terrace node that has deposition, the node is macthed to the closests 
+        nmg rmg node and a dataframe is prepared that includes the link # and downstream distance
+        on link. This dataframe is used to prepare a pulse table for the network sediment transporter
+        pulser
         '''
 
         def LDistanceRatio(row):
@@ -473,8 +487,9 @@ class MassWastingEroder(Component):
 
         else:
             Lmwlink = []
-            #for each node in FENodes, find the closest link and the distance on 
-            #that link that the node is closest to. This is achieved by using the 
+            #for each node in FENodes (all of which are either a channel or terrace node)
+            #, find the closest link and the distance on 
+            # that link that the node is closest to. This is achieved by using the 
             # raster model grid cells that underly the network model grid, which
             # may not be the same as the raster model grid cells representing the
             # channel. The node of erosion is matched to a one of the underlying 
@@ -496,8 +511,8 @@ class MassWastingEroder(Component):
                 mdn = self.xyDf[nmg_dist == offset] #minimum distance node # check that this works-
 
 
-                #find link that contains raster grid cell
-
+                #find link that contains raster grid cell => This shouldn't be needed, it is listed in self.xyDf
+                # redo this section
                 search = mdn['node'].iloc[0] #node number, first value if more than one grid cell is min dist from debris flow
                 for i, sublist in enumerate(self.Lnodelist): #for each list of nodes (corresponding to each link i)
                     if search in sublist: #if node is in list, then
@@ -558,7 +573,11 @@ class MassWastingEroder(Component):
         # before fluvial erosion of DEM, make a copy
         self.dem_previous_time_step_fe = self._grid.at_node['topographic__elevation'].copy()
         
-        # erode based on time since disturbance
+        # update shear stress in channel nodes
+        # if shear_stress:
+            # update shear_stress
+            # gt.transfer_nmg_link_field_to_rmg_node_field('effective_stress', 'effective_stress', link_node_list)
+        # erode based on time since disturbance and shear stress
         self._FluvialErosion()
         # print('fluvial erosion')
 
