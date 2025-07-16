@@ -541,7 +541,7 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
             self._grid.at_node[rmg_field][link_nodes] = value
             
 #############################
-def map_nmg_links_to_rmg_nodes(linknodes, active_links, nmgx, nmgy):
+def map_nmg_links_to_rmg_nodes(grid, linknodes, active_links, nmgx, nmgy):
     '''convert network model grid links to coincident raster model grid nodes.
     Output is a list of lists. order of lists is order of links. Coincident rmg
     nodes are used to determine the link # and location on link at which sediment
@@ -608,27 +608,4 @@ def map_nmg_links_to_rmg_nodes(linknodes, active_links, nmgx, nmgy):
     return (Lnodelist, Ldistlist, Lxy)
 
 
-lknd = linknodes[k]
-x0 = nmgx[lknd[0]] #x and y of downstream link node
-y0 = nmgy[lknd[0]]
-x1 = nmgx[lknd[1]] #x and y of upstream link node
-y1 = nmgy[lknd[1]]
-
-def link_to_points_and_dist(x0,y0,x1,y1,number_of_points = 1000):
-        # lknd: link node numbers
-
-        #create 1000 points along domain of link
-        X = np.linspace(x0,x1,number_of_points)
-        Xs = np.abs(X-x0) #change begin value to zero
-        #determine distance from upstream node to each point
-        #y value of points
-        if Xs.max() ==0: #if a vertical link (x is constant)
-            Y = np.linspace(y0,y1,number_of_points) # y 
-            dist = np.abs(Y-y0) #distance along link, from downstream end upstream
-            dist = dist.max()-dist #distance from updtream to downstream
-        else: #all their lines
-            Y = y0+(y1-y0)/np.abs(x1-x0)*(Xs) # y
-            dist = ((Y-y0)**2+Xs**2)**.5
-            dist = dist.max()-dist #distance from updtream to downstream
-
-        return X, Y, dist
+    
