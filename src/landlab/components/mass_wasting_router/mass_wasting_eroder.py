@@ -178,12 +178,12 @@ class MassWastingEroder(Component):
             self.gti.extract_terrace_nodes()
         if not hasattr(gti,"xyDf"):
             out = self.gtm.map_nmg_links_to_rmg_nodes(linknodes = self.linknodes,
-                                    active_links = self._nmgrid.active_links,
+                                    #active_links = self._nmgrid.active_links,
                                     nmgx = self.nmgridx, nmgy = self.nmgridy)
     
             self.Lnodelist = out[0] # all nodes that coincide with link
             self.Ldistlist = out[1] # the downstream distance of each node that coincide with link
-            self.xyDf = pd.DataFrame(out[2])
+            self.xyDf = out[2]
 
         ## define fluvial erosion rates of channel and terrace nodes (no fluvial erosion on hillslopes)
         self._DefineErosionRates()

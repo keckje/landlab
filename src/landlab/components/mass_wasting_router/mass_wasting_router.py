@@ -252,8 +252,10 @@ class MassWastingRouter(Component):
         ## create the nmg to rmg node mapper
         self.gt.map_rmg_nodes_to_nmg_nodes()
 
-        ## define nmg node elevation based on rmg channel nodes
-        self.gt.transfer_rmg_node_field_to_nmg_node_field()
+        # define nmg node elevation based on rmg channel nodes...this is only needed 
+        # during run one step, move to run_one_step, slope is then recomputed in 
+        # NST's run_one_step
+        self.gt.transfer_rmg_channel_node_field_to_nmg_node_field()
 
         ### class instance of LandslideMapper      
         self.Landslides = LM(self._grid,
