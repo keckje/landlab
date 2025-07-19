@@ -4,6 +4,7 @@ TODO:
     move daily_erosion_depth calculation to separate function
     clean up flow_resistance_RR, check most recent version in BedloadModelToolset_new
     fit_probability_distribution creates too many outputs, only need Fx and x
+    use link mapper to get mean of all links that coincide with coarser landlab grid
     
 """
 

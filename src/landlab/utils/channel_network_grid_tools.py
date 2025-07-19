@@ -76,8 +76,10 @@ def _node_at_coords(grid, x, y):
     # rmg nodes, reshaped in into m*n,1 array like other mg fields
     nodes = grid.nodes.flatten()
     node = nodes[mask] #use mask to extract node value
-    if node.shape[0] > 1: # if at cell boundary, use first node
+    if node.shape[0] >= 1: # if at cell boundary, use first node
         node = np.array([node[0]])
+    else:
+        raise ValueError("coordinates outside of model grid")
     return node
 
 def _link_to_points_and_dist(x0,y0,x1,y1,number_of_points = 1000):
@@ -324,7 +326,7 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
         ChannelNetworkToolsBase.__init__(self, grid, **kwgs)
         
 
-    def map_nmg_links_to_rmg_nodes(self, linknodes, nmgx, nmgy):
+    def map_nmg_links_to_rmg_nodes(self, linknodes, nmgx, nmgy, remove_duplicates = False):
         '''map the network model grid to the coincident raster model grid nodes (i.e.,
         create the nmg rmg nodes). The nmg rmg nodes are defined based on the 
         the rmg node id and the coincident nmg link and distance downstream on that
@@ -336,10 +338,14 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
         to the nmg at the corrisponding link # and downstream distance.
         
         # this code assumes linknodes correctly ordered as [downstream node, upstream node]
+        
+        # update to remove duplicates
         '''
         Lnodelist = [] #list of lists of all nodes that coincide with each link
         Ldistlist = [] #list of lists of the distance on the link (measured from upstream link node) for all nodes that coincide with each link
-        xdDFlist = []
+        LlinkIDlist = []
+        Lxlist = []
+        Lylist = []
         Lxy= [] #list of all nodes the coincide with the network links
         #loop through all links in network grid to determine raster grid cells that coincide with each link
         #and equivalent distance from upstream node on link
@@ -355,12 +361,18 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
           
             nodelist = [] #list of nodes along link
             distlist = [] #list of distance along link corresponding to node
+            linkIDlist =[]
+            xlist = []
+            ylist =[]
             for i,y in enumerate(Y):
                 x = X[i]
                 node = _node_at_coords(self._grid,x,y)
                 if node not in nodelist: #if node not already in list, append - many points will be in same cell; only need to list cell once
                     nodelist.append(node[0])  
                     distlist.append(dist[i])
+                    linkIDlist.append(linkID)
+                    xlist.append(self.gridx[node[0]])
+                    ylist.append(self.gridy[node[0]])
                     xy = {'linkID':linkID,
                           'node':node[0],
                           'x':self.gridx[node[0]],
@@ -370,8 +382,47 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
             
             Lnodelist.append(nodelist)
             Ldistlist.append(distlist)
+            LlinkIDlist.append(linkIDlist)
+            Lxlist.append(xlist)
+            Lylist.append(ylist)
+        # remove duplicates by assiging duplicate node to link with largest mean contributing area.
+        if remove_duplicates:
+            for link in range(len(linknodes)):
+                for other_link in range(len(linknodes)):
+                    if link != other_link:
+                        link_nodes = Lnodelist[link]
+                        other_link_nodes = Lnodelist[other_link]
+                        link_a = self._nmgrid.at_link['drainage_area'][link]
+                        other_link_a = self._nmgrid.at_link['drainage_area'][other_link]
+                        dup = np.intersect1d(link_nodes,other_link_nodes)
+                        # if contributing area of link a largest, remove dupilcate nodes from other link
+                        if len(dup)>0:
+                            print('link {} and link {} have duplicates: {}'.format(link, other_link, dup))
+                            if link_a >= other_link_a:
+                                mask = ~np.isin(other_link_nodes, dup)
+                                Lnodelist[other_link] = list(np.array(other_link_nodes)[mask])
+                                Ldistlist[other_link] = list(np.array(Ldistlist[other_link])[mask])
+                                LlinkIDlist[other_link] = list(np.array(LlinkIDlist[other_link])[mask])
+                                Lxlist[other_link] = list(np.array(Lxlist[other_link])[mask])
+                                Lylist[other_link] = list(np.array(Lylist[other_link])[mask])
+                            else:
+                                mask = ~np.isin(link_nodes, dup)
+                                Lnodelist[link] = list(np.array(link_nodes)[mask])                
+                                Ldistlist[link] = list(np.array(Ldistlist[link])[mask])
+                                LlinkIDlist[link] = list(np.array(LlinkIDlist[link])[mask])
+                                Lxlist[link] = list(np.array(Lxlist[link])[mask])
+                                Lylist[link] = list(np.array(Lylist[link])[mask])
+
+            Lxy = pd.DataFrame(np.array([_flatten_lol(LlinkIDlist),
+                                _flatten_lol(Lnodelist),
+                                _flatten_lol(Lxlist),
+                                _flatten_lol(Lylist),
+                                _flatten_lol(Ldistlist)]).T,
+                               columns = ['linkID','node','x','y','dist'])
+            Lxy['linkID'] = Lxy['linkID'].astype(int)
+            Lxy['node'] = Lxy['node'].astype(int)
             
-        return (Lnodelist, Ldistlist, pd.DataFrame(Lxy)) # coincident rmg node, downstream distance on link of node and dictionary that contains the link id, x and y value of each conicident node
+        return (Lnodelist, Ldistlist, Lxy, LlinkIDlist, Lxlist, Lylist) # coincident rmg node, downstream distance on link of node and dictionary that contains the link id, x and y value of each conicident node
     
     def map_rmg_channel_nodes_to_nmg_rmg_nodes(self, xyDf):
         """for each link i in the nmg create a list of the rmg channel nodes that
@@ -393,12 +444,13 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
             dist = xyDf.apply(lambda row: func(row, xc, yc),axis=1) 
             # link nmg_rmg node with the shortest distance to the channel node is 
             # assigned to the channel node.
-            # if more than one (which there will be if more than one reach because
-            # the end and begin of the reaches at a junction overlay the same cell) 
-            # for now, pick the first value. TODO: pick link with largest contributing area    
-            # use nmgrid.map_mean_of_link_nodes_to_link('drainage_area'), then pick link with
-            # largest mean drainage area
-            cn_link_id.append(xyDf['linkID'][dist == dist.min()].values[0])
+            # if more than one (which can happen because the end and begin of the reaches at a junction overlay the same cell) 
+            # pick link with largest contributing area
+            dist_min_links = xyDf['linkID'][dist == dist.min()].values
+            dmn_cont_area = self._nmgrid.at_link['drainage_area'][dist_min_links]
+            dmn_mask = dmn_cont_area == dmn_cont_area.max()
+            
+            cn_link_id.append(dist_min_links[dmn_mask][0]) # more than one cell from the same link may be the same distance from the node, just pick one
         
         # for each link, group all channel nodes assigned to link into list, append to Lcnodelist
         b = np.array(cn_link_id)
