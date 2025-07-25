@@ -267,10 +267,15 @@ class DistributedHydrologyGenerator(Component):
             nmgy = self._nmgrid.y_of_node            
         
             out = self.gtm.map_nmg_links_to_rmg_nodes(linknodes, nmgx, nmgy)#, active_links, nmgx, nmgy)
-            
-            self.Lnodelist = out[0]
-            self.Ldistlist = out[1]
-            self.xyDf = out[2]    
+            self.LlinkIDlist = out[0] 
+            self.Lnodelist = out[1]
+            self.Lxlist = out[2]
+            self.Lylist = out[3] 
+            self.Ldistlist = out[4]
+            self.xyDf = out[5]           
+            # self.Lnodelist = out[0]
+            # self.Ldistlist = out[1]
+            # self.xyDf = out[2]    
     
 
 
@@ -283,9 +288,17 @@ class DistributedHydrologyGenerator(Component):
         
             out = self.gtm.map_nmg_links_to_rmg_nodes(linknodes, nmgx, nmgy)#, active_links, nmgx, nmgy)
     
-            self.Lnodelist_d = out[0]
-            self.Ldistlist_d = out[1]
-            self.xyDf_d = out[2]           
+            # self.Lnodelist_d = out[0]
+            # self.Ldistlist_d = out[1]
+            # self.xyDf_d = out[2]           
+
+            self.LlinkIDlist_d = out[0] 
+            self.Lnodelist_d = out[1]
+            self.Lxlist_d = out[2]
+            self.Lylist_d = out[3] 
+            self.Ldistlist_d = out[4]
+            self.xyDf_d = out[5]
+            print('xyDf_d: ###########.{}'.format(self.xyDf_d))
         
         ## define bedload and debris flow channel nodes       
         ## channel

@@ -181,9 +181,9 @@ class MassWastingEroder(Component):
                                     #active_links = self._nmgrid.active_links,
                                     nmgx = self.nmgridx, nmgy = self.nmgridy)
     
-            self.Lnodelist = out[0] # all nodes that coincide with link
-            self.Ldistlist = out[1] # the downstream distance of each node that coincide with link
-            self.xyDf = out[2]
+            self.Lnodelist = out[1] # all nodes that coincide with link
+            self.Ldistlist = out[4] # the downstream distance of each node that coincide with link
+            self.xyDf = out[5]
 
         ## define fluvial erosion rates of channel and terrace nodes (no fluvial erosion on hillslopes)
         self._DefineErosionRates()

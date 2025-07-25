@@ -35,25 +35,39 @@ def _flatten_lol(lol):
     return [i for l in lol for i in l] 
 
 def get_linknodes(nmgrid):
-    """get the downstream and upstream nodes at a link from flow director.
-    Linknodes in network model grid (nodes_at_link) may not be correct. Output
-    from this function should be used as input for functions that require
-    linknodes in ChannelNetworkGridTools
+    """get the downstream (outlet) and upstream (inlet) nodes at a link from 
+    flow director. Linknodes in network model grid (nodes_at_link) may not be 
+    correct. Output from this function should be used as input for all 
+    ChannelNetworkGridTool functions that require a linknodes
+    
+    Parameters
+    ----------
+    nmgrid : network model grid
+    
+    Returns
+    -------
+    linknodes : np.array
+        for a nmgrid of n nodes, returns a nx2 np array, the ith row of the
+        array is the [downstream node id, upstream node id] of the ith link
     """
+    
     fd = FlowDirectorSteepest(nmgrid, "topographic__elevation")
     fd.run_one_step()
     upstream_node_id = []; downstream_node_id = []
     for i in range(nmgrid.number_of_links):
         upstream_node_id.append(fd.upstream_node_at_link()[i])
         downstream_node_id.append(fd.downstream_node_at_link()[i])
-    # create np array and transpose, each row is {downstream node id, upstream node id]
+    # create np array and transpose, each row is [downstream node id, upstream node id]
     linknodes = np.array([downstream_node_id,upstream_node_id]).T 
     return linknodes
+
 
 def _node_at_coords(grid, x, y):
     """
     given a raster model grid and coordinates x and y, this finds the
     rmg node closest to the x and y
+    
+    use grid.find_nearest_node() instead
 
     Parameters
     ----------
@@ -67,20 +81,20 @@ def _node_at_coords(grid, x, y):
         node id number
 
     """
-    ndxe = grid.node_x+grid.dx/2
-    ndxw = grid.node_x-grid.dx/2
-    ndyn = grid.node_y+grid.dy/2
-    ndys = grid.node_y-grid.dy/2
-    # find cell that contains point
-    mask = (ndyn>=y) & (ndys<=y) & (ndxe>=x) & (ndxw<=x)  
-    # rmg nodes, reshaped in into m*n,1 array like other mg fields
-    nodes = grid.nodes.flatten()
-    node = nodes[mask] #use mask to extract node value
-    if node.shape[0] >= 1: # if at cell boundary, use first node
-        node = np.array([node[0]])
-    else:
-        raise ValueError("coordinates outside of model grid")
-    return node
+    # ndxe = grid.node_x+grid.dx/2
+    # ndxw = grid.node_x-grid.dx/2
+    # ndyn = grid.node_y+grid.dy/2
+    # ndys = grid.node_y-grid.dy/2
+    # # find cell that contains point
+    # mask = (ndyn>=y) & (ndys<=y) & (ndxe>=x) & (ndxw<=x)  
+    # # rmg nodes, reshaped in into m*n,1 array like other mg fields
+    # nodes = grid.nodes.flatten()
+    # node = nodes[mask] #use mask to extract node value
+    # if node.shape[0] >= 1: # if at cell boundary, use first node
+    #     node = np.array([node[0]])
+    # else:
+    #     raise ValueError("coordinates outside of model grid")
+    return grid.find_nearest_node((x,y))
 
 def _link_to_points_and_dist(x0,y0,x1,y1,number_of_points = 1000):
         """
@@ -123,6 +137,10 @@ def _link_to_points_and_dist(x0,y0,x1,y1,number_of_points = 1000):
             Y = y0+(y1-y0)/np.abs(x1-x0)*(Xs) # y
             dist = ((Y-y0)**2+Xs**2)**.5
         return X, Y, dist
+    
+    
+def _dist_func(x1,x2,y1,y2):
+    return ((x1-x2)**2+(y1-y2)**2)**0.5 
 
 class ChannelNetworkToolsBase():    
     '''
@@ -299,15 +317,21 @@ class ChannelNetworkToolsInterpretor(ChannelNetworkToolsBase):
             ChType = debrisflow: uses debris flow network
             ChType = nmg: uses network model grid network
         """
-        def distance_to_network(row):
+        # def distance_to_network(row):
+        #     """compute distance between nodes """
+        #     return ((row['x']-self.gridx[cellid])**2+(row['y']-self.gridy[cellid])**2)**.5
+
+        def distance_to_network(grid, row):
             """compute distance between nodes """
-            return ((row['x']-self.gridx[cellid])**2+(row['y']-self.gridy[cellid])**2)**.5
+            return _dist_func(row['x'],grid.node_x[cellid],row['y'],grid.node_y[cellid])        
+
+        # dist = xyDf.apply(lambda row: distance_to_network(row, grid),axis=1)         
         if ChType == 'debrisflow':
-            nmg_dist = self.xyDf_df.apply(distance_to_network,axis=1)
+            nmg_dist = self.xyDf_df.apply(lambda row: distance_to_network(self._grid, row),axis=1) #.apply(distance_to_network,axis=1)
             offset = nmg_dist.min() # minimum distancce
             mdn = self.xyDf_df[nmg_dist == offset] # minimum distance node and node x y        
         elif ChType == 'nmg':
-            nmg_dist = self.xyDf_bc.apply(distance_to_network,axis=1)
+            nmg_dist = self.xyDf_bc.apply(lambda row: distance_to_network(self._grid, row),axis=1) #.apply(distance_to_network,axis=1)
             offset = nmg_dist.min() # minimum distancce
             mdn = self.xyDf_bc[nmg_dist == offset] # minimum distance node and node x y    
         return offset, mdn        
@@ -379,12 +403,15 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
                           'y':self.gridy[node[0]], # add dist
                           'dist':dist[i]}
                     Lxy.append(xy)
+                
+            
             
             Lnodelist.append(nodelist)
             Ldistlist.append(distlist)
             LlinkIDlist.append(linkIDlist)
             Lxlist.append(xlist)
             Lylist.append(ylist)
+        Lxy = pd.DataFrame(Lxy)
         # remove duplicates by assiging duplicate node to link with largest mean contributing area.
         if remove_duplicates:
             for link in range(len(linknodes)):
@@ -395,7 +422,7 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
                         link_a = self._nmgrid.at_link['drainage_area'][link]
                         other_link_a = self._nmgrid.at_link['drainage_area'][other_link]
                         dup = np.intersect1d(link_nodes,other_link_nodes)
-                        # if contributing area of link a largest, remove dupilcate nodes from other link
+                        # if contributing area of link largest, remove dupilcate nodes from other link
                         if len(dup)>0:
                             print('link {} and link {} have duplicates: {}'.format(link, other_link, dup))
                             if link_a >= other_link_a:
@@ -422,7 +449,8 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
             Lxy['linkID'] = Lxy['linkID'].astype(int)
             Lxy['node'] = Lxy['node'].astype(int)
             
-        return (Lnodelist, Ldistlist, Lxy, LlinkIDlist, Lxlist, Lylist) # coincident rmg node, downstream distance on link of node and dictionary that contains the link id, x and y value of each conicident node
+        # return (Lnodelist, Ldistlist, Lxy, LlinkIDlist, Lxlist, Lylist) # coincident rmg node, downstream distance on link of node and dictionary that contains the link id, x and y value of each conicident node
+        return (LlinkIDlist, Lnodelist, Lxlist, Lylist, Ldistlist, Lxy)
     
     def map_rmg_channel_nodes_to_nmg_rmg_nodes(self, xyDf):
         """for each link i in the nmg create a list of the rmg channel nodes that
@@ -433,15 +461,19 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
         # channel node y
         cnode_y = self._grid.node_y[self.ChannelNodes]
         
-        def func(row, xc, yc):
+        # def func(row, xc, yc):
+        #     """distance between channel node and link node"""
+        #     return ((xc-row['x'])**2+(yc-row['y'])**2)**0.5
+        
+        def dist_between_nmg_and_rmg_nodes(row, xc, yc):
             """distance between channel node and link node"""
-            return ((xc-row['x'])**2+(yc-row['y'])**2)**0.5
+            return _dist_func(xc,row['x'],yc,row['y'])
         
         cn_link_id = []
         for i, cn in enumerate(self.ChannelNodes): # for each channel node
             xc = cnode_x[i]; yc = cnode_y[i]
             # compute the distance to all link rmg nodes
-            dist = xyDf.apply(lambda row: func(row, xc, yc),axis=1) 
+            dist = xyDf.apply(lambda row: dist_between_nmg_and_rmg_nodes(row, xc, yc),axis=1) 
             # link nmg_rmg node with the shortest distance to the channel node is 
             # assigned to the channel node.
             # if more than one (which can happen because the end and begin of the reaches at a junction overlay the same cell) 
@@ -468,8 +500,8 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
         id to the DHSVM network id: self.nmg_d.at_link['arcid'][i], where i is the nmg_d link id.
         """
         #compute distance between deposit and all network cells
-        def Distance(row):
-            return ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5
+        def distance_between_links(row, XY):
+            return _dist_func(row['x'],XY[0],row['y'],XY[1])# ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5
         # for each node equivalent of each nmg link, find the closest nmg_d node
         # and record the equivalent nmg_d link id 
         LinkMapper ={}
@@ -478,7 +510,7 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
             LinkL = []
             for j in sublist: # for each rmg node j in the list
                 XY = [self.gridx[j], self.gridy[j]] # get x and y coordinate of node
-                nmg_d_dist = xyDf_d_nmg2.apply(Distance,axis=1) # compute the distance to all nodes of nmg2 links
+                nmg_d_dist = xyDf_d_nmg2.apply(lambda row: distance_between_links(row, XY),axis=1)#.apply(Distance,axis=1) # compute the distance to all nodes of nmg2 links
                 offset = nmg_d_dist.min() # find the minimum distance
                 mdn = xyDf_d_nmg2['linkID'].values[(nmg_d_dist == offset).values][0]# nmg2 link id with minimum distance node
                 LinkL.append(mdn) # nmg2 link id is appended to a list
@@ -487,8 +519,6 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
             print('nmg1 link '+ str(i)+' mapped to equivalent nmg2 link')
         return (LinkMapper, LinkMapL)
 
-    def _dist_func(x1,x2,y1,y2):
-        return ((x1-x2)**2+(y1-y2)**2)**0.5 
 
 
     def map_rmg_channel_nodes_to_nmg_nodes(self):
@@ -503,13 +533,13 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
         channel network.
         """
         #compute distance between deposit and all network cells
-        def Distance(row):
-            return ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5        
+        def distance_between_links(row, XY):
+            return _dist_func(row['x'],XY[0],row['y'],XY[1])       
         # for each node in the channel node list record the equivalent nmg_d link id 
         NodeMapper ={}
         for i, node in enumerate(self.nmg_nodes):# for each node network modelg grid
             XY = [self._nmgrid.node_x[i], self._nmgrid.node_y[i]] # get x and y coordinate of node
-            nmg_node_dist = self.xyDf_df.apply(Distance,axis=1) # compute the distance to all channel nodes
+            nmg_node_dist = self.xyDf_df.apply(lambda row: distance_between_links(row, XY),axis=1)#.apply(Distance,axis=1) # compute the distance to all channel nodes
             offset = nmg_node_dist.min() # find the minimum distance between node and channel nodes
             mdn = self.xyDf_df.index[(nmg_node_dist == offset).values][0]# index of minimum distance node, use first value
             NodeMapper[i] = self.ChannelNodes[mdn] # rmg node mapped to nmg node i         
