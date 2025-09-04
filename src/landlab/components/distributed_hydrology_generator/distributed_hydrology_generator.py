@@ -82,7 +82,8 @@ class DistributedHydrologyGenerator(Component):
                   BCt = 100000,
                   seed = None,
                   gtm = None,
-                  plotting_position = 'Weibull'
+                  plotting_position = 'Weibull',
+                  st_multiplier = 1
                   ):        
 
         # run component init
@@ -91,7 +92,6 @@ class DistributedHydrologyGenerator(Component):
         # determine run option based on user input
         # if both a nmg and rmg provided, will be option 1 or 2
         if (nmgrid != None) and (grid != None):
-            
             # option 1 and 2 update flow, updating flow requires ChannelNetworkToolsMapper
             if gtm != None:
                 self.gtm = gtm
@@ -157,6 +157,8 @@ class DistributedHydrologyGenerator(Component):
         # set the seed of the np random generator
         self._maker()
         
+        # saturated thickness mulitplier
+        self.st_multiplier = st_multiplier
         # initial parcels
         if parcels != None:
             self.parcels = parcels
@@ -259,46 +261,46 @@ class DistributedHydrologyGenerator(Component):
         # determine raster mg nodes that correspond to landlab network mg
 
         
-        if not hasattr(self,"xyDf"):
+        if not hasattr(self,"xyDF"):
             # determine raster mg nodes that correspond to nmg links 
             linknodes = self._nmgrid.nodes_at_link # make this an internal part of CNT
             active_links = self._nmgrid.active_links
             nmgx = self._nmgrid.x_of_node
             nmgy = self._nmgrid.y_of_node            
         
-            out = self.gtm.map_nmg_links_to_rmg_nodes(linknodes, nmgx, nmgy)#, active_links, nmgx, nmgy)
-            self.LlinkIDlist = out[0] 
-            self.Lnodelist = out[1]
-            self.Lxlist = out[2]
-            self.Lylist = out[3] 
-            self.Ldistlist = out[4]
-            self.xyDf = out[5]           
+            self.xyDF = self.gtm.map_nmg_links_to_rmg_nodes(linknodes, nmgx, nmgy)#, active_links, nmgx, nmgy)
+            # self.LlinkIDlist = out[0] # not used 
+            # self.Lnodelist = out[1] # not used
+            # self.Lxlist = out[2] # not used
+            # self.Lylist = out[3]  # not used
+            # self.Ldistlist = out[4] # not used
+            # self.xyDF = out[5]           
             # self.Lnodelist = out[0]
             # self.Ldistlist = out[1]
-            # self.xyDf = out[2]    
+            # self.xyDF = out[2]    
     
 
 
             # determine raster mg nodes that correspond to dhsvm links
-        if not hasattr(self,"xyDf_d"):
+        if not hasattr(self,"xyDF_d"):
             linknodes = self.nmgrid_d.nodes_at_link # make this an internal part of CNT
             active_links = self.nmgrid_d.active_links
             nmgx = self.nmgrid_d.x_of_node
             nmgy = self.nmgrid_d.y_of_node
-        
-            out = self.gtm.map_nmg_links_to_rmg_nodes(linknodes, nmgx, nmgy)#, active_links, nmgx, nmgy)
+            self.gtm_d = ChannelNetworkToolsMapper(grid = self._grid, nmgrid = self.nmgrid_d, Ct = self.Ct,BCt = self.BCt) # temporary fix until rewritten as list of functions
+            self.xyDF_d = self.gtm_d.map_nmg_links_to_rmg_nodes(linknodes, nmgx, nmgy)#, active_links, nmgx, nmgy)
     
             # self.Lnodelist_d = out[0]
             # self.Ldistlist_d = out[1]
-            # self.xyDf_d = out[2]           
+            # self.xyDF_d = out[2]           
 
-            self.LlinkIDlist_d = out[0] 
-            self.Lnodelist_d = out[1]
-            self.Lxlist_d = out[2]
-            self.Lylist_d = out[3] 
-            self.Ldistlist_d = out[4]
-            self.xyDf_d = out[5]
-            print('xyDf_d: ###########.{}'.format(self.xyDf_d))
+            # self.LlinkIDlist_d = out[0] 
+            # self.Lnodelist_d = out[1]
+            # self.Lxlist_d = out[2]
+            # self.Lylist_d = out[3] 
+            # self.Ldistlist_d = out[4]
+            # self.xyDF_d = out[5]
+            print('xyDF_d: ###########.{}'.format(self.xyDF_d))
         
         ## define bedload and debris flow channel nodes       
         ## channel
@@ -311,8 +313,8 @@ class DistributedHydrologyGenerator(Component):
     
         # determine dhsvm network mg links that correspond to the landlab network mg
         # self._map_nmg1_links_to_nmg2_links()
-        self.LinkMapper, self.LinkMapL = self.gtm.map_nmg1_links_to_nmg2_links(self.Lnodelist,self.xyDf_d)
-
+        self.LinkMapper, self.LinkMapL , self.LinkOffsetL= self.gtm.map_nmg1_links_to_nmg2_links(self.xyDF,self.xyDF_d)
+        
         # aggregate flow time series
         self._resample_flow()
 
@@ -334,7 +336,7 @@ class DistributedHydrologyGenerator(Component):
     def _resample_flow(self):
         
         if self.tag == 'water_year':
-            water_year = (self._streamflowonly_ag.index.month >= 10) + self._streamflowonly_ag.index.year
+            water_year = (self._streamflowonly_ag.index.month >= 10) + self._streamflowonly_ag.index.year # stream flow ag needs to be defined before this
             self._streamflowonly_ag['water_year'] = water_year
             if self.flow_metric == 'max':
                 self._streamflowonly_ag.groupby('water_year').max()
@@ -496,7 +498,7 @@ class DistributedHydrologyGenerator(Component):
             
             PDS_Q_l = self.partial_duration_series(Q_l, self.sed_ri)
             # Q_l_Fx, Q_l_x1, _, _, _  = self.fit_probability_distribution(AMS=PDS_Q_l['value'], dist = 'LP3')#Q_l_T, Q_l_Ty, Q_l_Q_ri  = self.fit_probability_distribution(AMS=PDS_Q_l['value'], dist = 'LP3')
-            Q_l_Fx, Q_l_x1, _, _  = self.fit_probability_distribution_new(MS=PDS_Q_l['value'], dist = 'LP3', visually_check_fit = True)
+            Q_l_Fx, Q_l_x1, _, _  = self.fit_probability_distribution_new(MS=PDS_Q_l['value'], dist = 'LP3', visually_check_fit = False)
             self.Q_l_dist[Link] = [Q_l_Fx, Q_l_x1]
             
             if c%3 == 0:
@@ -516,7 +518,7 @@ class DistributedHydrologyGenerator(Component):
         #                                                                                  min_ri = self.PDS['RI [yr]'].min(), dist = 'LP3')
         
         self.Q_Fx, self.Q_x1, self.Q_T, self.Q_Ty  = self.fit_probability_distribution_new(MS=self.PDS['value'],
-                                                                                         min_ri = self.PDS['RI [yr]'].min(), dist = 'LP3', visually_check_fit=True)
+                                                                                         min_ri = self.PDS['RI [yr]'].min(), dist = 'LP3', visually_check_fit=False)
         # fit distribution to annual maximum series, used to determine return interval in year
         # self.Pam_Fx, self.Pam_x1, self.Pam_T, self.Pam_Q_ri  = self.fit_probability_distribution(AMS=self.AMS['value'], dist = 'LP3')
                
@@ -579,7 +581,7 @@ class DistributedHydrologyGenerator(Component):
 
         self.PDS_s = pd.Series(data = self.rw_l_an.mean(axis=1), index = pd.to_datetime(self.map_dates))
         # self.Fx_s, self.x1_s, self.T_s, self.Ty_s, self.Q_ri_s = self.fit_probability_distribution(self.PDS_s,dist = 'LN')
-        self.Fx_s, self.x1_s, self.T_s, self.Ty_s = self.fit_probability_distribution_new(MS = self.PDS_s,dist = 'LN',visually_check_fit = True)
+        self.Fx_s, self.x1_s, self.T_s, self.Ty_s = self.fit_probability_distribution_new(MS = self.PDS_s,dist = 'LN',visually_check_fit = False)
                  
    
     def _saturated_zone_thickness_cdf(self):
@@ -753,7 +755,7 @@ class DistributedHydrologyGenerator(Component):
             Teff_s_dict[Link] = Teff_s
             daily_erosion_depth_dict[Link] = daily_erosion_depth           
 
-            print(Link)                
+            # print(Link)                
         
         # convert to dataframe, transpose so that each row 
         # is timeseries for a single link
@@ -868,7 +870,7 @@ class DistributedHydrologyGenerator(Component):
         # # get link attributes from nmgrid grid       
         # Q = self.Qlinks[str(dhsvmLinkID)] # flow at link for time ts 
         # get flow rate at Link
-        Q = self.Qlinks.loc[Link] # .loc call index by index name, not indici
+        Q = self.Qlinks.loc[Link].values # .loc call index by index name, not indici
         
         # look up bankfull flow and partial duration series
         Qb = self.RIflows[Link] # Q1.2 [m3/s]
@@ -904,20 +906,21 @@ class DistributedHydrologyGenerator(Component):
         
         # # TODO: update coefficent and exponent of width and depth HG based on d50 following Parker et al 2007                       
         wb = self.tao_dict['wHG'][0]*CA**self.tao_dict['wHG'][1]  # bankfull width [m]
-        db = self.tao_dict['dHG'][0]*CA**self.tao_dict['dHG'][1]  # bankfull depth [m]
+        db = self.tao_dict['dHG'][0]*CA**self.tao_dict['dHG'][1]  # bankfull depth [m], needed to estimate depth at base of channel
 
         # wb =  self.nmgrid.at_link['channel_width'][Link]     
         # db =  self.nmgrid.at_link['channel_depth'][Link]     
-                    
-        # approximate base channel width assuming 1:1 channel walls
+        
         b =  wb - 2*db
         if b<0:
             b = 0
-                    
-        # depth is normal depth in trapezoidal channel geometry - very slow
-        # d = depth_trapezoid(Q, S = S, b = b, m1 = 1, m2 = 1, n = 0.05)               
-        d = db*(Q/Qb)**0.3 # approximation for flow depth, uses hydraulic geometry and scales based on flow rate relative to bank full flow. If entire time series of flow is increased by the same proportion, flow depth will not change because the ratio of flow to bankfull flow is still the same.               
-        q = Q/(b+d/2)               
+
+        #####THIS PART NEEDS WORK######                    
+        # for now use mannings, later switch to RR method, see Paper 1 code for implementation
+        d = depth_trapezoid(Q, S = S, b = b, m1 = 1, m2 = 1, n = 0.05)[0]               
+        # d = db*(Q/Qb)**0.3 # approximation for flow depth, uses hydraulic geometry and scales based on flow rate relative to bank full flow. If entire time series of flow is increased by the same proportion, flow depth will not change because the ratio of flow to bankfull flow is still the same.               
+        q = Q/(b+d/2)   
+        ##########################            
             
         # roughness and effective stress
         # print("q:{},d:{},S:{},D65:{},D84:{}".format(q,d,S,D65,D84))
@@ -967,14 +970,14 @@ class DistributedHydrologyGenerator(Component):
     def streamflowonly_nmg(self):        
         # create reduced size streamflow.only file
         # move this function to a script as a pre-processing step to reduce memory needs
-
+        print(self._streamflowonly_ag.columns)
         nmg_streamflow_dict = {}
         for Link in self.LinkMapper.keys():
              i_d = self.LinkMapper[Link]
                      
              # get the dhsvm network link id 'arcid' of nmgrid_d link i
              dhsvmLinkID = self.nmgrid_d.at_link['arcid'][i_d]
-             
+             print('dhsvm link ID:{}'.format(dhsvmLinkID))
              # nmg_streamflow_dict[str(dhsvmLinkID)] = self._streamflowonly_ag[str(dhsvmLinkID)]
              nmg_streamflow_dict[Link] = self._streamflowonly_ag[str(dhsvmLinkID)]
          
@@ -1026,17 +1029,23 @@ class DistributedHydrologyGenerator(Component):
         # soild depth at core nodes
         soild = self._grid.at_node['soil__thickness'][self._grid.core_nodes]
         
+        # saturated thickness multiplier
+        st = st*self.st_multiplier
+        
         # apply constraints
         st[st<0]  = 0 # saturated thickness cannot be less than zero
         st[st>soild] = soild[st>soild] # saturated thickness cannot be greater than soil thickness
         
+
+        st_field = (np.ones(self._grid.at_node['soil__thickness'].shape[0])*np.nan).astype(float)
+        st_field[self._grid.core_nodes] = st.values
+
         # convert saturated thickness to depth to water table
         dtw = soild-st.values
-               
         dtw_field = (np.ones(self._grid.at_node['soil__thickness'].shape[0])*np.nan).astype(float)
         dtw_field[self._grid.core_nodes] = dtw
         
-        self._grid.add_field('node', 'saturated__thickness', dtw_field, clobber = True)
+        self._grid.add_field('node', 'saturated__thickness', st_field, clobber = True)
         self._grid.add_field('node', 'depth__to_water_table', dtw_field, clobber = True)
 
 
@@ -1335,11 +1344,13 @@ class DistributedHydrologyGenerator(Component):
             ax[0].plot(x, fx,'r-',markersize=8, label = 'fitted distribution')
             ax[0].legend(loc = 'best')
             ax[0].set_xlim(0,1.5*max(MS))
+            ax[0].grid(alpha = 0.5)
             # plt.show()
-            ax[1].plot(Fx,x,'r',label = 'fitted distribution');
-            ax[1].plot(PP,x2,'.', label ='empirical (Wiebull) estimate');
-            ax[1].set_ylim([min(x2)*0.5,x2.max()*1.05])
-            ax[1].set_xlim([-0.02,1.02])
+            ax[1].plot(x, Fx,'r',label = 'fitted distribution');
+            ax[1].plot(x2, PP,'.', label ='empirical (Wiebull) estimate');
+            ax[1].set_xlim(0,1.5*max(MS))#.set_xlim([min(x2)*0.5,x2.max()*1.05])
+            ax[1].set_ylim([-0.02,1.02])
+            ax[1].grid(alpha = 0.5)
             ax[1].legend(loc = 'best')
             plt.show()
     
@@ -1427,7 +1438,7 @@ def lognorm(sample):
 
         
 def depth_trapezoid(Q, S, b, m1 = 1, m2 = 1, n = 0.05):
-    
+    print('Q={}; S={}; b={}'.format(Q,S,b))
     """
     A main channel = A_t(b,m1,m2,y)
     P main channel = P_t(b,m1,m2,y)
@@ -1450,7 +1461,7 @@ def depth_trapezoid(Q, S, b, m1 = 1, m2 = 1, n = 0.05):
     def h(y):
         return np.abs(Q-(1/n)*A_t(b,m1,m2,y)*((A_t(b,m1,m2,y)/P_t(b,m1,m2,y))**(2/3))*S**(1/2))
 
-    r = sc.optimize.minimize_scalar(h,method='bounded',bounds = [.1,10])
+    r = sc.optimize.minimize_scalar(h,method='bounded',bounds = [.001,10])
     
     y = r.x
     Rh = A_t(b,m1,m2,y)/P_t(b,m1,m2,y) 

@@ -291,7 +291,7 @@ class MassWastingRouter(Component):
                     )
 
         
-        self.xyDf_t = self.DepositEroder.gti.xyDf_t
+        self.xyDF_t = self.DepositEroder.gti.xyDF_t
         print('instantiated eroder')
 
     def _transfer_rmg_node_field_to_nmg_node_field(self):

@@ -508,7 +508,7 @@ class LandslideMapper(Component):
             #TO DO need to change so that if distance to network is less than minimum, then stop
             
             
-            #if loc[c] not in self.xyDf['node'].values: # channel network doesnt always match DEM
+            #if loc[c] not in self.xyDF['node'].values: # channel network doesnt always match DEM
             # print(cdist)
             if cdist > self.POCbuffer: # downslope distance measured to POCbuffer from channel    
                 loc.append(self._grid.at_node['flow__receiver_node'][loc[c]])

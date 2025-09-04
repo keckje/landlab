@@ -176,14 +176,14 @@ class MassWastingEroder(Component):
             self.gti.extract_channel_nodes(Ct,BCt)
         if not hasattr(gti,"TerraceNodes"):
             self.gti.extract_terrace_nodes()
-        if not hasattr(gti,"xyDf"):
-            out = self.gtm.map_nmg_links_to_rmg_nodes(linknodes = self.linknodes,
+        if not hasattr(gti,"xyDF"):
+            self.xyDF = self.gtm.map_nmg_links_to_rmg_nodes(linknodes = self.linknodes,
                                     #active_links = self._nmgrid.active_links,
                                     nmgx = self.nmgridx, nmgy = self.nmgridy)
     
-            self.Lnodelist = out[1] # all nodes that coincide with link
-            self.Ldistlist = out[4] # the downstream distance of each node that coincide with link
-            self.xyDf = out[5]
+            # self.Lnodelist = out[1] # all nodes that coincide with link
+            # self.Ldistlist = out[4] # the downstream distance of each node that coincide with link
+            # self.xyDF = out[5]
 
         ## define fluvial erosion rates of channel and terrace nodes (no fluvial erosion on hillslopes)
         self._DefineErosionRates()
@@ -505,20 +505,22 @@ class MassWastingEroder(Component):
                 def Distance(row):
                     return ((row['x']-depXY[0])**2+(row['y']-depXY[1])**2)**.5
 
-                nmg_dist = self.xyDf.apply(Distance,axis=1) #xyDf is the dataframe of nodes that are coincident with the link locations
+                nmg_dist = self.xyDF.apply(Distance,axis=1) #xyDF is the dataframe of nodes that are coincident with the link locations
 
                 offset = nmg_dist.min()
-                mdn = self.xyDf[nmg_dist == offset] #minimum distance node # check that this works-
+                mdn = self.xyDF[nmg_dist == offset] #minimum distance node # check that this works-
 
 
-                #find link that contains raster grid cell => This shouldn't be needed, it is listed in self.xyDf
+                #find link that contains raster grid cell => This shouldn't be needed, it is listed in self.xyDF
                 # redo this section
                 search = mdn['node'].iloc[0] #node number, first value if more than one grid cell is min dist from debris flow
-                for i, sublist in enumerate(self.Lnodelist): #for each list of nodes (corresponding to each link i)
+                for i in np.unique(self.xyDF['linkID']): #for each list of nodes (corresponding to each link i)
+                    sublist = self.xyDF['node'].values[self.xyDF['linkID'] == i] # nodes in link
+                    sublist_d = self.xyDF['dist'].values[self.xyDF['linkID'] == i] # downstream distance to node
                     if search in sublist: #if node is in list, then
-                        link_n = sublist#Lnodelist[i]
-                        en = link_n.index(search)
-                        link_d = self.Ldistlist[i]
+                        link_n = sublist#
+                        en = list(link_n).index(search)
+                        link_d = sublist_d
                         ld = link_d[en]
                         linkID = i
                         mwlink = OrderedDict({'mw_unit':h,'pulse_volume':self.FEV[h],'raster_grid_cell_#':FEDn,'link_#':linkID,'link_cell_#':search,'raster_grid_to_link_offset [m]':offset,'link_downstream_distance':ld})
@@ -526,7 +528,7 @@ class MassWastingEroder(Component):
                         Lmwlink.append(mwlink)
                         break #for now use the first link found - later, CHANGE this to use largest order channel
                     else:
-                        if i ==  len(self.Lnodelist):
+                        if i ==  len(np.unique(self.xyDF['linkID'])):
                             print(' DID NOT FIND A LINK NODE THAT MATCHES THE DEPOSIT NODE ')
 
 
