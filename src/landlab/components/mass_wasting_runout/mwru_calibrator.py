@@ -108,10 +108,6 @@ class MWRu_calibrator():
         RMSE_metric: string
             can be 'Vu','Vd','dV','Vt'. Default is "Vd"
 
-        prior_distribution: string
-            can be "uniform" or "normal". used to determine liklihood of selected
-            parameter value in the MCMC algorithm
-
         jump_size: float
             standard deviation of jump size for MCMC algorithm expressed as ratio of
             the jump size to the range between the minimum and maximum parameter values

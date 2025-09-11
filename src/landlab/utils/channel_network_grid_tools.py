@@ -16,10 +16,20 @@ import scipy as sc
 #         1.figure out inputs
 #         2.rewrite
 #         3. change df to colluvial channels,  
+
+# check DHG for other functions that should be a part of CNGT
+
+# create a function that updates the mappers for a new DEM and rmg channel location
+
+# notebooks: notebook that loads the b694 grid and maps links between the two grids
+
+# check test notebook still runs
+# consistent naming and format for mappers
+
+# WHEN pull request for CNGT is done, update MWRo, eroder, mapper, DHG
+
+
 # """
-
-
-
 
 def _flatten_lol(lol):
     """
@@ -59,8 +69,8 @@ def get_linknodes(nmgrid):
         upstream_node_id.append(fd.upstream_node_at_link()[i])
         downstream_node_id.append(fd.downstream_node_at_link()[i])
     # create np array and transpose, each row is [downstream node id, upstream node id]
-    linknodes = np.array([downstream_node_id,upstream_node_id]).T 
-    return linknodes
+    downstream_upstream_nmg_link_nodes = np.array([downstream_node_id,upstream_node_id]).T 
+    return downstream_upstream_nmg_link_nodes
 
 
 def _node_at_coords(grid, x, y):
@@ -131,27 +141,405 @@ def _dist_func(x1,x2,y1,y2):
     return ((x1-x2)**2+(y1-y2)**2)**0.5 
 
 
-def extract_channel_nodes(grid,Ct,BFt):
-    """interpret which nodes of the DEM correspond to the entire channel network 
-    (which extends to the channel head and includes colluvial channels and which 
-     nodes of the DEM correspond to channels where sediment transport is predominatly 
-     via fluvial processes (cascade and lower channels)"""
+def extract_channel_nodes(grid,Ct):
+    """interpret which nodes of the DEM represent the channel network as all nodes 
+    that have a drainage area (Ct) larger than the average drainage area at which 
+    channels initiate (based on field or remote sensing evidence) in the 
+    basin. Using the average drainage area at which colluvial channels typically 
+    begin results in the entire channel network. Using the drainage area at which 
+    cascade channel typically begin results in a channel network where sediment
+    transport is primarily via fluvial processes"""
 
     # All channels below the channel head, including colluvial channels
-    AllChannelNodeMask = grid.at_node['drainage_area'] > Ct
-    ac_x = grid.node_x[EntireChannelNodeMask]
-    ac_y = grid.node_y[EntireChannelNodeMask]
-    xyDF_ac = pd.DataFrame({'x':ac_x, 'y':ac_y})
-    AllChannelNodes = grid.nodes.flatten()[AllChannelNodeMask] 
+    cn_mask = grid.at_node['drainage_area'] > Ct
+    cn_x = grid.node_x[cn_mask]
+    cn_y = grid.node_y[cn_mask]
+    xyDF_cn = pd.DataFrame({'x':cn_x, 'y':cn_y})
+    cn = grid.nodes.flatten()[cn_mask] 
+         
+    return cn, xyDF_cn
+
+def extract_terrace_nodes(grid, terrace_width, acn, fcn):
+    """determine which raster model grid nodes coincide with channel terraces,
+    which presently are asssumed to be a fixed width (number of nodes) from
+    the channel nodes
+    """
+    for i in range(terrace_width):
+        if i == 0:
+            # diagonal adjacent nodes to channel nodes
+            AdjDN =np.ravel(grid.diagonal_adjacent_nodes_at_node[fcn])  
+            # adjacent nodes to channel nodes
+            AdjN = np.ravel(grid.adjacent_nodes_at_node[fcn])
+        elif i>0:
+            # diagonal adjacent nodes to channel nodes
+            AdjDN = grid.diagonal_adjacent_nodes_at_node[TerraceNodes] 
+            # adjacent nodes to channel nodes
+            AdjN = grid.adjacent_nodes_at_node[TerraceNodes]            
+        # all adjacent nodes to channel nodes
+        AllNodes = np.concatenate((AdjN,AdjDN))
+        # unique adjacent nodes
+        AllNodes = np.unique(AllNodes)
+        # unique adjacent nodes, excluding all channel nodes.
+        TerraceNodes = AllNodes[np.in1d(AllNodes,acn,invert = True)]
+        
+        # finally, remove any -1 nodes, which represent adjacent nodes outside
+        # of the model grid
+        TerraceNodes = TerraceNodes[~(TerraceNodes == -1)]
     
-    # All channels where sediment transport is predominatly via fluvial processes
-    # (Cascade and lower channels)
-    FluvialChannelNodeMask = grid.at_node['drainage_area'] > BFt
-    fc_x = grid.node_x[FluvialChannelNodeMask]
-    fc_y = grid.node_y[FluvialChannelNodeMask]
-    xyDF_fc = pd.DataFrame({'x':fc_x, 'y':fc_y})
-    FluvialChannelNodes = grid.nodes.flatten()[FluvialChannelNodeMask]      
-    return AllChannelNodes, xyDF_ac, FluvialChannelNodes, xyDF_fc
+    t_x = grid.node_x[TerraceNodes]
+    t_y = grid.node_y[TerraceNodes]
+    xyDF_t = pd.DataFrame({'x':t_x, 'y':t_y})
+    TerraceNodes = TerraceNodes
+    
+    return TerraceNodes, xyDF_t
+
+
+def min_distance_to_network(grid, xyDF, cellid):
+    """determine the distance from a node to the nearest channel node
+        ChType = debrisflow: uses debris flow network
+        ChType = nmg: uses network model grid network
+    """
+    def distance_to_network(grid, row):
+        """compute distance between nodes """
+        return _dist_func(row['x'],grid.node_x[cellid],row['y'],grid.node_y[cellid])        
+
+    nmg_dist = xyDF.apply(lambda row: distance_to_network(grid, row), axis=1) 
+    offset = nmg_dist.min() # minimum distancce
+    mdn = xyDF[nmg_dist == offset] # find closest node
+        
+    return offset, mdn        
+
+
+
+def map_nmg_links_to_rmg_coincident_nodes(grid, nmgrid, downstream_upstream_nmg_link_nodes, acn, remove_duplicates = False):
+    '''#### change to map_rmg_nodes_to_nmg_links_distances ####  map the network model grid to the coincident raster model grid nodes (i.e.,
+    the nmg rmg nodes). The nmg rmg nodes are defined based on the 
+    the rmg node id and the coincident nmg link and distance downstream on that
+    link. In Eroder, erosion at
+    a channel or terrace is becomes a pulse of sediment and is inserted into
+    the network model grid at the link # and downstream location of the closest
+    rmg nmg node.(see _parcelDFmaker function in eroder). 
+    The pulser utlity uses the dataframe to transfer the depostion 
+    to the nmg at the corrisponding link # and downstream distance.
+    
+    # this code assumes downstream_upstream_nmg_link_nodes ordered as [downstream node, upstream node]
+    
+    # update to remove duplicates - done
+    
+    # make it so hat it is listed downstream to upstream for each link
+    '''
+    
+    Lnodelist = [] #list of lists of all nodes that coincide with each link
+    Ldistlist = [] #list of lists of the distance on the link (measured from upstream link node) for all nodes that coincide with each link
+    LlinkIDlist = []
+    Lxlist = []
+    Lylist = []
+    Lxy= [] #list of all nodes the coincide with the network links
+    #loop through all links in network grid to determine raster grid cells that coincide with each link
+    #and equivalent distance from upstream node on link
+    for linkID,lknd in enumerate(downstream_upstream_nmg_link_nodes) : #for each link in network grid
+       
+        x1 = nmgrid.x_of_node[lknd[0]] #x and y of downstream link node
+        y1 = nmgrid.y_of_node[lknd[0]]
+        x0 = nmgrid.x_of_node[lknd[1]] #x and y of upstream link node
+        y0 = nmgrid.y_of_node[lknd[1]]
+        
+        # x and y coordinates and downstream distance from the upstream node
+        # for 1000 points generated from downstream node to upstream node
+        X, Y, dist = _link_to_points_and_dist(x1,y1,x0,y0,number_of_points = 1000)
+        dist = dist.max()-dist # convert to downstream distance
+        nodelist = [] #list of nodes along link
+        distlist = [] #list of distance along link corresponding to node
+        linkIDlist =[]
+        xlist = []
+        ylist =[]
+        for i,y in enumerate(Y):
+            x = X[i]
+            node = _node_at_coords(grid,x,y)
+            if node not in nodelist: #if node not already in list, append - many points will be in same cell; only need to list cell once
+                nodelist.append(node)  
+                distlist.append(dist[i])
+                linkIDlist.append(linkID)
+                xlist.append(grid.node_x[node])
+                ylist.append(grid.node_y[node])
+                xy = {'linkID':linkID,
+                      'coincident_node':node,
+                      'x':grid.node_x[node],
+                      'y':grid.node_y[node], 
+                      'dist':dist[i],
+                      'drainage_area':nmgrid.at_link['drainage_area'][linkID]}
+                Lxy.append(xy)
+              
+        Lnodelist.append(nodelist)
+        Ldistlist.append(distlist)
+        LlinkIDlist.append(linkIDlist)
+        Lxlist.append(xlist)
+        Lylist.append(ylist)
+    nmg_link_to_rmg_nodes_mapper = pd.DataFrame(Lxy)
+    
+    # if duplicates, select link with largest mean contributing area.
+    if remove_duplicates:
+        for link in range(len(downstream_upstream_nmg_link_nodes)):
+            for other_link in range(len(downstream_upstream_nmg_link_nodes)):
+                if link != other_link:
+                    link_nodes = Lnodelist[link]
+                    other_link_nodes = Lnodelist[other_link]
+                    link_a = nmgrid.at_link['drainage_area'][link]
+                    other_link_a = nmgrid.at_link['drainage_area'][other_link]
+                    dup = np.intersect1d(link_nodes,other_link_nodes)
+                    # if contributing area of link largest, remove dupilcate nodes from other link
+                    if len(dup)>0:
+                        print('link {} and link {} have duplicates: {}'.format(link, other_link, dup))
+                        if link_a >= other_link_a:
+                            mask = ~np.isin(other_link_nodes, dup)
+                            Lnodelist[other_link] = list(np.array(other_link_nodes)[mask])
+                            Ldistlist[other_link] = list(np.array(Ldistlist[other_link])[mask])
+                            LlinkIDlist[other_link] = list(np.array(LlinkIDlist[other_link])[mask])
+                            Lxlist[other_link] = list(np.array(Lxlist[other_link])[mask])
+                            Lylist[other_link] = list(np.array(Lylist[other_link])[mask])
+                        else:
+                            mask = ~np.isin(link_nodes, dup)
+                            Lnodelist[link] = list(np.array(link_nodes)[mask])                
+                            Ldistlist[link] = list(np.array(Ldistlist[link])[mask])
+                            LlinkIDlist[link] = list(np.array(LlinkIDlist[link])[mask])
+                            Lxlist[link] = list(np.array(Lxlist[link])[mask])
+                            Lylist[link] = list(np.array(Lylist[link])[mask])
+        LinkIDs = _flatten_lol(LlinkIDlist)
+        nmg_link_to_rmg_nodes_mapper = pd.DataFrame(np.array([LinkIDs,
+                            _flatten_lol(Lnodelist),
+                            _flatten_lol(Lxlist),
+                            _flatten_lol(Lylist),
+                            _flatten_lol(Ldistlist),
+                           nmgrid.at_link['drainage_area'][np.array(LinkIDs)]]).T,
+                           columns = ['linkID','coincident_node','x','y','dist','drainage_area'])
+        nmg_link_to_rmg_nodes_mapper['linkID'] = nmg_link_to_rmg_nodes_mapper['linkID'].astype(int)
+        nmg_link_to_rmg_nodes_mapper['coincident_node'] = nmg_link_to_rmg_nodes_mapper['coincident_node'].astype(int)
+        
+    # map a channel node to each coincident node and addd to nmg_link_to_rmg_nodes_mapper table
+    # cn_to_nmg_link_mapper = map_channel_nodes_to_nmg_coincident_nodes(grid, nmgrid, nmg_link_to_rmg_nodes_mapper, acn)
+    # nmg_link_to_rmg_nodes_mapper['channel_node'] = np.concatenate(cn_to_nmg_link_mapper)
+    return nmg_link_to_rmg_nodes_mapper # change to rmg_nodes_to_nmg_location_mapper
+
+  
+# def map_channel_nodes_to_nmg_links_(grid, nmgrid, nmg_link_to_rmg_nodes_mapper, acn):
+#     """for each link i in the nmg create a list of the rmg channel nodes that
+#     represent the link"""
+#     # for each channel node, get the distance to all link rmg nodes
+#     # channel node x
+#     cnode_x = grid.node_x[acn] # cn, not fcn
+#     # channel node y
+#     cnode_y = grid.node_y[acn]
+
+#     def dist_between_nmg_and_rmg_nodes(row, xc, yc):
+#         """distance between channel node and link node"""
+#         return _dist_func(xc,row['x'],yc,row['y'])
+    
+#     cn_link_id = []
+#     for i, cn in enumerate(acn): # for each channel node
+#         xc = cnode_x[i]; yc = cnode_y[i]
+#         # compute the distance to all link rmg nodes
+#         dist = nmg_link_to_rmg_nodes_mapper.apply(lambda row: dist_between_nmg_and_rmg_nodes(row, xc, yc),axis=1) 
+#         # link nmg_rmg node with the shortest distance to the channel node is 
+#         # assigned to the channel node.
+#         # if more than one (which can happen because the end and begin of the reaches at a junction overlay the same cell) 
+#         # pick link with largest contributing area
+#         dist_min_links = nmg_link_to_rmg_nodes_mapper['linkID'][dist == dist.min()].values
+#         dmn_cont_area = nmgrid.at_link['drainage_area'][dist_min_links]
+#         dmn_mask = dmn_cont_area == dmn_cont_area.max()
+        
+#         cn_link_id.append(dist_min_links[dmn_mask][0]) # more than one cell from the same link may be the same distance from the node, just pick one
+    
+#     # for each link, group all channel nodes assigned to link into list, append to cn_to_nmg_rmg_node_mapper
+#     b = np.array(cn_link_id)
+#     cn_to_nmg_link_mapper = {}
+#     for link in range(nmgrid.number_of_links): #np.unique(b):
+#         cn_to_nmg_link_mapper[link] = (list(acn[b == link]))
+#     return cn_to_nmg_link_mapper # for each link i, the list of channel nodes assigned to the link
+
+def map_rmg_nodes_to_nmg_links(grid, nmgrid, nmg_link_to_rmg_nodes_mapper, cn):
+    """for each link i in the nmg create a list of the rmg channel nodes that
+    represent the link"""
+    # for each channel node, get the distance to all link rmg nodes
+    # channel node x
+    cnode_x = grid.node_x[cn] # cn, not fcn
+    # channel node y
+    cnode_y = grid.node_y[cn]
+
+    def dist_between_nmg_and_rmg_nodes(row, xc, yc):
+        """distance between channel node and link node"""
+        return _dist_func(xc,row['x'],yc,row['y'])
+    
+    cn_link_id = []
+    node_ = []
+    dist_ = []
+    link_ = []
+    for n in cn: # for each channel node
+        xc = grid.node_x[n]; yc = grid.node_y[n]
+        # compute the distance to all link rmg nodes
+        # dist = nmg_link_to_rmg_nodes_mapper.apply(lambda row: dist_between_nmg_and_rmg_nodes(row, xc, yc),axis=1)
+        dist = nmg_link_to_rmg_nodes_mapper.apply(lambda row: dist_between_nmg_and_rmg_nodes(row, xc, yc),axis=1)
+        # link nmg_rmg node with the shortest distance to the channel node is 
+        # assigned to the channel node.
+        # if more than one (which can happen because the end and begin of the reaches at a junction overlay the same cell) 
+        # pick link with largest contributing area
+        mask = dist == dist.min()
+        dist_min_links = nmg_link_to_rmg_nodes_mapper[['linkID','dist','coincident_node','drainage_area']][mask]
+        link = dist_min_links[dist_min_links['drainage_area']==dist_min_links['drainage_area'].max()].head(1)
+        link_.append(link)
+    cn_to_nmg_link_mapper  = pd.concat(link_)
+    cn_to_nmg_link_mapper['node'] = cn
+    cn_to_nmg_link_mapper =cn_to_nmg_link_mapper[['node','linkID','dist','coincident_node','drainage_area']]
+    return cn_to_nmg_link_mapper # for each link i, the list of channel nodes assigned to the link
+
+def map_nmg1_links_to_nmg2_links(grid, LxyDF_nmg1, LxyDF_nmg2):    
+    
+    """map link ids from one network model grid (nmg1) to equivalent link ids on
+    another network model grid (nmg2).
+    link to each link in the landlab nmg. Note, the landlab nmg id of the dhsvm
+    network is used, not the DHSVM network id (arcID) To translate the nmg_d link
+    id to the DHSVM network id: self.nmg_d.at_link['arcid'][i], where i is the nmg_d link id.
+    """
+
+    def distance_between_links(row, XY):
+        return _dist_func(row['x'],XY[0],row['y'],XY[1])# ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5
+
+    link_mapper ={}
+    link_map_L = {}
+    link_offset_L = {}
+    for i in np.unique(LxyDF_nmg1['linkID']):# for each nmg1 link i
+        sublist = LxyDF_nmg1['coincident_node'].values[LxyDF_nmg1['linkID'] == i] # get all rmg nodes coincident with the nmg1 link i
+        LinkL = [] # id of nmg2 link that is closest to nmg1 rmg node
+        offsetL = [] # distance of nmg2 link that is closest to nmg1 rmg node 
+        DAL = [] # drainage area of nmg2 link that is closest to nmg1 rmg node 
+        
+        for j in sublist: # for each nmg1 rmg node find the closest nmg2 rmg node
+            XY = [grid.node_x[j], grid.node_y[j]] # get x and y coordinate of the rmg node
+            nmg_d_dist = LxyDF_nmg2.apply(lambda row: distance_between_links(row, XY),axis=1)# compute the distance from the rmg node to all nmg2 rmg nodes
+            offset = nmg_d_dist.min() # find the minimum distance between the nmg1 rmg node and nmg2 rmg nodes
+            mdn = LxyDF_nmg2['linkID'].values[(nmg_d_dist == offset).values][0]# get the nmg2 link id with minimum distance node, if more than one, pick the first one
+            DA = LxyDF_nmg2['drainage_area'].values[(nmg_d_dist == offset).values][0] # drainage area
+            offsetL.append(offset)
+            LinkL.append(mdn) 
+            DAL.append(DA)
+            
+        offsets = np.array(offsetL)
+        Links = np.array(LinkL)
+        DAs = np.array(DAL)
+        
+        count =  np.bincount(Links) # number of times nmg2 rmg nodes were closest to nmg1 link   
+
+        # nmg2 link with highest count is matched to nmg1 link 
+        if (count == count.max()).sum() == 1: 
+            Link = np.argmax(count) 
+        else: # if two or more nmg2 links have the same count, select the closer one that drains the largest area
+             # get the link(s) that have the closest rmg node. 
+            Links_ = Links[offsets == offsets.min()]
+            if len(Links_)>1: 
+                DAs_  = DAs[offsets == offsets.min()] # get subset of drainage areas
+                DA_max = DAs_.max()
+                Link = Links_[DAs_ == DA_max][0] # if drainage area is same, use the first one
+            else:
+                Link = Links_[0]
+        link_mapper[i] = Link
+        link_offset_L[i] = offsets
+        link_map_L[i] = Links # final list of all nmg2 link ids matched to a nmg1 link i rmg nodes
+        print('nmg1 link '+ str(i)+' mapped to equivalent nmg2 link')
+    return (link_mapper, link_map_L, link_offset_L)
+
+
+def map_rmg_channel_nodes_to_nmg_nodes(nmgrid, acn, xyDF_acn):
+    """ find rmg channel node that is closest to each nmg node
+    
+    The mapping dictionary produced by this function can be used to transfer 
+    field values from a rmg node to an spatially equivalent nmg node. However,
+    if the rmg channel network does not extend to the upper reaches of 
+    the nmg channel network, the most upstream nmg nodes may be matched with 
+    rmg nodes in the wrong reach or branch of the rmg channel network. This 
+    function works best if the rmg channel network roughly underlies the nmg 
+    channel network.
+    """
+    #compute distance between deposit and all network cells
+    def distance_between_links(row, XY):
+        return _dist_func(row['x'],XY[0],row['y'],XY[1])       
+    # for each node in the channel node list record the equivalent nmg_d link id 
+    nmg_node_to_cn_mapper ={}
+    for i, node in enumerate(nmgrid.nodes):# for each node network modelg grid
+        XY = [nmgrid.node_x[i], nmgrid.node_y[i]] # get x and y coordinate of node
+        nmg_node_dist = xyDF_acn.apply(lambda row: distance_between_links(row, XY),axis=1)#.apply(Distance,axis=1) # compute the distance to all channel nodes
+        offset = nmg_node_dist.min() # find the minimum distance between node and channel nodes
+        mdn = xyDF_acn.index[(nmg_node_dist == offset).values][0]# index of minimum distance node, use first value
+        nmg_node_to_cn_mapper[i] = acn[mdn] # rmg node mapped to nmg node i         
+    return nmg_node_to_cn_mapper
+
+
+def transfer_rmg_channel_node_field_to_nmg_node_field(grid, nmgrid, NMGtoRMGnodeMapper, field = 'topographic__elevation'):
+    """update the topographic elevation field of nmg using th elevation of the
+    equivalent raster model grid node
+    """
+    # update elevation
+    for i, node in enumerate(nmgrid.nodes):
+        RMG_node = NMGtoRMGnodeMapper[i]
+        nmgrid.at_node[field][i] = grid.at_node[field][RMG_node]
+
+def transfer_nmg_link_field_to_rmg_channel_node_field(grid, nmgrid, nmg_field, rmg_field, cn_to_nmg_link_mapper, default_value = np.nan):
+    """
+    transfers the field value on each link to each rmg channel node assigned
+    to the link in map_rmg_channel_nodes_to_nmg_rmg_nodes()
+
+    Returns
+    -------
+    None.
+    """
+    # add field to the rmg if not already present
+    if rmg_field not in grid.at_node.keys(): # field not
+        grid.at_node[rmg_field] = np.ones(grid.number_of_nodes)*default_value
+    
+    for i, link in enumerate(nmgrid.active_links):
+        value = nmgrid.at_link[nmg_field][link]
+        link_nodes =  cn_to_nmg_link_mapper['node'][cn_to_nmg_link_mapper['linkID'] == link].values
+        grid.at_node[rmg_field][link_nodes] = value
+        
+        
+def transfer_rmg_channel_node_field_to_nmg_link_field(grid, nmgrid, rmg_field, nmg_field, cn_to_nmg_link_mapper, metric = 'mean', default_value = np.nan):
+    """
+    transfer the max, min, mean or median field value of the rmg 
+    channel nodes that represent each nmg link to the nmg link field.
+    """
+    # add field to the nmg if not already present
+    if nmg_field not in nmgrid.at_link.keys(): # field not
+        nmgrid.at_link[nmg_field] = np.ones(nmgrid.number_of_links)*default_value
+    
+    for i, link in enumerate(nmgrid.active_links):
+        link_nodes =  cn_to_nmg_link_mapper['node'][cn_to_nmg_link_mapper['linkID'] == link].values
+        if len(link_nodes)>0: # if link_nodes is not empty
+            if metric == 'mean':
+                value = grid.at_node[rmg_field][link_nodes].mean()
+            elif metric == 'max':
+                value = grid.at_node[rmg_field][link_nodes].max()
+            elif metric == 'min':
+                value = grid.at_node[rmg_field][link_nodes].min()
+            elif metric == 'median':
+                value = np.median(grid.at_node[rmg_field][link_nodes])
+            else:
+                raise ValueError('metric "{}" not an option'.format(metric))
+            nmgrid.at_link[nmg_field][link] = value
+
+def update_rmg_channel_location_and_mapping(grid, nmgrid, Ct, BFt, terrace_width, downstream_upstream_nmg_link_nodes):
+    acn, xyDF_acn, fcn, xyDF_fcn = extract_channel_nodes(grid,Ct,BFt)
+    tn, xyDF_tn = extract_terrace_nodes(grid, terrace_width, acn, fcn)
+    nmg_link_to_rmg_nodes_mapper = map_nmg_links_to_rmg_coincident_nodes(grid, nmgrid, downstream_upstream_nmg_link_nodes, remove_duplicates = True) 
+    cn_to_nmg_link_mapper = map_rmg_channel_nodes_to_nmg_links(grid, nmgrid, nmg_link_to_rmg_nodes_mapper, acn) 
+    nmg_node_to_cn_mapper = map_rmg_channel_nodes_to_nmg_nodes(nmgrid, acn, xyDF_acn)
+    
+    return {'acn':acn,
+            'fcn':fcn,
+            'tn':tn,
+            'nmg_link_to_rmg_nodes_mapper':nmg_link_to_rmg_nodes_mapper,
+            'cn_to_nmg_rmg_node_mapper':cn_to_nmg_rmg_node_mapper,
+            'nmg_node_to_cn':nmg_node_to_cn}
+    
+
+
 
 class ChannelNetworkToolsBase():    
     '''
@@ -170,7 +558,7 @@ class ChannelNetworkToolsBase():
     BCt: float
         Contributing area threshold at which cascade channels begin, which is 
         assumed to be the upper limit of frequent bedload transport
-    TerraceWidth: int
+    terrace_width: int
         width from channel cells in number of cells considered terrace cells.
         Defaul value is 1 (i.e. all cells directly adjacent to the channels
                            cells are considered terrace cells)
@@ -186,7 +574,7 @@ class ChannelNetworkToolsBase():
             nmgrid = None,
             Ct = 5000,
             BCt = 100000,
-            TerraceWidth = 1,
+            terrace_width = 1,
             **kwds):
         
         if grid != None:
@@ -237,12 +625,13 @@ class ChannelNetworkToolsBase():
         ### Channel extraction parameters
         self.Ct = Ct # Channel initiation threshold [m2]   
         self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
-        self.TerraceWidth = TerraceWidth # distance from channel grid cells that are considered terrace grid cells [# cells]          
+        self.terrace_width = terrace_width # distance from channel grid cells that are considered terrace grid cells [# cells]          
 
     
     def extract_channel_nodes(self,Ct,BCt):
         """interpret which nodes of the DEM correspond to the fluvial channel 
         network and entire channel network (including colluvial channels)
+        TO FUNCTION => DONE
         """
         
         # entire channel network (all channels below channel head or upper extent 
@@ -278,7 +667,7 @@ class ChannelNetworkToolsInterpretor(ChannelNetworkToolsBase):
             BCt: float
                 Contributing area threshold at which cascade channels begin, which is 
                 assumed to be the upper limit of frequent bedload transport
-            TerraceWidth: int
+            terrace_width: int
                 width from channel cells in number of cells considered terrace cells.
                 Defaul value is 1 (i.e. all cells directly adjacent to the channels
                                    cells are considered terrace cells)
@@ -293,8 +682,9 @@ class ChannelNetworkToolsInterpretor(ChannelNetworkToolsBase):
         """determine which raster model grid nodes coincide with channel terraces,
         which presently are asssumed to be a fixed width (number of nodes) from
         the channel nodes
+        TO FUNCTION => DONE
         """
-        for i in range(self.TerraceWidth):
+        for i in range(self.terrace_width):
             if i == 0:
                 # diagonal adjacent nodes to channel nodes
                 AdjDN =np.ravel(self._grid.diagonal_adjacent_nodes_at_node[self.BedloadChannelNodes])  
@@ -420,7 +810,7 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
             LlinkIDlist.append(linkIDlist)
             Lxlist.append(xlist)
             Lylist.append(ylist)
-        Lxy = pd.DataFrame(Lxy)
+        LxyDF = pd.DataFrame(Lxy)
         # remove duplicates by assiging duplicate node to link with largest mean contributing area.
         if remove_duplicates:
             for link in range(len(linknodes)):
@@ -449,16 +839,16 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
                                 Lxlist[link] = list(np.array(Lxlist[link])[mask])
                                 Lylist[link] = list(np.array(Lylist[link])[mask])
             LinkIDs = _flatten_lol(LlinkIDlist)
-            Lxy = pd.DataFrame(np.array([LinkIDs,
+            LxyDF = pd.DataFrame(np.array([LinkIDs,
                                 _flatten_lol(Lnodelist),
                                 _flatten_lol(Lxlist),
                                 _flatten_lol(Lylist),
                                 _flatten_lol(Ldistlist),
                                self._nmgrid.at_link['drainage_area'][np.array(LinkIDs)]]).T,
                                columns = ['linkID','node','x','y','dist','drainage_area'])
-            Lxy['linkID'] = Lxy['linkID'].astype(int)
-            Lxy['node'] = Lxy['node'].astype(int)
-        return Lxy
+            LxyDF['linkID'] = LxyDF['linkID'].astype(int)
+            LxyDF['node'] = LxyDF['node'].astype(int)
+        return LxyDF
     
     def map_rmg_channel_nodes_to_nmg_rmg_nodes(self, xyDF):
         """for each link i in the nmg create a list of the rmg channel nodes that

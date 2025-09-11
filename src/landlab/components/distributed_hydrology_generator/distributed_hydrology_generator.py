@@ -6,6 +6,10 @@ TODO:
     fit_probability_distribution creates too many outputs, only need Fx and x
     use link mapper to get mean of all links that coincide with coarser landlab grid
     
+    use nmg.active_links to get list of all links instead of self.LinkMapper
+    uses CNGT to map fine network to coarse network
+                 map nmg fluxes to model grid
+    
 """
 
 
@@ -263,7 +267,7 @@ class DistributedHydrologyGenerator(Component):
         
         if not hasattr(self,"xyDF"):
             # determine raster mg nodes that correspond to nmg links 
-            linknodes = self._nmgrid.nodes_at_link # make this an internal part of CNT
+            linknodes = self._nmgrid.nodes_at_link # use CNGT get get_linknodes function
             active_links = self._nmgrid.active_links
             nmgx = self._nmgrid.x_of_node
             nmgy = self._nmgrid.y_of_node            

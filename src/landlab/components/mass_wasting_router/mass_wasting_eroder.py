@@ -7,6 +7,7 @@ from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFind
 from landlab import imshow_grid, imshow_grid_at_node
 # from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
 from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsInterpretor, ChannelNetworkToolsMapper
+import landlab.utils.channel_network_grid_tools as gt
 
 class MassWastingEroder(Component):
     
@@ -67,7 +68,7 @@ class MassWastingEroder(Component):
             self,
             grid,
             nmgrid,
-            Ct = 5000,
+            Ct = 10000,
             BCt = 100000,
             TerraceWidth = 1,
             fluvial_erosion_rate = [[0.03,-0.43, 0.01], [0.01,-0.43, 0.005]], # Fluvial erosion rate parameters
@@ -177,9 +178,14 @@ class MassWastingEroder(Component):
         if not hasattr(gti,"TerraceNodes"):
             self.gti.extract_terrace_nodes()
         if not hasattr(gti,"xyDF"):
-            self.xyDF = self.gtm.map_nmg_links_to_rmg_nodes(linknodes = self.linknodes,
-                                    #active_links = self._nmgrid.active_links,
-                                    nmgx = self.nmgridx, nmgy = self.nmgridy)
+            # self.xyDF = self.gtm.map_nmg_links_to_rmg_nodes(linknodes = self.linknodes,
+            #                         #active_links = self._nmgrid.active_links,
+            #                         nmgx = self.nmgridx, nmgy = self.nmgridy)
+            
+            self.xyDF = gt.map_nmg_links_to_rmg_nodes(self._grid, 
+                                                      self._nmgrid, 
+                                                      gt.get_linknodes(self._nmgrid), 
+                                                      self.gti.ChannelNodes, remove_duplicates = True)
     
             # self.Lnodelist = out[1] # all nodes that coincide with link
             # self.Ldistlist = out[4] # the downstream distance of each node that coincide with link
@@ -469,6 +475,11 @@ class MassWastingEroder(Component):
         nmg rmg node and a dataframe is prepared that includes the link # and downstream distance
         on link. This dataframe is used to prepare a pulse table for the network sediment transporter
         pulser
+        
+        rewrite this function - add rmg channel node columne to xyDF (which is now: nmg_link_to_rmg_nodes_mapper)
+        then for each deposit node, simply search if in nmg_link_to_rmg_nodes_mapper. If in, get distance and other attributes 
+        from nmg_link_to_rmg_nodes_mapper table.
+        
         '''
 
         def LDistanceRatio(row):
@@ -505,13 +516,93 @@ class MassWastingEroder(Component):
                 def Distance(row):
                     return ((row['x']-depXY[0])**2+(row['y']-depXY[1])**2)**.5
 
-                nmg_dist = self.xyDF.apply(Distance,axis=1) #xyDF is the dataframe of nodes that are coincident with the link locations
+                nmg_dist = self.xyDF.apply(Distance,axis=1) #xyDF is the dataframe of nodes that are coincident with the link locations, this needs to be switched to : cn_to_nmg_link_mapper to get the correct link id and location
 
                 offset = nmg_dist.min()
                 mdn = self.xyDF[nmg_dist == offset] #minimum distance node # check that this works-
 
 
-                #find link that contains raster grid cell => This shouldn't be needed, it is listed in self.xyDF
+                #find link that contains raster grid cell => This shouldn't be needed, it is listed in self.xyDF, change to find node in cn_to_nmg_link_mapper, get the link from the node
+                # redo this section
+                search = mdn['node'].iloc[0] #node number, first value if more than one grid cell is min dist from debris flow
+                for i in np.unique(self.xyDF['linkID']): #for each list of nodes (corresponding to each link i)
+                    sublist = self.xyDF['node'].values[self.xyDF['linkID'] == i] # nodes in link
+                    sublist_d = self.xyDF['dist'].values[self.xyDF['linkID'] == i] # downstream distance to node
+                    if search in sublist: #if node is in list, then
+                        link_n = sublist#
+                        en = list(link_n).index(search)
+                        link_d = sublist_d
+                        ld = link_d[en]
+                        linkID = i
+                        mwlink = OrderedDict({'mw_unit':h,'pulse_volume':self.FEV[h],'raster_grid_cell_#':FEDn,'link_#':linkID,'link_cell_#':search,'raster_grid_to_link_offset [m]':offset,'link_downstream_distance':ld})
+                        # mwlink = OrderedDict({'mw_unit':h,'vol [m^3]':self.FEV[h],'raster_grid_cell_#':FEDn,'link_#':linkID,'link_cell_#':search,'raster_grid_to_link_offset [m]':offset,'link_downstream_distance [m]':ld})
+                        Lmwlink.append(mwlink)
+                        break #for now use the first link found - later, CHANGE this to use largest order channel
+                    else:
+                        if i ==  len(np.unique(self.xyDF['linkID'])):
+                            print(' DID NOT FIND A LINK NODE THAT MATCHES THE DEPOSIT NODE ')
+
+
+            parcelDF = pd.DataFrame(Lmwlink)
+            pLinkDistanceRatio = parcelDF.apply(LDistanceRatio,axis=1)
+            pLinkDistanceRatio.name = 'normalized_downstream_distance'
+            self.parcelDF = pd.concat([parcelDF,pLinkDistanceRatio],axis=1)
+
+
+
+
+    def _parcelDFmaker_v2(self):
+        '''
+        for each channel or terrace node that has deposition, the node is macthed to the closests 
+        nmg rmg node and a dataframe is prepared that includes the link # and downstream distance
+        on link. This dataframe is used to prepare a pulse table for the network sediment transporter
+        pulser
+        
+        rewrite this function - add rmg channel node columne to xyDF (which is now: nmg_link_to_rmg_nodes_mapper)
+        then for each deposit node, simply search if in nmg_link_to_rmg_nodes_mapper. If in, get distance and other attributes 
+        from nmg_link_to_rmg_nodes_mapper table.
+        
+        '''
+
+        def LDistanceRatio(row):
+            '''
+            # determine deposition location on reach - ratio of distance from
+              inlet to deposition location in link to length of link
+
+            '''
+            # return row['link_downstream_distance [m]']/self.linklength[int(row['link_#'])]
+            return row['link_downstream_distance']/self.linklength[int(row['link_#'])]
+        if len(self.FENodes) == 0:
+            FEDn = []
+            parcelDF = pd.DataFrame([])
+            self.parcelDF = parcelDF
+
+
+        else:
+            Lmwlink = []
+            #for each node in FENodes (all of which are either a channel or terrace node)
+            #, find the closest link and the distance on 
+            # that link that the node is closest to. This is achieved by using the 
+            # raster model grid cells that underly the network model grid, which
+            # may not be the same as the raster model grid cells representing the
+            # channel. The node of erosion is matched to a one of the underlying 
+            # nodes. From that node, its position interms of the link ID and distance
+            # on link are looked up.
+            for h, FEDn in enumerate(self.FENodes): 
+            
+                #deposition location x and y coordinate
+                depXY = [self._grid.node_x[FEDn],self._grid.node_y[FEDn]] 
+
+                #find closest channel node
+                def Distance(row):
+                    return ((self._grid.node_x['channel_node']-depXY[0])**2+(self._grid.node_y['channel_node']-depXY[1])**2)**.5
+
+                nmg_dist = self.xyDF.apply(Distance,axis=1) #xyDF is the dataframe of nodes that are coincident with the link locations, this needs to be switched to : cn_to_nmg_link_mapper to get the correct link id and location
+                offset = nmg_dist.min()
+                mdn = self.xyDF[nmg_dist == offset] #minimum distance node # check that this works-
+
+
+                #find link that contains raster grid cell => This shouldn't be needed, it is listed in self.xyDF, change to find node in cn_to_nmg_link_mapper, get the link from the node
                 # redo this section
                 search = mdn['node'].iloc[0] #node number, first value if more than one grid cell is min dist from debris flow
                 for i in np.unique(self.xyDF['linkID']): #for each list of nodes (corresponding to each link i)
