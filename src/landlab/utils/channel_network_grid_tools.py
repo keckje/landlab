@@ -290,9 +290,9 @@ def choose_unique(
     if any(key.size != values.size for key in order_by):
         raise ValueError("All `order_by` arrays must match `values` length")
 
-    # sorted_rows = np.lexsort(order_by + (values,))
+    sorted_rows = np.lexsort(order_by + (values,))
     
-    sorted_rows = np.lexsort([order_by[0], values])
+    # sorted_rows = np.lexsort([order_by[0], values])
 
     is_last = choose_from_repeated(values[sorted_rows], choose=choose)
 
@@ -370,7 +370,7 @@ def map_nmg_links_to_rmg_coincident_nodes(
 
         row = np.arange(len(df), dtype=np.int64)
 
-        idx = choose_unique(values=values, order_by=[area, -row], choose="last")
+        idx = choose_unique(values=values, order_by=[area], choose="last") # order_by=[area, -row]
         idx.sort()
 
         df = df.iloc[idx].reset_index(drop=True)
