@@ -526,8 +526,9 @@ def map_nmg1_links_to_nmg2_links(nmgrid_1, nmgrid_2, number_of_points = 11):
     nmgrid_2 : network model grid
         grid that values will be mapped from
     number_of_points : int
-        Each link is converted to a series of number_of_point points. The default 
-        is 11.
+        Each link is converted to a series of number_of_point points. The relative
+        distance of each link to the other is determined using the points.
+        The default is 11. Below 11, output may not match expected.
 
     Returns
     -------
@@ -557,17 +558,13 @@ def map_nmg1_links_to_nmg2_links(nmgrid_1, nmgrid_2, number_of_points = 11):
 
         sublist = nmgrid_1_link_points[['X','Y']][nmgrid_1_link_points['linkID'] == linkID]
         LinkL = [] # id of nmg2 link that is closest to nmg1 rmg node
-        DAL = [] # drainage area of nmg2 link that is closest to nmg1 rmg node 
         for j in range(len(sublist)):
             XY = [sublist.iloc[j]['X'], sublist.iloc[j]['Y']] 
             distances = nmgrid_2_link_points.apply(lambda row: distance_between_links(row, XY),axis=1)# compute the distance from the nmgrid_1 point and all nmgrid_2 points
             offset = distances.min() # find the minimum distance between the nmg1 point and all nmg2 points
             mdl = nmgrid_2_link_points['linkID'][(distances == offset)].values[0].astype(int)# get the nmg2 link id with point at minimum distance from nmg1 point, if more than one, pick the first one
-            DA = nmgrid_2.at_link['drainage_area'][mdl] # drainage area of link
             LinkL.append(mdl) 
-            DAL.append(DA)
         Links = np.array(LinkL)
-        DAs = np.array(DAL)
         # number of times each nmgrid_2 point was closest to nmgrid_1 link 
         count =  np.bincount(Links)  
 
