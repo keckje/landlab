@@ -29,6 +29,7 @@ from landlab import Component, FieldError
 from landlab.plot import graph
 from landlab.io import read_esri_ascii
 from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsMapper
+import landlab.utils.channel_network_grid_tools as gt
 
 class DistributedHydrologyGenerator(Component):
 
@@ -97,10 +98,10 @@ class DistributedHydrologyGenerator(Component):
         # if both a nmg and rmg provided, will be option 1 or 2
         if (nmgrid != None) and (grid != None):
             # option 1 and 2 update flow, updating flow requires ChannelNetworkToolsMapper
-            if gtm != None:
-                self.gtm = gtm
-            else:
-                self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
+            # if gtm != None:
+            #     self.gtm = gtm
+            # else:
+            #     self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
             # option 1, a dtw dictionary is provided and flow and depth to water table will be updated
             if DHSVM_dtw_dict != None:
                 self.opt = 1
@@ -120,7 +121,7 @@ class DistributedHydrologyGenerator(Component):
         # check for network model grid inputs
         if nmgrid != None:
             if nmgrid_d != None:
-                self.nmgrid_d = nmgrid_d
+                self._nmgrid_d = nmgrid_d
             else:
                 raise ValueError("network model grid representation of the dhsvm" \
                                  " network required for translating dhsvm flow to" \
@@ -221,7 +222,9 @@ class DistributedHydrologyGenerator(Component):
         # Run options:                          
         # (1) FLOW and DTW 
         if (nmgrid != None) and (DHSVM_dtw_dict != None):
+            # print('prepping flow')
             self._prep_flow()
+            # print('prepping dtw')
             self._prep_depth_to_watertable()
         
         # (2) FLOW only
@@ -265,14 +268,14 @@ class DistributedHydrologyGenerator(Component):
         # determine raster mg nodes that correspond to landlab network mg
 
         
-        if not hasattr(self,"xyDF"):
+        # if not hasattr(self,"xyDF"):
             # determine raster mg nodes that correspond to nmg links 
-            linknodes = self._nmgrid.nodes_at_link # use CNGT get get_linknodes function
-            active_links = self._nmgrid.active_links
-            nmgx = self._nmgrid.x_of_node
-            nmgy = self._nmgrid.y_of_node            
+            # link_nodes = gt.get_link_nodes(self._nmgrid) #self._nmgrid.nodes_at_link # use CNGT get get_linknodes function
+            # # active_links = self._nmgrid.active_links
+            # nmgx = self._nmgrid.x_of_node
+            # nmgy = self._nmgrid.y_of_node            
         
-            self.xyDF = self.gtm.map_nmg_links_to_rmg_nodes(linknodes, nmgx, nmgy)#, active_links, nmgx, nmgy)
+            # self.xyDF = gt.map_nmg_links_to_rmg_coincident_nodes(self._grid, self._nmgrid, link_nodes) #self.gtm.map_nmg_links_to_rmg_nodes(linknodes, nmgx, nmgy)#, active_links, nmgx, nmgy)
             # self.LlinkIDlist = out[0] # not used 
             # self.Lnodelist = out[1] # not used
             # self.Lxlist = out[2] # not used
@@ -284,15 +287,14 @@ class DistributedHydrologyGenerator(Component):
             # self.xyDF = out[2]    
     
 
-
             # determine raster mg nodes that correspond to dhsvm links
-        if not hasattr(self,"xyDF_d"):
-            linknodes = self.nmgrid_d.nodes_at_link # make this an internal part of CNT
-            active_links = self.nmgrid_d.active_links
-            nmgx = self.nmgrid_d.x_of_node
-            nmgy = self.nmgrid_d.y_of_node
-            self.gtm_d = ChannelNetworkToolsMapper(grid = self._grid, nmgrid = self.nmgrid_d, Ct = self.Ct,BCt = self.BCt) # temporary fix until rewritten as list of functions
-            self.xyDF_d = self.gtm_d.map_nmg_links_to_rmg_nodes(linknodes, nmgx, nmgy)#, active_links, nmgx, nmgy)
+        # if not hasattr(self,"xyDF_d"):
+            # link_nodes = gt.get_link_nodes(self._nmgrid_d) #linknodes = self.nmgrid_d.nodes_at_link # make this an internal part of CNT
+            # # active_links = self._nmgrid_d.active_links
+            # nmgx = self._nmgrid_d.x_of_node
+            # nmgy = self._nmgrid_d.y_of_node
+            # self.gtm_d = ChannelNetworkToolsMapper(grid = self._grid, nmgrid = self.nmgrid_d, Ct = self.Ct,BCt = self.BCt) # temporary fix until rewritten as list of functions
+            # self.xyDF_d = self.gt.map_nmg_links_to_rmg_coincident_nodes(self._grid, self._nmgrid_d, link_nodes) #$self.gtm_d.map_nmg_links_to_rmg_nodes(linknodes, nmgx, nmgy)#, active_links, nmgx, nmgy)
     
             # self.Lnodelist_d = out[0]
             # self.Ldistlist_d = out[1]
@@ -304,24 +306,26 @@ class DistributedHydrologyGenerator(Component):
             # self.Lylist_d = out[3] 
             # self.Ldistlist_d = out[4]
             # self.xyDF_d = out[5]
-            print('xyDF_d: ###########.{}'.format(self.xyDF_d))
+            # print('xyDF_d: ###########.{}'.format(self.xyDF_d))
         
         ## define bedload and debris flow channel nodes       
         ## channel
         # self._ChannelNodes()
-        if not hasattr(self.gtm,"ChannelNodes"):
-            self.gtm.extract_channel_nodes(self.Ct,self.BCt)
+        # if not hasattr(self.gtm,"ChannelNodes"): # not needed
+        #     self.gtm.extract_channel_nodes(self.Ct,self.BCt)
     
         # map dhsvm network model grid to landlab network model grid and prepare
         # time series of flow at each landlab network model grid link
     
         # determine dhsvm network mg links that correspond to the landlab network mg
         # self._map_nmg1_links_to_nmg2_links()
-        self.LinkMapper, self.LinkMapL , self.LinkOffsetL= self.gtm.map_nmg1_links_to_nmg2_links(self.xyDF,self.xyDF_d)
+        # self.LinkMapper, self.LinkMapL , self.LinkOffsetL= self.gtm.map_nmg1_links_to_nmg2_links(self.xyDF,self.xyDF_d)
         
+        self.LinkMapper = gt.map_nmg1_links_to_nmg2_links(self._nmgrid, self._nmgrid_d, number_of_points = 11)
+        print('mapped links')
         # aggregate flow time series
         self._resample_flow()
-
+        
         # create reduced size streamflow.only file with index according to nmg links
         self.streamflowonly_nmg()
         
@@ -980,8 +984,8 @@ class DistributedHydrologyGenerator(Component):
              i_d = self.LinkMapper[Link]
                      
              # get the dhsvm network link id 'arcid' of nmgrid_d link i
-             dhsvmLinkID = self.nmgrid_d.at_link['arcid'][i_d]
-             print('dhsvm link ID:{}'.format(dhsvmLinkID))
+             dhsvmLinkID = self._nmgrid_d.at_link['arcid'][i_d]
+             # print('dhsvm link ID:{}'.format(dhsvmLinkID))
              # nmg_streamflow_dict[str(dhsvmLinkID)] = self._streamflowonly_ag[str(dhsvmLinkID)]
              nmg_streamflow_dict[Link] = self._streamflowonly_ag[str(dhsvmLinkID)]
          
@@ -1442,7 +1446,7 @@ def lognorm(sample):
 
         
 def depth_trapezoid(Q, S, b, m1 = 1, m2 = 1, n = 0.05):
-    print('Q={}; S={}; b={}'.format(Q,S,b))
+    # print('Q={}; S={}; b={}'.format(Q,S,b))
     """
     A main channel = A_t(b,m1,m2,y)
     P main channel = P_t(b,m1,m2,y)
