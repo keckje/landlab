@@ -238,7 +238,6 @@ class MassWastingRouter(Component):
         self.FED_all = {} # all fluvial erosion depths
         self.FENodes_all = {} # all fluvial erosion nodes
         self.parcelDF_dict = {} #  parcels dataframe, created from aggregated fluvial erosion nodes
-
         ### initial values
         self._grid.at_node['mass__wasting_events'] = np.zeros(self.nodes.shape[0]).astype(int)
         self._grid.at_node['mass__wasting_volumes'] = np.zeros(self.nodes.shape[0])

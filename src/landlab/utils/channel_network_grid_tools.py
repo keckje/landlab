@@ -463,7 +463,7 @@ def map_rmg_nodes_to_nmg_links(grid, nmg_link_to_rmg_coincident_nodes_mapper, rm
     rmg_nodes_to_nmg_links_mapper  = pd.concat(link_)
     rmg_nodes_to_nmg_links_mapper['node'] = rmg_nodes
     # organize column order in mapper
-    rmg_nodes_to_nmg_links_mapper =rmg_nodes_to_nmg_links_mapper[['node','linkID','dist','coincident_node','drainage_area','node_drainage_area']].reset_index(drop=True) 
+    rmg_nodes_to_nmg_links_mapper = rmg_nodes_to_nmg_links_mapper[['node','linkID','dist','coincident_node','drainage_area','node_drainage_area']].reset_index(drop=True) 
 
     if remove_small_tribs:# check for small tributary nodes assigned to link and remove them 
         rmg_nodes_to_nmg_links_mapper = _remove_small_tribs(rmg_nodes_to_nmg_links_mapper, 
