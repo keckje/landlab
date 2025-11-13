@@ -15,6 +15,7 @@ import pandas as pd
 from numpy.typing import ArrayLike
 from numpy.typing import NDArray
 from scipy.spatial.distance import cdist
+import landlab
 
 from landlab.components.flow_director.flow_director_steepest import FlowDirectorSteepest
 
@@ -144,6 +145,20 @@ def extract_channel_nodes(grid, Ct):
     """
     return np.flatnonzero(grid.at_node["drainage_area"] >= Ct)
 
+
+def define_true_elements(grid, field_name, element, elements_that_are_true):
+    """for a  model grid, creates the field "field_name"", assigns
+    elements elements_that_are_true as ones and all others as zero"""
+    if isinstance(grid, landlab.grid.raster.RasterModelGrid):
+        if element == 'node':
+            grid.at_node[field_name] = np.zeros(grid.number_of_nodes).astype(int)
+            grid.at_node[field_name][elements_that_are_true] = 1
+        if element == 'link':
+            grid.at_link[field_name] = np.zeros(grid.number_of_links).astype(int)
+            grid.at_link[field_name][elements_that_are_true] = 1
+    
+    
+    
 
 def extract_terrace_nodes(grid, terrace_width, acn, fcn):
     """Determine which raster model grid nodes coincide with channel terraces,

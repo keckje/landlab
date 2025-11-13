@@ -83,10 +83,10 @@ class DistributedHydrologyGenerator(Component):
                   fluvial_sediment_RI = 0.25,
                   hillslope_sediment_RI = 2.5,
                   tao_dict = None,
-                  Ct = 5000,
-                  BCt = 100000,
+                  Ct = 5000, # may not need these
+                  BCt = 100000, # may not need these
                   seed = None,
-                  gtm = None,
+                  gtm = None, # this can be deleted, not used anymore
                   plotting_position = 'Weibull',
                   st_multiplier = 1
                   ):        

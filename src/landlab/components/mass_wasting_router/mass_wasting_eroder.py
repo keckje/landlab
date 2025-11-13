@@ -68,9 +68,9 @@ class MassWastingEroder(Component):
             self,
             grid,
             nmgrid,
-            Ct = 10000,
-            BCt = 100000,
-            TerraceWidth = 1,
+            # channel_nodes, #Ct = 10000,
+            # terrace_nodes, #BCt = 100000,
+            #TerraceWidth = 1,
             fluvial_erosion_rate = [[0.03,-0.43, 0.01], [0.01,-0.43, 0.005]], # Fluvial erosion rate parameters
             parcel_volume = 0.2, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
             gti = None,
@@ -134,12 +134,12 @@ class MassWastingEroder(Component):
                 'A flow__receiver_node field is required as a component input!')  
 
         # instantiate channel network grid tools or use  provided instance
-        if gti != None:
-            self.gti = gti
-            self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid)
-        else:
-            self.gti = ChannelNetworkToolsInterpretor(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
-            self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid)
+        # if gti != None:
+        #     self.gti = gti
+        #     self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid)
+        # else:
+        #     self.gti = ChannelNetworkToolsInterpretor(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
+        #     self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid)
             
         # self.gt = ChannelNetworkGridTools(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
 
@@ -156,7 +156,7 @@ class MassWastingEroder(Component):
         # self.nmg_nodes = nmgrid.nodes
 
         ### Channel extraction parameters
-        self.TerraceWidth = TerraceWidth # distance from channel grid cells that are considered terrace grid cells [# cells]     
+        # self.TerraceWidth = TerraceWidth # distance from channel grid cells that are considered terrace grid cells [# cells]     
          
         ### fluvial erosion
         self.C_a = fluvial_erosion_rate[0][0]
@@ -173,26 +173,30 @@ class MassWastingEroder(Component):
 
 
         #### these functions may have already been run
-        if not hasattr(gti,"ChannelNodes"):
-            self.gti.extract_channel_nodes(Ct,BCt)
-        if not hasattr(gti,"TerraceNodes"):
-            self.gti.extract_terrace_nodes()
-        self.TN = self.gti.TerraceNodes
-        self.CN = self.gti.ChannelNodes
-        self.channel_nodes = np.unique(np.concatenate((self.TN, self.CN)))
+        # if not hasattr(gti,"ChannelNodes"):
+            # self.gti.extract_channel_nodes(Ct,BCt)
+        # if not hasattr(gti,"TerraceNodes"):
+            # self.gti.extract_terrace_nodes()
+        # self.terrace_nodes = terrace_nodes #gt.self.gti.TerraceNodes
+        # self.channel_nodes = channel_nodes # self.gti.ChannelNodes
+        # self.channel_and_terrace_nodes = np.unique(np.concatenate((self.terrace_nodes, self.channel_nodes))) # change to channel_and_terrace_nodes
+        define_channel_and_terrace_nodes()
         
-        if not hasattr(gti,"xyDF"):
+        
+        # if not hasattr(gti,"xyDF"):
             # self.xyDF = self.gtm.map_nmg_links_to_rmg_nodes(linknodes = self.linknodes,
             #                         #active_links = self._nmgrid.active_links,
             #                         nmgx = self.nmgridx, nmgy = self.nmgridy)
             
-            self.xyDF = gt.map_nmg_links_to_rmg_coincident_nodes(self._grid, 
-                                                      self._nmgrid, 
-                                                      gt.get_link_nodes(self._nmgrid), 
-                                                      remove_duplicates = True)
-            
-            self.cn_to_nmg_link_mapper = gt.map_rmg_nodes_to_nmg_links(self._grid, self.xyDF, self.channel_nodes, remove_small_tribs = False)
-    
+              
+        map_channel_and_terrace_nodes_to_links(channel_and_terrace_nodes)
+        # self.xyDF = gt.map_nmg_links_to_rmg_coincident_nodes(self._grid, 
+        #                                           self._nmgrid, 
+        #                                           gt.get_link_nodes(self._nmgrid), 
+        #                                           remove_duplicates = True)
+        
+        # self.cn_to_nmg_link_mapper = gt.map_rmg_nodes_to_nmg_links(self._grid, self.xyDF, self.channel_and_terrace_nodes, remove_small_tribs = False)
+
             # self.Lnodelist = out[1] # all nodes that coincide with link
             # self.Ldistlist = out[4] # the downstream distance of each node that coincide with link
             # self.xyDF = out[5]
@@ -211,7 +215,22 @@ class MassWastingEroder(Component):
         self.dem_mw_dzdt = self.dem - self.dem_initial # initial cells of deposition and scour - none, TODO, make this an optional input
         self.DistNodes = np.array([])
         self.FED = np.array([])
+
+
+    def define_channel_and_terrace_nodes():
+        self.channel_nodes = np.arange(mg.number_of_nodes)[mg.at_node['channel_nodes'].astype(bool)]    
+        self.terrace_nodes = np.arange(mg.number_of_nodes)[mg.at_node['terrace_nodes'].astype(bool)] 
+        self.channel_and_terrace_nodes = np.unique(np.concatenate((self.terrace_nodes, self.channel_nodes)))
         
+
+    def map_channel_and_terrace_nodes_to_links():
+        self.xyDF = gt.map_nmg_links_to_rmg_coincident_nodes(self._grid, 
+                                                  self._nmgrid, 
+                                                  gt.get_link_nodes(self._nmgrid), 
+                                                  remove_duplicates = True)
+        
+        self.cn_to_nmg_link_mapper = gt.map_rmg_nodes_to_nmg_links(self._grid, self.xyDF, self.channel_and_terrace_nodes, remove_small_tribs = False)
+
 
         
     def _DefineErosionRates(self):
@@ -236,9 +255,9 @@ class MassWastingEroder(Component):
 
         # coeficients of fluvial erosion/storm as a function of time
         for i in self.rnodes:
-            if i in self.gti.TerraceNodes:
+            if i in self.TN:#
                 coefL.append(np.array([self.T_a, self.T_b, self.T_c]))
-            elif i in self.gti.ChannelNodes:
+            elif i in self.CN:
                 coefL.append(np.array([self.C_a, self.C_b, self.C_c]))
             else:
                 coefL.append(np.array([0, 0, 0]))
@@ -349,7 +368,7 @@ class MassWastingEroder(Component):
             # self.DistNodes = np.unique(np.concatenate((self.DistNodes, NewDistNodes))).astype(int)
             
             # create a mask to only keep the channel nodes
-            cnodes_mask = np.isin(self.DistNodes, self.channel_nodes)
+            cnodes_mask = np.isin(self.DistNodes, self.channel_and_terrace_nodes)
             self.DistNodes = self.DistNodes[cnodes_mask]
             # get the fluvial erosion rate parameters of each disturbed cells
             self.FERateC  = self.fluvial_erosion_rate[self.DistNodes]
@@ -432,6 +451,7 @@ class MassWastingEroder(Component):
 
     def _parcelAggregator(self):
         '''
+        THIS IS NTO USED AND CAN PROBABLY BE DELETED
         reduces the number of parcels entered into a channel network by aggregating
         parcels into larger parcels
 
@@ -481,10 +501,7 @@ class MassWastingEroder(Component):
         nmg rmg node and a dataframe is prepared that includes the link # and downstream distance
         on link. This dataframe is used to prepare a pulse table for the network sediment transporter
         pulser
-        
-        rewrite this function - add rmg channel node columne to xyDF (which is now: nmg_link_to_rmg_nodes_mapper)
-        then for each deposit node, simply search if in nmg_link_to_rmg_nodes_mapper. If in, get distance and other attributes 
-        from nmg_link_to_rmg_nodes_mapper table.
+
         
         '''
         def LDistanceRatio(row):
@@ -556,6 +573,13 @@ class MassWastingEroder(Component):
         # if shear_stress:
             # update shear_stress
             # gt.transfer_nmg_link_field_to_rmg_node_field('effective_stress', 'effective_stress', link_node_list)
+        
+        # update channel location and erosion rates as a function of time and shear stress
+        self.define_channel_and_terrace_nodes()
+        self.map_channel_and_terrace_nodes_to_links()
+        
+        # self._DefineErosionRates()
+        
         # erode based on time since disturbance and shear stress
         self._FluvialErosion()
         # print('fluvial erosion')
@@ -566,7 +590,6 @@ class MassWastingEroder(Component):
         # convert list of cells and volumes to a dataframe compatiable with
         # the sediment pulser utility
         self._parcelDFmaker()
-        self._parcelDFmaker_v2()
         
         # after fluvial erosion of DEM, make a copy, disturbed cells identified next 
         # iteration are any cells that changed elevation following MWR

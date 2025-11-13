@@ -10,7 +10,7 @@ from landlab.components.mass_wasting_router.landslide_mapper import LandslideMap
 from landlab.components.mass_wasting_runout import MassWastingRunout as MWRu
 from landlab.components.mass_wasting_router.mass_wasting_eroder import MassWastingEroder as MWE
 from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsMapper
-
+import landlab.utils.channel_network_grid_tools as gt
 
 class MassWastingRouter(Component):
     
@@ -246,8 +246,17 @@ class MassWastingRouter(Component):
         self.gt = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid, Ct = Ct, BCt = BCt)
 
         ## define colluvial and fluvial channel networks in the raster model grid
-        self.gt.extract_channel_nodes(Ct,BCt)        
-
+        
+        
+        # saving as a node field value because passed to mapper and eroder
+        
+        
+        # self.gt.extract_channel_nodes(Ct,BCt) 
+        channel_nodes = gt.extract_channel_nodes(self._grid, Ct)
+        fluvial_channel_nodes = gt.extract_channel_nodes(self._grid, BCt)
+        gt.define_true_elements(self._grid, 'channel_nodes', 'node', fluvial_channel_nodes)
+        terrace_nodes =  gt.extract_terrace_nodes(self._grid, terrace_width, channel_nodes, fluvial_channel_nodes)
+        gt.define_true_elements(self._grid, 'terrace_nodes', 'node', terrace_nodes)
         ## create the nmg to rmg node mapper
         self.gt.map_rmg_channel_nodes_to_nmg_nodes()
 
@@ -282,15 +291,15 @@ class MassWastingRouter(Component):
         self.DepositEroder = MWE(
                     self._grid,
                     self._nmgrid,
-                    Ct = Ct,
-                    BCt = BCt,
-                    terrace_width = terrace_width,#self._nmgrid,
+                    # fluvial_channel_nodes,
+                    # terrace_nodes,
+                    #terrace_width = terrace_width,#self._nmgrid,
                     fluvial_erosion_rate = fluvial_erosion_rate, # Fluvial erosion rate parameters
                     parcel_volume = parcel_volume, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
                     )
 
         
-        self.xyDF_t = self.DepositEroder.gti.xyDF_t
+        # self.xyDF_t = self.DepositEroder.gti.xyDF_t
         print('instantiated eroder')
 
     def _transfer_rmg_node_field_to_nmg_node_field(self):
@@ -418,10 +427,16 @@ class MassWastingRouter(Component):
         self.parcelDF_dict[self._time_idx] = self.DepositEroder.parcelDF.copy()
         self.dem_dz_dict[self._time_idx] = self.DepositEroder.dem_mw_dzdt
         
-        ## re-run d8flowdirector
-        ## (clumping and down-slope distance computations require d-8 flow direction)
+        ## re-run d8flowdirector, update contributing area for landslide-modified terrain
+        ## for channel mappiing, clumping and down-slope distance computations
         self._d8flowdirector()
         # print('reset flow directions to d8')
+        
+        # update the channel node locations
+        fluvial_channel_nodes = gt.extract_channel_nodes(self._grid, BCt)
+        gt.define_true_elements(self._grid, 'channel_nodes', 'node', fluvial_channel_nodes)
+        terrace_nodes  = gt.extract_terrace_nodes(self._grid, terrace_width, channel_nodes, fluvial_channel_node)
+        gt.define_true_elements(self._grid, 'terrace_nodes', 'node', terrace_nodes)
 
         self._time += dt  # cumulative modeling time (not time or time stamp)
         self._time_idx += 1  # update iteration index

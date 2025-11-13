@@ -472,7 +472,7 @@ class LandslideMapper(Component):
         return group
 
     
-    def _downslopecells(self,StartCell):
+    def _downslopecells(self,StartCell): # add channel_nodes as an input
         '''MWR
         compute distance between a given cell and the nearest downslope channel 
         network cell. distance is computed to POCbuffer distance from channel network
@@ -504,7 +504,7 @@ class LandslideMapper(Component):
             
             slope  = self._grid.at_node['topographic__slope'][loc[c]]
             #compute distance between deposit and all debris flow network cells
-            cdist, nc = self.gti.min_distance_to_network(loc[c],  ChType = 'debrisflow')
+            cdist, nc = self.gti.min_distance_to_network(loc[c],  ChType = 'debrisflow') # change this to gt.min_distance_to_network(self._grid, channel_nodes, loc[c])
             #TO DO need to change so that if distance to network is less than minimum, then stop
             
             
@@ -527,9 +527,6 @@ class LandslideMapper(Component):
     def _MassWastingExtent(self):
         """maps hillslope scale landslides from a raster model grid fields of
         topographic elevation and landslide factor of saftey or landslide probability
-
-
-
         """
 
         # minimum number of cells criteria
