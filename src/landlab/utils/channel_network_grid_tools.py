@@ -147,7 +147,7 @@ def extract_channel_nodes(grid, Ct):
 
 
 def define_true_elements(grid, field_name, element, elements_that_are_true):
-    """for a  model grid, creates the field "field_name"", assigns
+    """for a  model grid, creates the field "field_name, assigns
     elements elements_that_are_true as ones and all others as zero"""
     if isinstance(grid, landlab.grid.raster.RasterModelGrid):
         if element == 'node':

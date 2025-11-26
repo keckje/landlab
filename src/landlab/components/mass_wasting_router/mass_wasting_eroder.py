@@ -180,7 +180,7 @@ class MassWastingEroder(Component):
         # self.terrace_nodes = terrace_nodes #gt.self.gti.TerraceNodes
         # self.channel_nodes = channel_nodes # self.gti.ChannelNodes
         # self.channel_and_terrace_nodes = np.unique(np.concatenate((self.terrace_nodes, self.channel_nodes))) # change to channel_and_terrace_nodes
-        define_channel_and_terrace_nodes()
+        self.define_channel_and_terrace_nodes()
         
         
         # if not hasattr(gti,"xyDF"):
@@ -189,7 +189,7 @@ class MassWastingEroder(Component):
             #                         nmgx = self.nmgridx, nmgy = self.nmgridy)
             
               
-        map_channel_and_terrace_nodes_to_links(channel_and_terrace_nodes)
+        self.map_channel_and_terrace_nodes_to_links()
         # self.xyDF = gt.map_nmg_links_to_rmg_coincident_nodes(self._grid, 
         #                                           self._nmgrid, 
         #                                           gt.get_link_nodes(self._nmgrid), 
@@ -217,13 +217,13 @@ class MassWastingEroder(Component):
         self.FED = np.array([])
 
 
-    def define_channel_and_terrace_nodes():
-        self.channel_nodes = np.arange(mg.number_of_nodes)[mg.at_node['channel_nodes'].astype(bool)]    
-        self.terrace_nodes = np.arange(mg.number_of_nodes)[mg.at_node['terrace_nodes'].astype(bool)] 
+    def define_channel_and_terrace_nodes(self):
+        self.channel_nodes = np.arange(self._grid.number_of_nodes)[self._grid.at_node['channel_nodes'].astype(bool)]    
+        self.terrace_nodes = np.arange(self._grid.number_of_nodes)[self._grid.at_node['terrace_nodes'].astype(bool)] 
         self.channel_and_terrace_nodes = np.unique(np.concatenate((self.terrace_nodes, self.channel_nodes)))
         
 
-    def map_channel_and_terrace_nodes_to_links():
+    def map_channel_and_terrace_nodes_to_links(self):
         self.xyDF = gt.map_nmg_links_to_rmg_coincident_nodes(self._grid, 
                                                   self._nmgrid, 
                                                   gt.get_link_nodes(self._nmgrid), 
@@ -255,9 +255,9 @@ class MassWastingEroder(Component):
 
         # coeficients of fluvial erosion/storm as a function of time
         for i in self.rnodes:
-            if i in self.TN:#
+            if i in self.terrace_nodes:#
                 coefL.append(np.array([self.T_a, self.T_b, self.T_c]))
-            elif i in self.CN:
+            elif i in self.channel_nodes:
                 coefL.append(np.array([self.C_a, self.C_b, self.C_c]))
             else:
                 coefL.append(np.array([0, 0, 0]))
@@ -326,6 +326,9 @@ class MassWastingEroder(Component):
         
     #     self.DistNodes = self.DistNodes[disturbed_node_mask]
 
+    def _update_daily_erosion_depth(self):
+        """update the rmg channel nodes with a daily erosion depth value from the nmg"""
+        gt.transfer_nmg_link_field_to_rmg_channel_node_field(self._grid, self._nmgrid, 'daily_erosion_depth', 'daily_erosion_depth', self.cn_to_nmg_link_mapper)
 
     def _FluvialErosion(self, erosion_model = 'time'):
         '''determine pulse location based on the time since mw caused disturbance
@@ -412,7 +415,7 @@ class MassWastingEroder(Component):
                        # fr_FED = 0.001*(fr_tao)**1.2 # m # coefficient and exponent will also be parameters
 
                     
-                tn_mask = np.isin(self.FENodes,self.TN)
+                tn_mask = np.isin(self.FENodes,self.terrace_nodes)
                 fr_FED = self._grid.at_node['daily_erosion_depth'][self.FENodes] # this will be replaced by shear stress aproximation above
                 
                 # max erosion rate is FED, if less than FED, then fluvial erosion rate
@@ -514,7 +517,7 @@ class MassWastingEroder(Component):
 
         if len(self.FENodes) == 0:
             FEDn = []
-            self.parcelDF_v2 = pd.DataFrame([])
+            self.parcelDF = pd.DataFrame([])
 
         
         else:
@@ -531,7 +534,7 @@ class MassWastingEroder(Component):
             parcelDF = pd.DataFrame(Lmwlink)
             pLinkDistanceRatio = parcelDF.apply(LDistanceRatio,axis=1)
             pLinkDistanceRatio.name = 'normalized_downstream_distance'
-            self.parcelDF_v2 = pd.concat([parcelDF,pLinkDistanceRatio],axis=1)
+            self.parcelDF = pd.concat([parcelDF, pLinkDistanceRatio],axis=1)
             
 
 
@@ -579,7 +582,7 @@ class MassWastingEroder(Component):
         self.map_channel_and_terrace_nodes_to_links()
         
         # self._DefineErosionRates()
-        
+        self._update_daily_erosion_depth()
         # erode based on time since disturbance and shear stress
         self._FluvialErosion()
         # print('fluvial erosion')

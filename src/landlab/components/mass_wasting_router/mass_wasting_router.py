@@ -222,7 +222,7 @@ class MassWastingRouter(Component):
         ### Channel extraction parameters
         self.Ct = Ct # Channel initiation threshold [m2]   
         self.BCt = BCt # CA threshold for channels that typically transport bedload [m2] 
-
+        self.terrace_width = terrace_width
         ### prep time
         self._time_idx = 0 # index
         self._time = 0.0 # duration of model run (hours, excludes time between time steps)
@@ -238,12 +238,13 @@ class MassWastingRouter(Component):
         self.FED_all = {} # all fluvial erosion depths
         self.FENodes_all = {} # all fluvial erosion nodes
         self.parcelDF_dict = {} #  parcels dataframe, created from aggregated fluvial erosion nodes
+        self.channel_nodes_dict = {}
         ### initial values
         self._grid.at_node['mass__wasting_events'] = np.zeros(self.nodes.shape[0]).astype(int)
         self._grid.at_node['mass__wasting_volumes'] = np.zeros(self.nodes.shape[0])
       
         # instantiate channel network grid tools
-        self.gt = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid, Ct = Ct, BCt = BCt)
+        # self.gt = ChannelNetworkToolsMapper(grid = grid, nmgrid = self._nmgrid, Ct = Ct, BCt = BCt)
 
         ## define colluvial and fluvial channel networks in the raster model grid
         
@@ -251,19 +252,21 @@ class MassWastingRouter(Component):
         # saving as a node field value because passed to mapper and eroder
         
         
-        # self.gt.extract_channel_nodes(Ct,BCt) 
-        channel_nodes = gt.extract_channel_nodes(self._grid, Ct)
-        fluvial_channel_nodes = gt.extract_channel_nodes(self._grid, BCt)
-        gt.define_true_elements(self._grid, 'channel_nodes', 'node', fluvial_channel_nodes)
-        terrace_nodes =  gt.extract_terrace_nodes(self._grid, terrace_width, channel_nodes, fluvial_channel_nodes)
-        gt.define_true_elements(self._grid, 'terrace_nodes', 'node', terrace_nodes)
+        # define the initial channel and terrace location
+        self.all_channel_nodes = gt.extract_channel_nodes(self._grid, self.Ct)
+        self.fluvial_channel_nodes = gt.extract_channel_nodes(self._grid, self.BCt)
+        gt.define_true_elements(self._grid, 'channel_nodes', 'node', self.fluvial_channel_nodes)
+        self.terrace_nodes =  gt.extract_terrace_nodes(self._grid, self.terrace_width, self.all_channel_nodes, self.fluvial_channel_nodes)
+        gt.define_true_elements(self._grid, 'terrace_nodes', 'node', self.terrace_nodes)
         ## create the nmg to rmg node mapper
-        self.gt.map_rmg_channel_nodes_to_nmg_nodes()
-
+        # self.gt.map_rmg_channel_nodes_to_nmg_nodes()
+        self.nmg_node_to_cn_mapper = gt.map_rmg_channel_nodes_to_nmg_nodes(self._grid, self._nmgrid, self.fluvial_channel_nodes)
         # define nmg node elevation based on rmg channel nodes...this is only needed 
         # during run one step, move to run_one_step, slope is then recomputed in 
         # NST's run_one_step
-        self.gt.transfer_rmg_channel_node_field_to_nmg_node_field()
+        # self.gt.transfer_rmg_channel_node_field_to_nmg_node_field()
+        gt.transfer_rmg_channel_node_field_to_nmg_node_field(self._grid, self._nmgrid, self.nmg_node_to_cn_mapper, field = 'topographic__elevation')
+        
 
         ### class instance of LandslideMapper      
         self.Landslides = LM(self._grid,
@@ -291,9 +294,6 @@ class MassWastingRouter(Component):
         self.DepositEroder = MWE(
                     self._grid,
                     self._nmgrid,
-                    # fluvial_channel_nodes,
-                    # terrace_nodes,
-                    #terrace_width = terrace_width,#self._nmgrid,
                     fluvial_erosion_rate = fluvial_erosion_rate, # Fluvial erosion rate parameters
                     parcel_volume = parcel_volume, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
                     )
@@ -308,6 +308,7 @@ class MassWastingRouter(Component):
         updates the link slopes based on the updated nmg node elevations
         move to channel_network_grid_tools?
 
+        this is now a CNGT function, can delete
         Returns
         -------
         None.
@@ -315,7 +316,7 @@ class MassWastingRouter(Component):
 
         # update elevation
         for i, node in enumerate(self.nmg_nodes):
-            RMG_node = self.gt.NMGtoRMGnodeMapper[i]
+            RMG_node = self.nmg_node_to_cn_mapper[i] # self.gt.NMGtoRMGnodeMapper[i]
             self._nmgrid.at_node['topographic__elevation'][i] = self._grid.at_node['topographic__elevation'][RMG_node]
 
         # update slope # may need to turn off because this can lead to negative slope, which throws off NST and flow_resistance_RR in DHG
@@ -409,7 +410,7 @@ class MassWastingRouter(Component):
             self.StormDEM_dict[self._time_idx] = self.DebrisFlows._grid.at_node['topographic__elevation'].copy()  # copy of DEM before fluvial erosion              
             # print('scour and deposition')
        
-            ## update NMG node elevation
+            ## update NMG node elevation # this may need to be turned off if it causes too low of slopes
             self._transfer_rmg_node_field_to_nmg_node_field()
             # print('updated NMG node elevation')
                
@@ -426,17 +427,21 @@ class MassWastingRouter(Component):
         self.FENodes_all[self._time_idx] = self.DepositEroder.FENodes
         self.parcelDF_dict[self._time_idx] = self.DepositEroder.parcelDF.copy()
         self.dem_dz_dict[self._time_idx] = self.DepositEroder.dem_mw_dzdt
+        self.channel_nodes_dict[self._time_idx] = {'acn':self.all_channel_nodes,
+                                                   'fcn':self.fluvial_channel_nodes,
+                                                   'tn':self.terrace_nodes}
         
         ## re-run d8flowdirector, update contributing area for landslide-modified terrain
         ## for channel mappiing, clumping and down-slope distance computations
         self._d8flowdirector()
         # print('reset flow directions to d8')
         
-        # update the channel node locations
-        fluvial_channel_nodes = gt.extract_channel_nodes(self._grid, BCt)
-        gt.define_true_elements(self._grid, 'channel_nodes', 'node', fluvial_channel_nodes)
-        terrace_nodes  = gt.extract_terrace_nodes(self._grid, terrace_width, channel_nodes, fluvial_channel_node)
-        gt.define_true_elements(self._grid, 'terrace_nodes', 'node', terrace_nodes)
+        # update the channel and terrace node locations
+        self.all_channel_nodes = gt.extract_channel_nodes(self._grid, self.Ct)
+        self.fluvial_channel_nodes = gt.extract_channel_nodes(self._grid, self.BCt)
+        gt.define_true_elements(self._grid, 'channel_nodes', 'node', self.fluvial_channel_nodes)
+        self.terrace_nodes  = gt.extract_terrace_nodes(self._grid, self.terrace_width, self.all_channel_nodes, self.fluvial_channel_nodes)
+        gt.define_true_elements(self._grid, 'terrace_nodes', 'node', self.terrace_nodes)
 
         self._time += dt  # cumulative modeling time (not time or time stamp)
         self._time_idx += 1  # update iteration index
