@@ -1053,8 +1053,8 @@ class DistributedHydrologyGenerator(Component):
         dtw_field = (np.ones(self._grid.at_node['soil__thickness'].shape[0])*np.nan).astype(float)
         dtw_field[self._grid.core_nodes] = dtw
         
-        self._grid.add_field('node', 'saturated__thickness', st_field, clobber = True)
-        self._grid.add_field('node', 'depth__to_water_table', dtw_field, clobber = True)
+        self._grid.add_field('saturated__thickness', st_field, at = 'node', clobber = True)
+        self._grid.add_field('depth__to_water_table', dtw_field, at = 'node', clobber = True)
 
 
     
@@ -1068,7 +1068,7 @@ class DistributedHydrologyGenerator(Component):
             # event return interval cdf of flow rates to get flow
             self.Q_i = self.intp(self.Q_Fx, self.Q_x1, self.q_i, message = None)
             
-            # cdf of flow rate in terms of annual return interval
+            # get annual RI from cdf of flow rate in terms of annual return interval
             self.Q_ri = self.intp(self.Q_Fx, self.Q_Ty, self.q_i, message = None)
                             
             ## GET FLOW RATES
@@ -1114,8 +1114,17 @@ class DistributedHydrologyGenerator(Component):
                     self.get_depth_to_water_table_at_node(self.q_yrs_i)
             
             else:
-
-                    self.q_yrs_i = 1-1/self.Q_ri                
+                    # convert annual return period of flow to a quantile value
+                    # saturated thickness is annual maximum series rather
+                    # than partial duration series like flow. 
+                    # if annual return interval of flow < ~1, then set quantile
+                    # value to 0.01 (~1 year saturated thickness event)
+                    if self.Q_ri < 1.0111:
+                        self.q_yrs_i = 0.01
+                    # else, convert using annual return period to quantile formula
+                    # see Maidment ch. 17
+                    else:
+                        self.q_yrs_i = 1-1/self.Q_ri  # 1-1/Ty#               
                     self.get_depth_to_water_table_at_node(self.q_yrs_i)
             
             

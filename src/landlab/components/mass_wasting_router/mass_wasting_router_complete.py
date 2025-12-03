@@ -127,19 +127,47 @@ class MassWastingRouter(Component):
             self,
             grid,
             nmgrid,
-            Ct = 5000,
-            BCt = 100000, 
-            MW_to_channel_threshold = 50, # landslide mapping
+            parcels,
+            channel_threshold = 5000,
+            alluvial_channel_threshold = 100000, 
             terrace_width = 1,
-            mass_wasting_threshold = 0.75, 
-            min_mw_cells = 1,
-            mw_dict = {'critical_slope':[0.1], 
+            # rewrite this to take instantiated componenets
+            dist_hydro_gen_dict = {'external_hydrology_model_nmg':nmg_ex,
+                                   'flow_at_links':flow_at_links,
+                                   'depth_to_watertable_maps':depth_to_watertable_maps,
+                                   'depth_to_watertable_map_dates':depth_to_watertable_map_dates,
+                                   'storm_generator_method':method,
+                                   'begin_year':begin_year,
+                                   'end_year':end_year,
+                                   'landslide_storm_threshold_RI',landslide_storm_threshold_RI
+                                   'hydraulic_geometry_dict', hydraulic_geometry_dict
+                                   },
+            
+            network_sediment_transporter_dict = {'bed_porosity': bed_porosity,
+                                                 'transport_method':transport_method,
+                                                 'active_layer_method':active_layer_method
+                                                 },
+            
+            landslide_probability_dict = {'number_of_iterations':number_of_iterations,
+                                          'saturated__thickness_distribution':saturated__thickness_distribution
+                                          },
+            
+            landslide_mapper_dict = {'MW_to_channel_threshold': 50,
+                            'mass_wasting_threshold': 0.75,
+                            'min_mw_cells' = 1
+                            },
+            
+            mass_wasting_runout_dict = {'critical_slope':[0.1], 
                        'threshold_flux':0.03,
-                       'erosion_coefficient':0.02},
-            fluvial_erosion_rate = [[0.03,-0.43], [0.01,-0.43]], # mass wasting eroder
-
-            parcel_volume = 0.2, # minimum parcel depth, parcels smaller than this are aggregated into larger parcels
+                       'erosion_coefficient':0.02
+                       },
+            
+            mass_waster_eroder_dict = {'fluvial_erosion_rate': [[0.03,-0.43], [0.01,-0.43]],
+                                       'parcel_volume' = 0.2
+                                       },
             **kwds):
+        
+        
 
         """
 
@@ -154,16 +182,22 @@ class MassWastingRouter(Component):
         BCt: float
             Contributing area threshold at which cascade channels begin, which is 
             assumed to be the upper limit of frequent bedload transport
+        terrace_width: int
+            Width of terrace that boarders the fullvial channel network [cells]
             
-        LANDSLIDE MAPPER
+        
+        DistributedHydrologyGenerator    
+        
+        LandslideProbability
+            
+        LandslideMapper 
         
         MW_to_channel_threshold: float
             Threshold distance between downslope end of landslide and channel.
             Landslides within this distance of the channel area assumed to extend
             to the channel (rather than fail and runout over the downslope regolith)
             [m]
-        terrace_width: int
-            Width of terrace that boarders the fullvial channel network [cells]
+
         mass_wasting_threshold: float
             Threshold value of mass_wasting metric above which, the cell is assumed
             to fail.
@@ -172,7 +206,7 @@ class MassWastingRouter(Component):
             considered a landslide
         
         
-        MASS WASTING RUNOUT
+        MassWastingRunout
         
         mw_dict : dictionary of key word arguements and values for MassWastingRunout
                     
@@ -192,6 +226,7 @@ class MassWastingRouter(Component):
 
         super().__init__(grid)
 
+        print("CCCCCCOOOOOOOOOMMMMMMMMPPPPPPPLLLLLLLLEEEEEEETTTTTTTEEEEEEEEEE")
         if 'topographic__elevation' in grid.at_node:  # redundant
             self.dem = grid.at_node['topographic__elevation']
         else:
