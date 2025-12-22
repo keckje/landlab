@@ -527,7 +527,21 @@ def create_df_of_link_points(nmgrid, nodes_at_link, number_of_points):
         link_ = np.concatenate((link_,(np.ones(len(X))*linkID).astype(int)))
         
     return pd.DataFrame(data = zip(link_, X_ ,Y_), columns = ['linkID','X','Y'])
-  
+
+    
+
+def convert_links_to_LineString(nmgrid, nodes_at_link):
+    """ function for converting links to a list of line strings, attempted to 
+    use line strings to find closest link to each link, but Shapely distance
+    function uses the minimum distance, not the mean."""
+    link_lines = []
+    for linkID, lknd in enumerate(nodes_at_link):
+        x0 = nmgrid.x_of_node[lknd[0]]  # x and y of downstream link node
+        y0 = nmgrid.y_of_node[lknd[0]]
+        x1 = nmgrid.x_of_node[lknd[1]]  # x and y of upstream link node
+        y1 = nmgrid.y_of_node[lknd[1]]
+        link_lines.append(LineString([(x0,y0), (x1,y1)]))
+    return link_lines
         
 
 # def map_nmg1_links_to_nmg2_links(nmgrid_1, nmgrid_2, number_of_points = 11):
@@ -599,6 +613,9 @@ def create_df_of_link_points(nmgrid, nodes_at_link, number_of_points):
 #         link_mapper[linkID] = Link
         
 #     return link_mapper
+
+
+
 
 
 
