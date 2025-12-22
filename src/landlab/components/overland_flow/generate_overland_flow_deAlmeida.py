@@ -88,9 +88,13 @@ array([0. , 0. , 0. , 0. ,
 
 import numpy as np
 import scipy.constants
+from numpy.typing import NDArray
 
 from landlab import Component
+from landlab.components.overland_flow._calc import adjust_supercritical_discharge
+from landlab.components.overland_flow._calc import calc_bates_flow_height
 from landlab.components.overland_flow._calc import calc_grad_at_link
+from landlab.components.overland_flow._calc import calc_weighted_mean_of_parallel_links
 from landlab.components.overland_flow._calc import zero_out_dry_links
 from landlab.components.overland_flow._links import active_link_ids
 from landlab.components.overland_flow._links import horizontal_active_link_ids
@@ -106,8 +110,14 @@ from landlab.components.overland_flow._links import vertical_south_link_neighbor
 from landlab.core._validate import require_between
 from landlab.core._validate import require_nonnegative
 from landlab.core._validate import require_positive
+from landlab.core.errors import Error
+from landlab.grid.linkstatus import LinkStatus
 
 _SEVEN_OVER_THREE = 7.0 / 3.0
+
+
+class NoWaterError(Error):
+    pass
 
 
 def _active_links_at_node(grid, *args):
@@ -356,13 +366,59 @@ class OverlandFlow(Component):
         """Calculate time step.
 
         Adaptive time stepper from Bates et al., 2010 and de Almeida et
-        al., 2012
+        al., 2012.
+
+        Returns
+        -------
+        time_step : float
+            A stable time step for the current landscape.
+
+        Raises
+        ------
+        NoWaterError
+            If there is no water on active nodes (i.e., the maximum water depth is
+            zero), this exception is raised to indicate that a time step cannot be
+            determined.
         """
+        active_nodes = self._update_active_nodes()
+
+        h: NDArray = self.grid.at_node["surface_water__depth"][active_nodes]
+        if h.size == 0:
+            raise NoWaterError("no active links, unable to determine time step")
+
+        max_water_depth: float = np.max(h)
+        if max_water_depth <= 0.0:
+            raise NoWaterError("no water on landscape, unable to determine time step")
+
         return (
             self._alpha
-            * self._grid.dx
-            / np.sqrt(self._g * np.amax(self._grid.at_node["surface_water__depth"]))
+            * min(self._grid.dx, self._grid.dy)
+            / np.sqrt(self._g * max_water_depth)
         )
+
+    def _update_active_nodes(self, *, clear_cache: bool = False) -> NDArray[np.bool_]:
+        """Compute and optionally re-compute the active-node mask.
+
+        Parameters
+        ----------
+        clear_cache : bool, optional
+            If ``True`` clear any cached value and recompute the active
+            node mask.
+
+        Returns
+        -------
+        active_nodes : ndarray of bool, size (n_nodes,)
+            The active nodes.
+        """
+        if clear_cache:
+            self._cached_is_active_node = None
+
+        if getattr(self, "_cached_is_active_node", None) is None:
+            self._cached_is_active_node: NDArray[np.bool_] = np.any(
+                self.grid.link_status_at_node == LinkStatus.ACTIVE, axis=1
+            )
+
+        return self._cached_is_active_node
 
     def set_up_neighbor_arrays(self):
         """Create and initialize link neighbor arrays.
@@ -453,14 +509,29 @@ class OverlandFlow(Component):
 
         Outputs water depth, discharge and shear stress values through time at
         every point in the input grid.
-        """
-        # DH adds a loop to enable an imposed tstep while maintaining stability
-        local_elapsed_time = 0.0
-        if dt is None:
-            dt = np.inf  # to allow the loop to begin
 
-        if not self._neighbor_flag:
-            self.set_up_neighbor_arrays()
+        Parameters
+        ----------
+        dt : float, optional
+            The duration over which to simulate overland flow. If not provided,
+            the duration will be chosen to be the maximum time step that
+            ensures stability.
+
+        Returns
+        -------
+        elapsed : float
+            The elapsed time that was simulated.
+        """
+        if dt is None:
+            try:
+                duration = self.calc_time_step()
+            except NoWaterError as error:
+                raise ValueError(
+                    "no water on landscape and dt not provided,"
+                    " unable to determine time step"
+                ) from error
+        else:
+            duration = dt
 
         if isinstance(self._mannings_n, str):
             mannings_at_link = self.grid.at_link[self._mannings_n]
@@ -471,34 +542,39 @@ class OverlandFlow(Component):
         q_at_link = self._grid.at_link["surface_water__discharge"]
         h_at_link = self._h_links
         water_surface_slope = self._grid.at_link["water_surface__gradient"]
+        q_mean_at_link = self.grid.empty(at="link")
 
         core_nodes = self._grid.core_nodes
         active_links = self._grid.active_links
 
-        while local_elapsed_time < dt:
-            dt_local = self.calc_time_step()
-            # Can really get into trouble if nothing happens but we still run:
-            if not dt_local < np.inf:
+        elapsed = 0.0
+        while elapsed < duration:
+            remaining = duration - elapsed
+            try:
+                dt_local = min(self.calc_time_step(), remaining)
+            except NoWaterError:
+                elapsed = duration
                 break
-            if local_elapsed_time + dt_local > dt:
-                dt_local = dt - local_elapsed_time
+
+            elapsed += dt_local
 
             # Per Bates et al., 2010, this solution needs to find difference
             # between the highest water surface in the two cells and the
             # highest bed elevation
-            zmax = self._grid.map_max_of_link_nodes_to_link(z_at_node)
-            w = h_at_node + z_at_node
-            wmax = self._grid.map_max_of_link_nodes_to_link(w)
-            hflow = wmax[active_links] - zmax[active_links]
+            h_at_link = calc_bates_flow_height(
+                z_at_node,
+                h_at_node,
+                nodes_at_link=self.grid.nodes_at_link,
+                where=active_links,
+                out=h_at_link,
+            )
 
-            # Insert this water depth into an array of water depths at the
-            # links.
-            h_at_link[active_links] = hflow
+            h_at_link = np.clip(h_at_link, self._h_init, None, out=h_at_link)
 
             # Now we calculate the slope of the water surface elevation at
             # active links
             water_surface_slope = calc_grad_at_link(
-                w,
+                h_at_node + z_at_node,
                 length_of_link=self.grid.length_of_link,
                 nodes_at_link=self.grid.nodes_at_link,
                 where=active_links,
@@ -515,14 +591,20 @@ class OverlandFlow(Component):
             # units of L^2/T) to the end of the discharge array.
             q_at_link = np.append(q_at_link, [0])
 
+            q_mean_at_link.fill(0.0)
+            q_mean_at_link = calc_weighted_mean_of_parallel_links(
+                q_at_link,
+                parallel_links_at_link=self.grid.parallel_links_at_link,
+                status_at_link=self.grid.status_at_link,
+                theta=self._theta,
+                where=self._grid.active_links,
+                out=q_mean_at_link,
+            )
             horiz = self._grid.horizontal_links
             vert = self._grid.vertical_links
             # Now we calculate discharge in the horizontal direction
             q_at_link[horiz] = (
-                self._theta * q_at_link[horiz]
-                + (1.0 - self._theta)
-                / 2.0
-                * (q_at_link[self._west_neighbors] + q_at_link[self._east_neighbors])
+                q_mean_at_link[horiz]
                 - self._g * h_at_link[horiz] * dt_local * water_surface_slope[horiz]
             ) / (
                 1
@@ -535,10 +617,7 @@ class OverlandFlow(Component):
 
             # ... and in the vertical direction
             q_at_link[vert] = (
-                self._theta * q_at_link[vert]
-                + (1 - self._theta)
-                / 2.0
-                * (q_at_link[self._north_neighbors] + q_at_link[self._south_neighbors])
+                q_mean_at_link[vert]
                 - self._g * h_at_link[vert] * dt_local * water_surface_slope[vert]
             ) / (
                 1
@@ -556,12 +635,8 @@ class OverlandFlow(Component):
 
             if self._steep_slopes is True:
                 # To prevent water from draining too fast for our time steps...
-                # Our Froude number.
-                Fr = 1.0
                 # Our two limiting factors, the froude number and courant
                 # number.
-                # Looking a calculated q to be compared to our Fr number.
-                calculated_q = (q_at_link / h_at_link) / np.sqrt(self._g * h_at_link)
 
                 # Looking at our calculated q and comparing it to Courant no.,
                 q_courant = q_at_link * dt_local / self._grid.dx
@@ -575,12 +650,6 @@ class OverlandFlow(Component):
                 # ... and negative.
                 (negative_q,) = np.where(q_at_link < 0)
 
-                # Where does our calculated q exceed the Froude number? If q
-                # does exceed the Froude number, we are getting supercritical
-                # flow and discharge needs to be reduced to maintain stability.
-                (Froude_logical,) = np.where((calculated_q) > Fr)
-                (Froude_abs_logical,) = np.where(abs(calculated_q) > Fr)
-
                 # Where does our calculated q exceed the Courant number and
                 # water depth divided amongst 4 links? If the calculated q
                 # exceeds the Courant number and is greater than the water
@@ -592,21 +661,20 @@ class OverlandFlow(Component):
                 # Where are these conditions met? For positive and negative q,
                 # there are specific rules to reduce q. This step finds where
                 # the discharge values are positive or negative and where
-                # discharge exceeds the Froude or Courant number.
-                self._if_statement_1 = np.intersect1d(positive_q, Froude_logical)
-                self._if_statement_2 = np.intersect1d(negative_q, Froude_abs_logical)
+                # discharge exceeds the Courant number.
                 self._if_statement_3 = np.intersect1d(positive_q, water_logical)
                 self._if_statement_4 = np.intersect1d(negative_q, water_abs_logical)
 
-                # Rules 1 and 2 reduce discharge by the Froude number.
-                q_at_link[self._if_statement_1] = h_at_link[self._if_statement_1] * (
-                    np.sqrt(self._g * h_at_link[self._if_statement_1]) * Fr
-                )
-
-                q_at_link[self._if_statement_2] = 0.0 - (
-                    h_at_link[self._if_statement_2]
-                    * np.sqrt(self._g * h_at_link[self._if_statement_2])
-                    * Fr
+                # Where does our calculated q exceed the Froude number? If q
+                # does exceed the Froude number, we are getting supercritical
+                # flow and discharge needs to be reduced to maintain stability.
+                q_at_link = adjust_supercritical_discharge(
+                    q_at_link,
+                    h_at_link,
+                    g=self._g,
+                    froude=1.0,
+                    where=active_links,
+                    out=q_at_link,
                 )
 
                 # Rules 3 and 4 reduce discharge by the Courant number.
@@ -663,9 +731,7 @@ class OverlandFlow(Component):
             # artifically reduced due to boundary effects. This step removes
             # those errors.
 
-            if dt is np.inf:
-                break
-            local_elapsed_time += dt_local
+        return elapsed
 
     def run_one_step(self, dt=None):
         """Generate overland flow across a grid.
@@ -678,8 +744,20 @@ class OverlandFlow(Component):
 
         Outputs water depth, discharge and shear stress values through time at
         every point in the input grid.
+
+        Parameters
+        ----------
+        dt : float, optional
+            The duration over which to simulate overland flow. If not provided,
+            the duration will be chosen to be the maximum time step that
+            ensures stability.
+
+        Returns
+        -------
+        elapsed : float
+            The elapsed time that was simulated.
         """
-        self.overland_flow(dt=dt)
+        return self.overland_flow(dt=dt)
 
     def discharge_mapper(self, input_discharge, convert_to_volume=False):
         """Maps discharge value from links onto nodes.
