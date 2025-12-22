@@ -157,9 +157,7 @@ def define_true_elements(grid, field_name, element, elements_that_are_true):
             grid.at_link[field_name] = np.zeros(grid.number_of_links).astype(int)
             grid.at_link[field_name][elements_that_are_true] = 1
     
-    
-    
-
+        
 def extract_terrace_nodes(grid, terrace_width, acn, fcn):
     """Determine which raster model grid nodes coincide with channel terraces,
     which presently are assumed to be a fixed width (number of nodes) from
