@@ -16,6 +16,8 @@ from numpy.typing import ArrayLike
 from numpy.typing import NDArray
 from scipy.spatial.distance import cdist
 import landlab
+import warnings
+import matplotlib.pyplot as plt
 
 from landlab.components.flow_director.flow_director_steepest import FlowDirectorSteepest
 
@@ -612,19 +614,109 @@ def convert_links_to_LineString(nmgrid, nodes_at_link):
         
 #     return link_mapper
 
-
-
-
-
-
-# possible alternative that may be quicker, using scipy function below
-def map_nmg1_links_to_nmg2_links(nmgrid_1, nmgrid_2, number_of_points = 11):
-    """given two slighly different network model grids of the same channel network,
-    map links from one network model grid (nmgrid_1) to the closest links of the
-    other network model grid (nmgrid_2). If two or more links of nmgrid_2 are equally 
-    close to a link of nmgrid_1, the link with the largest drainage area is mapped 
-    to the nmgrid_1 link. 
+def plot_nmgrids(nmgrid_1, nmgrid_2):
+    """compare links and link ids of two network model grids in a plot"""
+    def plot_nmgrid(nmgrid, line_color, alpha, fontsize, label):
+        xnode = nmgrid.x_of_node; xlink = nmgrid.midpoint_of_link[:,0]
+        ynode = nmgrid.y_of_node; ylink = nmgrid.midpoint_of_link[:,1]
+        for link,val in enumerate(nmgrid.nodes_at_link):
+            xv = xnode[val]; yv = ynode[val]         
+            if link == 0:
+                plt.plot(xv,yv, color = line_color, alpha = alpha, label=label)
+            else:
+                plt.plot(xv,yv, color = line_color, alpha = alpha, label =  '_nolegend_')
+            plt.text(xlink[link], ylink[link], str(link), size=fontsize, color=line_color, alpha = alpha)
     
+    plt.figure(figsize=(5,5))
+    plot_nmgrid(nmgrid_1, line_color = 'red',alpha =1,fontsize = 12,label='nmgrid_1')
+    plot_nmgrid(nmgrid_2, line_color = 'green',alpha = 0.37,fontsize = 20,label ='nmgrid_2')
+    plt.xlabel('x'); plt.ylabel('y')
+    plt.legend()
+    plt.show()
+
+
+
+
+
+# # possible alternative that may be quicker, using scipy function below
+# def map_nmg1_links_to_nmg2_links(nmgrid_1, nmgrid_2, number_of_points = 11):
+#     """given two slighly different network model grids of the same channel network,
+#     map links from one network model grid (nmgrid_1) to the closest links of the
+#     other network model grid (nmgrid_2). If two or more links of nmgrid_2 are equally 
+#     close to a link of nmgrid_1, the link with the largest drainage area is mapped 
+#     to the nmgrid_1 link. 
+    
+
+#     Parameters
+#     ----------
+#     nmgrid_1 : network model grid
+#         grid that values will be mapped to
+#     nmgrid_2 : network model grid
+#         grid that values will be mapped from
+#     number_of_points : int
+#         Each link is converted to a series of number_of_point points. The relative
+#         distance of each link to the other is determined using the points.
+#         The default is 11. Below 11, output may not match expected.
+
+#     Returns
+#     -------
+#     link_mapper : dict
+#         Keys are the id of all links in nmgrid_1. Values are the link IDs of nmgrid_2
+#         that are mapped to each nmgrid_1 link.
+#     """    
+    
+
+#     def distance_between_links(row, XY):
+#         return _dist_func(row['X'], XY[0], row['Y'], XY[1])# ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5
+    
+#     # convert the network model grid to a point representation, as described by
+#     # the link ID, x and y value of each point 
+#     nmgrid_1_link_points = create_df_of_link_points(nmgrid_1, nmgrid_1.nodes_at_link, number_of_points)
+#     nmg1_linkIDs = nmgrid_1_link_points['linkID'].astype(int).values
+    
+#     nmgrid_2_link_points = create_df_of_link_points(nmgrid_2, nmgrid_2.nodes_at_link, number_of_points)
+#     nmg2_linkIDs = nmgrid_2_link_points['linkID'].astype(int).values
+#     # for each point of each link of nmgrid_1, find the closest nmgrid_2 point
+#     # and link. nmgrid_2 link with highest number of points closest to the 
+#     # nmgrid_1 link is mapped to the nmgrid_1 link.
+
+#     sublist1 = nmgrid_1_link_points[['X','Y']] # get points that represent nmgrid_1
+#     sublist2 = nmgrid_2_link_points[['X','Y']] # get points that represent nmgrid_2
+#     distance_matrix = cdist(sublist1, sublist2, metric='euclidean') # create the distance matrix, which lists the distance between all nmgrid_1 and nmgrid_2 points
+#     distance_matrix_nodiag = distance_matrix # fill the diagonal values with inf
+#     np.fill_diagonal(distance_matrix_nodiag, np.inf)
+#     closest_point_indices = np.argmin(distance_matrix_nodiag, axis=1) # find the minimum values
+#     linkID_array = np.tile(nmg2_linkIDs, (len(nmg1_linkIDs),1)) # create a matrix of the nmg 2 link ids
+#     nmg2_link_matrix = linkID_array [np.arange(len(nmg1_linkIDs)), closest_point_indices] # get the link id of the closest node
+    
+
+#     # now count the number of times each nmgrid_2 point was closest to nmgrid_1 link
+#     link_mapper ={}
+#     for linkID_1 in nmg1_linkIDs:
+#         linkIDs_2 = nmg2_link_matrix[nmg1_linkIDs == linkID_1]
+#         count =  np.bincount(linkIDs_2) 
+#         # nmgrid_2 link with highest count is matched to nmg1 link 
+#         # if only one nmgrid_2 link has highest count, that is the link
+#         if (count == count.max()).sum() == 1: 
+#             linkID_2 = np.argmax(count) 
+#         else: # if two or more nmgrid_2 links have the hightest count, select the 
+#             # one that drains the largest area 
+#             links_with_same_count = np.arange(len(count))[count == count.max()]
+#             DAs_ =nmgrid_2.at_link['drainage_area'][links_with_same_count]
+#             linkID_2 = links_with_same_count[DAs_ == DAs_.max()][0] # to remove bracket
+#         link_mapper[linkID_1] = linkID_2
+        
+#     return link_mapper
+
+
+
+def map_nmg1_links_to_nmg2_links(nmgrid_1, nmgrid_2, number_of_points=11, plot_grids = False):
+    """given two slightly different network model grids of the same channel network,
+    map each link from one network model grid (nmgrid_1) to the closest (based on
+    the mean distance between links) link of the other network model grid (nmgrid_2). 
+    If two or more links of nmgrid_2 are equally close to a link of nmgrid_1, the 
+    link with the largest drainage area is mapped to the nmgrid_1 link
+
 
     Parameters
     ----------
@@ -634,59 +726,78 @@ def map_nmg1_links_to_nmg2_links(nmgrid_1, nmgrid_2, number_of_points = 11):
         grid that values will be mapped from
     number_of_points : int
         Each link is converted to a series of number_of_point points. The relative
-        distance of each link to the other is determined using the points.
-        The default is 11. Below 11, output may not match expected.
+        distance of each link to the other is determined using these points.
+        The default is 11. Below 11, mapping may not match expected.
 
     Returns
     -------
     link_mapper : dict
         Keys are the id of all links in nmgrid_1. Values are the link IDs of nmgrid_2
         that are mapped to each nmgrid_1 link.
-    """    
+        
+        
+    WARNING: In some situations this function may not map as expected. Set plot_grids
+    to True and inspect results to check
+    """
+    warnings.warn("In some situations this function may not map as expected. Set plot_grids to True and inspect results to check")
     
-
     def distance_between_links(row, XY):
-        return _dist_func(row['X'], XY[0], row['Y'], XY[1])# ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5
-    
+        return _dist_func(
+            row["X"], XY[0], row["Y"], XY[1]
+        )  # ((row['x']-XY[0])**2+(row['y']-XY[1])**2)**.5
+
     # convert the network model grid to a point representation, as described by
-    # the link ID, x and y value of each point 
-    nmgrid_1_link_points = create_df_of_link_points(nmgrid_1, nmgrid_1.nodes_at_link, number_of_points)
-    nmg1_linkIDs = nmgrid_1_link_points['linkID'].astype(int).values
-    
-    nmgrid_2_link_points = create_df_of_link_points(nmgrid_2, nmgrid_2.nodes_at_link, number_of_points)
-    nmg2_linkIDs = nmgrid_2_link_points['linkID'].astype(int).values
+    # the link ID, x and y value of each point
+    nmgrid_1_link_points = create_df_of_link_points(
+        nmgrid_1, nmgrid_1.nodes_at_link, number_of_points
+    )
+    nmg1_linkIDs = nmgrid_1_link_points["linkID"].astype(int).values
+
+    nmgrid_2_link_points = create_df_of_link_points(
+        nmgrid_2, nmgrid_2.nodes_at_link, number_of_points
+    )
+    nmg2_linkIDs = nmgrid_2_link_points["linkID"].astype(int).values
     # for each point of each link of nmgrid_1, find the closest nmgrid_2 point
-    # and link. nmgrid_2 link with highest number of points closest to the 
+    # and link. nmgrid_2 link with highest number of points closest to the
     # nmgrid_1 link is mapped to the nmgrid_1 link.
 
-    sublist1 = nmgrid_1_link_points[['X','Y']] # get points that represent nmgrid_1
-    sublist2 = nmgrid_2_link_points[['X','Y']] # get points that represent nmgrid_2
-    distance_matrix = cdist(sublist1, sublist2, metric='euclidean') # create the distance matrix, which lists the distance between all nmgrid_1 and nmgrid_2 points
-    distance_matrix_nodiag = distance_matrix # fill the diagonal values with inf
+    sublist1 = nmgrid_1_link_points[["X", "Y"]]  # get points that represent nmgrid_1
+    sublist2 = nmgrid_2_link_points[["X", "Y"]]  # get points that represent nmgrid_2
+    distance_matrix = cdist(
+        sublist1, sublist2, metric="euclidean"
+    )  # create the distance matrix, which lists the distance between all nmgrid_1 and nmgrid_2 points
+    distance_matrix_nodiag = distance_matrix  # fill the diagonal values with inf
     np.fill_diagonal(distance_matrix_nodiag, np.inf)
-    closest_point_indices = np.argmin(distance_matrix_nodiag, axis=1) # find the minimum values
-    linkID_array = np.tile(nmg2_linkIDs, (len(nmg1_linkIDs),1)) # create a matrix of the nmg 2 link ids
-    nmg2_link_matrix = linkID_array [np.arange(len(nmg1_linkIDs)), closest_point_indices] # get the link id of the closest node
-    
+    closest_point_indices = np.argmin(
+        distance_matrix_nodiag, axis=1
+    )  # find the minimum values
+    linkID_array = np.tile(
+        nmg2_linkIDs, (len(nmg1_linkIDs), 1)
+    )  # create a matrix of the nmg 2 link ids
+    nmg2_link_matrix = linkID_array[
+        np.arange(len(nmg1_linkIDs)), closest_point_indices
+    ]  # get the link id of the closest node
 
     # now count the number of times each nmgrid_2 point was closest to nmgrid_1 link
-    link_mapper ={}
+    link_mapper = {}
     for linkID_1 in nmg1_linkIDs:
         linkIDs_2 = nmg2_link_matrix[nmg1_linkIDs == linkID_1]
-        count =  np.bincount(linkIDs_2) 
-        # nmgrid_2 link with highest count is matched to nmg1 link 
+        count = np.bincount(linkIDs_2)
+        # nmgrid_2 link with highest count is matched to nmgrid_1 link
         # if only one nmgrid_2 link has highest count, that is the link
-        if (count == count.max()).sum() == 1: 
-            linkID_2 = np.argmax(count) 
-        else: # if two or more nmgrid_2 links have the hightest count, select the 
-            # one that drains the largest area 
+        if (count == count.max()).sum() == 1:
+            linkID_2 = np.argmax(count)
+        else:  # if two or more nmgrid_2 links have the hightest count, select the
+            # one that drains the largest area
             links_with_same_count = np.arange(len(count))[count == count.max()]
-            DAs_ =nmgrid_2.at_link['drainage_area'][links_with_same_count]
-            linkID_2 = links_with_same_count[DAs_ == DAs_.max()][0] # to remove bracket
+            DAs_ = nmgrid_2.at_link["drainage_area"][links_with_same_count]
+            linkID_2 = links_with_same_count[DAs_ == DAs_.max()][0]  # to remove bracket
         link_mapper[linkID_1] = linkID_2
         
-    return link_mapper
+    if plot_grids:
+        plot_nmgrids(nmgrid_1, nmgrid_2)
 
+    return link_mapper
         
 
 
