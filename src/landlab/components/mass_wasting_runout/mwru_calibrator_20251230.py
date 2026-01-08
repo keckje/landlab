@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from landlab import RasterModelGrid
 from landlab.components import SinkFillerBarnes, FlowAccumulator, FlowDirectorMFD
-from landlab.components.mass_wasting_runout.mass_wasting_runout import (MassWastingRunout,
+from landlab.components.mass_wasting_runout.mass_wasting_runout_20251230 import (MassWastingRunout,
                                                                        shear_stress_grains,
                                                                        shear_stress_static,
                                                                        erosion_rate,
@@ -21,11 +21,8 @@ class MWRu_calibrator():
     """an adaptive Markov Chain Monte Carlo calibration utility for calibrating
     MassWastingRunout to observed landslide runout and/or scour and deposition
     
-    See other beyesian calibration apporaches that use more than two variables
-    to figure out ways for visualizing results.
-    
-    is _check_E_lessthan_lambda_times_qsc needed -  yes, but not as critical. Keeping
-    will allow the user to exclude watery-like runout behavior
+    TODO:
+    is _check_E_lessthan_lambda_times_qsc needed?
     save data for plots
 
     Examples
@@ -166,8 +163,8 @@ class MWRu_calibrator():
 
 
     def _simulation(self):
-        """reset mg to initial conditions, run the MWR, save the DoD"""
-        
+        """run the model, determine the cumulative modeled deposition along the
+        channel centerline"""
         # reset the dem to the initial dem and soil to initial soil depth
         self.MWR.grid.at_node['topographic__elevation'] = self.MWR.grid.at_node['topographic__initial_elevation'].copy()
         self._update_topographic_slope()
@@ -180,14 +177,11 @@ class MWRu_calibrator():
             
         # run the model
         self.MWR.run_one_step()
-        
-        # create the modeldiff_m (modeled DoD) field
+        # create the modeldiff_m field
         diff = self.mg.at_node['topographic__elevation'] - self.mg.at_node['topographic__initial_elevation']
         self.mg.at_node['dem_dif_m'] = diff
         
-        # save the DoD
         self.dem_dif_m_dict[self.it] = self.mg.at_node['dem_dif_m']
-        
         if self.plot_tf == True:
             plt.figure('iteration'+str(self.it))
             imshow_grid(self.mg,"dem_dif_m",cmap = 'RdBu_r')
@@ -351,7 +345,7 @@ class MWRu_calibrator():
         return Vse
 
     def _MSE_Qt(self):
-        """computes the MSE of modeled Qt"""
+
         observed = self.mbLdf_o[self.RMSE_metric] 
         modeled = self.mbLdf_m[self.RMSE_metric]
         self.trial_qs_profiles[self.it] = modeled
@@ -370,7 +364,7 @@ class MWRu_calibrator():
         return MSE_Qt
 
     def _MSE(self, observed, modeled):
-        """computes the mean square error (MSE) between two difference 
+        """computes the root mean square error (RMSE) between two difference 
         datasets
         """
         if modeled.size == 0:
@@ -381,26 +375,27 @@ class MWRu_calibrator():
     
     
     def _SE(self, observed, modeled):
-        """computes the cumulative square error (SE) between two difference 
+        """computes the cumulative square error (RMSE) between two difference 
         datasets
         """
         if modeled.size == 0:
             modeled = np.array([0])
             observed = np.array([0])
+            print("NO MODELED VALUES")
         SE = ((observed-modeled)**2).sum()
         return SE
     
     
 
-    # def _RMSE(self, observed, modeled):
-    #     """computes the root mean square error (RMSE) between two difference 
-    #     datasets
-    #     """
-    #     if modeled.size == 0:
-    #         modeled = np.array([0])
-    #         observed = np.array([0])
-    #     RSEmax = (((observed-modeled)**2).mean())**0.5
-    #     return RSEmax
+    def _RMSE(self, observed, modeled):
+        """computes the root mean square error (RMSE) between two difference 
+        datasets
+        """
+        if modeled.size == 0:
+            modeled = np.array([0])
+            observed = np.array([0])
+        RSEmax = (((observed-modeled)**2).mean())**0.5
+        return RSEmax
 
 
     def _prior_probability(self, value, key):
@@ -419,7 +414,7 @@ class MWRu_calibrator():
 
     def _determine_erosion(self, value, solve_for = 'k'):
         """
-        determine k using (A4) and (A5) or E_l using (11) and dividing by dx  
+        determine k using (36) or E_l using (35)  
         
         Parameters
         ----------
@@ -473,13 +468,13 @@ class MWRu_calibrator():
 
 
     def _check_E_lessthan_lambda_times_qsc(self, candidate_value, jump_size, selected_value):
-        """A check that average erosion depth (E) does not greatly exceed the flux constraint times some coefficient 
-        (E must be less than qsc*lambda). If average E>qsc*lambda, resample k until average E<(qsc*lambda) OR resample qsc until (qsc*lambda)>E"""
+        """A check that average erosion depth (E) does not exceed flux constraint (E must be less than qsc*lambda)
+        if average E>qsc, resample k until average E<(qsc*lambda) OR resample qsc until (qsc*lambda)>E"""
         # this may not be needed anymore
         equivalent_E = self._determine_erosion(self.MWR.k, solve_for = 'E_l')*self.mg.dx
         
         _lambda = 1 # when slpc is low, model is unstable when ~E>qsc.
-        if self.MWR.slpc>=0.02: # when slpc is high (>0.02), model is unstable when ~E>(10*qsc)
+        if self.MWR.slpc>=0.02: # when slpc is low (<0.01), model is unstable when ~E>(10*qsc)
             _lambda = 10
             
         if equivalent_E>self.MWR.qsc*_lambda:

@@ -1289,7 +1289,7 @@ class MassWastingRunout(Component):
                 (att_up[key] * E + att_in[key] * (qsi - A)) / (qsi - A + E)
             )
             check_val = att_out[key]
-            if (check_val < 0) or (np.isnan(check_val)) or (np.isinf(check_val)):
+            if (check_val <= 0) or (np.isnan(check_val)) or (np.isinf(check_val)):
                 msg = f"out-flowing {key} is zero, negative, nan or inf"
                 raise ValueError(msg)
         return att_out
