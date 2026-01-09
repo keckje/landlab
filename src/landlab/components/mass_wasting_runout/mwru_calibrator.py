@@ -21,8 +21,13 @@ class MWRu_calibrator():
     """an adaptive Markov Chain Monte Carlo calibration utility for calibrating
     MassWastingRunout to observed landslide runout and/or scour and deposition
     
-    See other beyesian calibration apporaches that use more than two variables
-    to figure out ways for visualizing results.
+    TODO:   See other beyesian calibration apporaches that use more than two variables
+            to figure out ways for visualizing results.
+            
+            Add a option for jumping in one parameter direction at a time rather
+            than all parameters as presently implemented
+    
+    
     
     is _check_E_lessthan_lambda_times_qsc needed -  yes, but not as critical. Keeping
     will allow the user to exclude watery-like runout behavior
@@ -55,10 +60,13 @@ class MWRu_calibrator():
     def __init__(self,
                  MassWastingRunout,
                  params,
-                 profile_calib_dict,
+                 el_l,
+                 el_h,
+                 runout_profile_nodes,
+                 runout_profile_distance,
                  prior_distribution = "uniform",
-                 method = 'both',
-                 omega_metric = "runout",
+                 calibration_method = 'extent_and_sediment',
+                 extent_metric = "entire_runout_extent",
                  RMSE_metric = "Vu",
                  jump_size = 0.2,
                  N_cycles = 10,
@@ -76,37 +84,32 @@ class MWRu_calibrator():
             raster model grid that contains the fields:
                 topographic__elevation
                 topographic__steepest_slope
-                dem_dif_o
+                DoD_o
 
         params : list of lists
-            each list is the min, max and opimal parameter value. Used to define
+            each list is the min, max and optimal parameter value. Used to define
             the parameter space used by the MCMC sampler
 
-        profile_calib_dict : dictonary, optional
-            dictionary of parameters needed to evaluate calibration based on
-            volumetric deposition versus elevation along the channel. Keys in the
-            dicitonary include the following parameters:
-                ----------
-                el_l : float
-                    lower limit of elevation range included in analysis.
-                el_h : float
-                    upper limit of elevation range included in analysis.
-                mg : raster model grid
-                    has fields topographic__elevation, topographic__steepest_slope and dem_dif_o and dem_dif_m
-                runout_profile_nodes : np.array
-                    np.array of node id numbers that define profile on raster model grid
-                runout_profile_distance : np.array
-                    np.array of distance at each node from outlet, output from channel profiler
-                cL : float
-                    length of grid cell for modeled grid
+        el_l : float
+            lower limit of elevation range included in analysis.
+            
+        el_h : float
+            upper limit of elevation range included in analysis.
+            
+        runout_profile_nodes : np.array
+            np.array of node id numbers that define profile on raster model grid
+            
+        runout_profile_distance : np.array
+            np.array of distance at each node from outlet, output from channel profiler
+                    
         prior_distribution: string
             can be "uniform" or "normal"
 
-        method: string
-            can be "RMSE", "omega" or "both"
+        calibration_method: string
+            can be "extent_only" or "extent_and_sediment"
 
-        omega_metric: string
-            can be "runout", "deposition" or "scour". Default is "runout"
+        extent_metric: string
+            can be "entire_runout_extent", "deposition_extent_only" or "scour_extent_only". Default is "entire_runout_extent"
 
         RMSE_metric: string
             can be 'Vu','Vd','dV','Vt'. Default is "Vd"
@@ -120,16 +123,16 @@ class MWRu_calibrator():
             Number of iterations between updates to the jump size based on MCMC acceptance ratio
         """
 
-        assert (profile_calib_dict is not None
-                ),"must provide parameters for either profile or planemetric evaluation"
-
         self.MWR = MassWastingRunout
         self.mg = MassWastingRunout.grid
         self.params = params
-        self.pcd = profile_calib_dict
+        self.el_l = el_l
+        self.el_h = el_h
+        self.runout_profile_nodes = runout_profile_nodes
+        self.runout_profile_distance = runout_profile_distance
         self.prior_distribution = prior_distribution
-        self.method = method
-        self.omega_metric = omega_metric
+        self.calibration_method = calibration_method
+        self.extent_metric = extent_metric
         self.RMSE_metric = RMSE_metric
         self.jump_size = jump_size
         self.N_cycles = N_cycles
@@ -137,7 +140,7 @@ class MWRu_calibrator():
         if self.mg.has_field("particle__diameter", at="node"):
             self.initial_particle_diameter = self.mg.at_node["particle__diameter"].copy()
         self.plot_tf = plot_tf
-        self.dem_dif_m_dict ={} # for dedegging
+        self.DoD_m_dict ={} # for dedegging
         self._maker(seed)
         self.jstracking = [] # for tracking jumps
         self.alpha_min = alpha_min
@@ -149,13 +152,15 @@ class MWRu_calibrator():
 
     def __call__(self, max_number_of_runs = 50):
         """instantiate the class"""
-        if (self.method == "both") or (self.method == "RMSE"):
+        if self.calibration_method == "extent_and_sediment":
             # get profile of observed total flow
             self.mbLdf_o = self._channel_profile_deposition("observed")
             # compute total mobilized volume
-            self.TMV = (-1*(self.mg.at_node['dem_dif_o'][self.mg.at_node['dem_dif_o']<0]).sum())*self.mg.dx*self.mg.dy
+            self.TMV = (-1*(self.mg.at_node['DoD_o'][self.mg.at_node['DoD_o']<0]).sum())*self.mg.dx*self.mg.dy
             # mean total flow
             self.Qtm = self.mbLdf_o[self.RMSE_metric].mean()
+            # determine the a typical shear stress value given field observed flow characteristics
+            self._determine_typical_shear_stress()
             
         self._MCMC_sampler(max_number_of_runs)
 
@@ -183,14 +188,14 @@ class MWRu_calibrator():
         
         # create the modeldiff_m (modeled DoD) field
         diff = self.mg.at_node['topographic__elevation'] - self.mg.at_node['topographic__initial_elevation']
-        self.mg.at_node['dem_dif_m'] = diff
+        self.mg.at_node['DoD_m'] = diff
         
         # save the DoD
-        self.dem_dif_m_dict[self.it] = self.mg.at_node['dem_dif_m']
+        self.DoD_m_dict[self.it] = self.mg.at_node['DoD_m']
         
         if self.plot_tf == True:
             plt.figure('iteration'+str(self.it))
-            imshow_grid(self.mg,"dem_dif_m",cmap = 'RdBu_r')
+            imshow_grid(self.mg,"DoD_m",cmap = 'RdBu_r')
             plt.title("it:{}, slpc:{}, qsc:{}, k:{}".format(self.it, self.MWR.slpc, self.MWR.qsc, self.MWR.k ))
             plt.clim(-1,1)
             plt.show()
@@ -209,22 +214,16 @@ class MWRu_calibrator():
         """
         mg = self.mg
         dA = mg.dx*mg.dx
-        el_l = self.pcd['el_l']
-        el_h = self.pcd['el_h']
-        
-        runout_profile_nodes = self.pcd['runout_profile_nodes']
-        
         # extract all nodes between lower and upper profile limits
         # use observed runout dem to get elevations
-        demd_ = mg.at_node['dem_dif_o']
+        demd_ = mg.at_node['DoD_o']
         dem_ = mg.at_node['topographic__initial_elevation']+demd_
-        pel = dem_[runout_profile_nodes] # elevation of profile nodes 
-        mask = (pel > el_l) & (pel < el_h)
-        runout_profile_nodes = runout_profile_nodes[mask]
-        runout_distance = self.pcd['runout_profile_distance'][mask]
-        runout_distance = (runout_distance-runout_distance.max())*-1
+        pel = dem_[self.runout_profile_nodes] # elevation of profile nodes 
+        mask = (pel > self.el_l) & (pel < self.el_h)
+        runout_profile_nodes = self.runout_profile_nodes[mask]
+        runout_profile_distance = self.runout_profile_distance[mask]
+        runout_profile_distance = (runout_profile_distance-runout_profile_distance.max())*-1
         node_slope = mg.at_node['topographic__steepest_slope']
-        cL = self.pcd['cL']
                
         def cv_mass_change(cn):
 
@@ -234,27 +233,27 @@ class MWRu_calibrator():
 
             # metric 1, Vt: cumulative aggradation downslope of point cn
             dp = demd[demd>0]; dem_dp = dem[demd>0]
-            dpe = np.nansum(dp[(dem_dp<el)&(dem_dp>=el_l)])
+            dpe = np.nansum(dp[(dem_dp<el)&(dem_dp>=self.el_l)])
             Vt = dpe*dA # multiply by cell area to get volume
             
             # metric 2, dV: cumulative scour upstream of point cn
             sc = demd[demd<0]; dem_sc = dem[demd<0]
-            sce = np.nansum(sc[(dem_sc>el)&(dem_sc<=el_h)])
+            sce = np.nansum(sc[(dem_sc>el)&(dem_sc<=self.el_h)])
             dV = sce*dA # multiply by cell area to get volume
 
             # metric 3, Vd: cumulative erosion and aggradation downslope of point cn
-            dd = np.nansum(demd[(dem<=el) & (dem>=el_l)])
+            dd = np.nansum(demd[(dem<=el) & (dem>=self.el_l)])
             Vd = dd*dA
             
             # metric 4, Vu: cumulative flow volume past point cn
             #               equivalent to the cumulative erosion and aggradation 
             #               upslope of point cn * -1.
-            du = np.nansum(demd[(dem>=el) & (dem<=el_h)])*-1  # equation 28
+            du = np.nansum(demd[(dem>=el) & (dem<=self.el_h)])*-1  # equation 28
             Vu = du*dA # equation 28
 
             # get channel characteristics
             # same, nut get node distance
-            rd = runout_distance[runout_profile_nodes == cn]
+            rd = runout_profile_distance[runout_profile_nodes == cn]
             # node slope
             cns = node_slope[cn]
             #return Vu, Vd, dV, Vt, cns, cn, cd, rd, el 
@@ -262,21 +261,21 @@ class MWRu_calibrator():
 
         dem_m = mg.at_node['topographic__elevation']
         if datatype == "modeled":
-            demd = mg.at_node['dem_dif_m']
+            demd = mg.at_node['DoD_m']
             dem = mg.at_node['topographic__elevation'] 
         elif datatype == "observed":
-            demd = mg.at_node['dem_dif_o']
+            demd = mg.at_node['DoD_o']
             dem = mg.at_node['topographic__initial_elevation']+demd
 
         mbL = []
         for cn in runout_profile_nodes:
             mbL.append(cv_mass_change(cn))
         mbLdf = pd.DataFrame(mbL)
-        mbLdf.columns = ['Vu','Vd','dV','Vt', 'slope', 'node','runout_distance','elevation']
+        mbLdf.columns = ['Vu','Vd','dV','Vt', 'slope', 'node','runout_profile_distance','elevation']
         return mbLdf
 
 
-    def _omegaT(self, metric = 'runout'):
+    def _omegaT(self, metric = 'entire_runout_extent'):
         """ determines intersection, over estimated area and underestimated area of
         modeled debris flow deposition and the the calibration metric OmegaT following
         Heiser et al. (2017)
@@ -284,18 +283,18 @@ class MWRu_calibrator():
         c = 1
         n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
         na = self.mg.dx*self.mg.dy
-        if metric == 'runout':
-            n_o =  n_a[np.abs(self.mg.at_node['dem_dif_o']) > 0] # get nodes with scour or deposit
-            n_m = n_a[np.abs(self.mg.at_node['dem_dif_m']) > 0]
-        elif metric == 'deposition':
-            n_o =  n_a[self.mg.at_node['dem_dif_o'] > 0] # get nodes with scour or deposit
-            n_m = n_a[self.mg.at_node['dem_dif_m'] > 0]
-        elif metric == 'scour':
-            n_o =  n_a[self.mg.at_node['dem_dif_o'] < 0] # get nodes with scour or deposit
-            n_m = n_a[self.mg.at_node['dem_dif_m'] < 0]
+        if metric == 'entire_runout_extent':
+            n_o =  n_a[np.abs(self.mg.at_node['DoD_o']) > 0] # get both nodes aggradation and erosion nodes
+            n_m = n_a[np.abs(self.mg.at_node['DoD_m']) > 0]
+        elif metric == 'deposition_extent_only':
+            n_o =  n_a[self.mg.at_node['DoD_o'] > 0] # get aggradation nodes
+            n_m = n_a[self.mg.at_node['DoD_m'] > 0]
+        elif metric == 'scour_extent_only':
+            n_o =  n_a[self.mg.at_node['DoD_o'] < 0] # get erosion nodes
+            n_m = n_a[self.mg.at_node['DoD_m'] < 0]
         self.a_o = n_o*na
         self.a_m = n_m*na
-        n_x =  n_o[np.isin(n_o,n_m)]#np.unique(np.concatenate([n_o,n_m])) # intersection nodes
+        n_x =  n_o[np.isin(n_o,n_m)] # intersection nodes
         n_u = n_o[~np.isin(n_o,n_m)] # underestimate
         n_o = n_m[~np.isin(n_m,n_o)] # overestimate
         
@@ -307,38 +306,37 @@ class MWRu_calibrator():
         return omegaT
 
 
-    def _Vse(self, metric = 'runout'):
-        """ determine the volumetric square error, normalized by the total mobilized
-        volume.
+    def _SE_DoD(self, metric = 'entire_runout_extent'):
+        """ determine the volumetric square error of the modeled DoD, normalized 
+        by the total mobilized volume.
         """
-        
         c1 = 1; c2 = 1
         n_a = self.mg.nodes.reshape(self.mg.shape[0]*self.mg.shape[1]) # all nodes
         na = self.mg.dx*self.mg.dy
-        if metric == 'runout':
-            n_o =  n_a[np.abs(self.mg.at_node['dem_dif_o']) > 0] # get nodes with scour or deposit
-            n_m = n_a[np.abs(self.mg.at_node['dem_dif_m']) > 0]
-        elif metric == 'deposition':
-            n_o =  n_a[self.mg.at_node['dem_dif_o'] > 0] # get nodes with scour or deposit
-            n_m = n_a[self.mg.at_node['dem_dif_m'] > 0]
-        elif metric == 'scour':
-            n_o =  n_a[self.mg.at_node['dem_dif_o'] < 0] # get nodes with scour or deposit
-            n_m = n_a[self.mg.at_node['dem_dif_m'] < 0]
+        if metric == 'entire_runout_extent':
+            n_o =  n_a[np.abs(self.mg.at_node['DoD_o']) > 0] # get nodes with scour or deposit
+            n_m = n_a[np.abs(self.mg.at_node['DoD_m']) > 0]
+        elif metric == 'deposition_extent_only':
+            n_o =  n_a[self.mg.at_node['DoD_o'] > 0] # get nodes with scour or deposit
+            n_m = n_a[self.mg.at_node['DoD_m'] > 0]
+        elif metric == 'scour_extent_only':
+            n_o =  n_a[self.mg.at_node['DoD_o'] < 0] # get nodes with scour or deposit
+            n_m = n_a[self.mg.at_node['DoD_m'] < 0]
         self.a_o = n_o*na
         self.a_m = n_m*na
-        n_x =  n_o[np.isin(n_o,n_m)]#np.unique(np.concatenate([n_o,n_m])) # intersection nodes
+        n_x =  n_o[np.isin(n_o,n_m)] # intersection nodes
         n_u = n_o[~np.isin(n_o,n_m)] # underestimate
         n_o = n_m[~np.isin(n_m,n_o)] # overestimate
         A_x = len(n_x)*self.mg.dx*self.mg.dy
         A_u = len(n_u)*self.mg.dx*self.mg.dy
         A_o = len(n_o)*self.mg.dx*self.mg.dy
         CA = self.mg.dx*self.mg.dy
-        observed_ = self.mg.at_node['dem_dif_o']
-        mask =  np.abs(observed_)>0 
-        modeled_ = self.mg.at_node['dem_dif_m']       
+        observed_ = self.mg.at_node['DoD_o']
+        # mask =  np.abs(observed_)>0 
+        modeled_ = self.mg.at_node['DoD_m']       
 
-        modeled = modeled_[mask]
-        observed = observed_[mask]
+        modeled = modeled_[n_x] # modeled_[mask]
+        observed = observed_[n_x] # observed_[mask]
         X = self._SE(observed, modeled)*CA**2
         modeled = modeled_[n_u]
         observed = observed_[n_u]
@@ -346,28 +344,26 @@ class MWRu_calibrator():
         modeled = modeled_[n_o]
         observed = observed_[n_o]        
         O = self._SE(observed, modeled)*CA**2        
-        Vse = (X+c1*U+c2*O)/(self.TMV**2)
-        
-        return Vse
+        SE_DoD = (X+c1*U+c2*O)/(self.TMV**2)        
+        return SE_DoD
 
-    def _MSE_Qt(self):
+    def _MSE_Qs(self):
         """computes the MSE of modeled Qt"""
         observed = self.mbLdf_o[self.RMSE_metric] 
         modeled = self.mbLdf_m[self.RMSE_metric]
         self.trial_qs_profiles[self.it] = modeled
         CA = self.mg.dx*self.mg.dy
-        MSE_Qt = self._MSE(observed, modeled)/(self.Qtm**2) # equation 29
+        MSE_Qs = self._MSE(observed, modeled)/(self.Qtm**2) # equation 29
         
         nm = 'V_rms, iteration'+str(self.it)
         if self.plot_tf == True:
             plt.figure(nm)
-            plt.plot(self.mbLdf_o['runout_distance'], observed, label = 'observed')
-            plt.plot(self.mbLdf_m['runout_distance'], modeled, label = 'modeled')
+            plt.plot(self.mbLdf_o['runout_profile_distance'], observed, label = 'observed')
+            plt.plot(self.mbLdf_m['runout_profile_distance'], modeled, label = 'modeled')
             plt.title(nm)
             plt.legend()
-            plt.show()
-        
-        return MSE_Qt
+            plt.show()  
+        return MSE_Qs
 
     def _MSE(self, observed, modeled):
         """computes the mean square error (MSE) between two difference 
@@ -390,18 +386,6 @@ class MWRu_calibrator():
         SE = ((observed-modeled)**2).sum()
         return SE
     
-    
-
-    # def _RMSE(self, observed, modeled):
-    #     """computes the root mean square error (RMSE) between two difference 
-    #     datasets
-    #     """
-    #     if modeled.size == 0:
-    #         modeled = np.array([0])
-    #         observed = np.array([0])
-    #     RSEmax = (((observed-modeled)**2).mean())**0.5
-    #     return RSEmax
-
 
     def _prior_probability(self, value, key):
         """get prior liklihood of parameter value"""
@@ -413,30 +397,15 @@ class MWRu_calibrator():
             mean = (min_val+high_val)/2
             # assume min and max values equivalent to 4 standard deviations from the mean
             sd = (max_val-min_val)/8
-            prior = norm.pdf(value, mean,sd)
+            prior = norm.pdf(value, mean, sd)
         return prior
 
 
-    def _determine_erosion(self, value, solve_for = 'k'):
+
+
+    def _determine_typical_shear_stress(self):
         """
         determine k using (A4) and (A5) or E_l using (11) and dividing by dx  
-        
-        Parameters
-        ----------
-        ros : density of grains in runout [kg/m3]
-        vs  : volumetric ratio of solids to matrix [m3/m3]
-        h   : depth [m] - typical runout depth
-        s   : slope [m/m] - average slope of erosion part of runout path
-        eta : exponent of scour model (equation 7) - 
-        E_l : average erosion rate per unit length of runout [m/m]
-        dx  : cell width [m]
-        slpc: average slope at which positive net deposition occurs
-        Dp  : representative grain size [m]
-    
-        Returns
-        -------
-        k
-    
         """
     
         rodf = self.MWR.vs*self.MWR.ros+(1-self.MWR.vs)*self.MWR.rof
@@ -444,40 +413,45 @@ class MWRu_calibrator():
         
         if self.MWR.grain_shear:
             # use mean particle diameter in runout profile for representative grain size used to determine erosion rate
-            Dp = self.MWR._grid.at_node['particle__diameter'][self.pcd['runout_profile_nodes']].mean()
-            tau = shear_stress_grains(self.MWR.vs,
+            Dp = self.MWR._grid.at_node['particle__diameter'][self.runout_profile_nodes].mean()
+            self.tau = shear_stress_grains(self.MWR.vs,
                                       self.MWR.ros,
                                       Dp,
                                       self.MWR.h,
                                       self.MWR.s,
                                       self.MWR.g)
         else:
-            tau = shear_stress_static(self.MWR.vs,
+            self.tau = shear_stress_static(self.MWR.vs,
                                       self.MWR.ros,
                                       self.MWR.rof,
                                       self.MWR.h,
                                       self.MWR.s,
                                       self.MWR.g)
-        if solve_for == 'k':
-            k = erosion_coef_k(value,
-                               tau,
-                               self.MWR.eta,
-                               self.mg.dx)
-            return_value = k
-        elif solve_for == 'E_l':
-            E_l = erosion_rate(value,tau,
-                               self.MWR.eta,
-                               self.mg.dx)
-            return_value = E_l
-        return return_value
+            
+            
+    #     if solve_for == 'k':
+    #         k = erosion_coef_k(value,
+    #                            self.tau,
+    #                            self.MWR.f,
+    #                            self.mg.dx)
+    #         return_value = k
+    #     elif solve_for == 'E_l':
+    #         E_l = erosion_rate(value,self.tau,
+    #                            self.MWR.f,
+    #                            self.mg.dx)
+    #         return_value = E_l
+    #     return return_value
+
+    # def
 
 
     def _check_E_lessthan_lambda_times_qsc(self, candidate_value, jump_size, selected_value):
         """A check that average erosion depth (E) does not greatly exceed the flux constraint times some coefficient 
-        (E must be less than qsc*lambda). If average E>qsc*lambda, resample k until average E<(qsc*lambda) OR resample qsc until (qsc*lambda)>E"""
+        (E must be less than qsc*lambda). If average E>qsc*lambda, if k is a calibration parameter, resample k until 
+        average E<(qsc*lambda). If k is not a calibration parameter but qsc is, resample qsc until (qsc*lambda)>E"""
         # this may not be needed anymore
-        equivalent_E = self._determine_erosion(self.MWR.k, solve_for = 'E_l')*self.mg.dx
-        
+        # equivalent_E = self._determine_erosion(self.MWR.k, solve_for = 'E_l')*self.mg.dx
+        equivalent_E = erosion_rate(self.MWR.k, self.tau, self.MWR.f, self.mg.dx)*self.mg.dx
         _lambda = 1 # when slpc is low, model is unstable when ~E>qsc.
         if self.MWR.slpc>=0.02: # when slpc is high (>0.02), model is unstable when ~E>(10*qsc)
             _lambda = 10
@@ -487,7 +461,8 @@ class MWRu_calibrator():
             # if k is a calibration parameter, first apply constraint to k, since model is very sensitive to qsc
             if self.params.get('k'):
                 # check if minimum k range is low enough
-                equivalent_E_min = self._determine_erosion(self.params['k'][0], solve_for = 'E_l')*self.mg.dx
+                # equivalent_E_min = self._determine_erosion(self.params['k'][0], solve_for = 'E_l')*self.mg.dx
+                equivalent_E_min = erosion_rate(self.params['k'][0],self.tau,self.MWR.f,self.mg.dx)*self.mg.dx
                 if equivalent_E_min>self.MWR.qsc*_lambda:
                     msg = "minimum possible k value results in too much erosion"
                     raise ValueError(msg)                    
@@ -496,18 +471,21 @@ class MWRu_calibrator():
                     _i_ = 0
                     while _pass is False:
                         candidate_value['k'], jump_size['k'] = self._candidate_value(selected_value['k'], 'k')
-                        self.MWR.k = candidate_value['k']
-                        equivalent_E = self._determine_erosion(self.MWR.k, solve_for = 'E_l')*self.mg.dx
-                        if equivalent_E < self.MWR.qsc*_lambda:
+                        
+                        # equivalent_E = self._determine_erosion(candidate_value['k'], solve_for = 'E_l')*self.mg.dx
+                        candadite_equivalent_E = erosion_rate(candidate_value['k'],self.tau,self.MWR.f,self.mg.dx)*self.mg.dx
+                        if candadite_equivalent_E < self.MWR.qsc*_lambda:
                             _pass = True
+                            self.MWR.k = candidate_value['k']
                             print('resampled, E<qsc')
+                            
                         _i_+=1; 
                         if _i_%1000 == 0:
                             print('after {} runs, all sampled k values are too large, decrease the lower range of k'.format(_i_))
             # if k is not a calibration parameter (k is fixed), then adjust qsc to meet constraint
             elif self.params.get('qsc'):
                 # esimate of erosion depth caused by passage of one debriton
-                equivalent_E = self._determine_erosion(self.MWR.k, solve_for = 'E_l')*self.mg.dx
+                # equivalent_E = self._determine_erosion(self.MWR.k, solve_for = 'E_l')*self.mg.dx
                 if equivalent_E > self.params['qsc'][1]*_lambda: # if erosion is less than lambda times qsc
                     msg = "maximum possible qsc value is less than erosion caused by k value"
                     raise ValueError(msg)   
@@ -516,24 +494,29 @@ class MWRu_calibrator():
                     _i_ = 0
                     while _pass is False:
                         candidate_value['qsc'], jump_size['qsc'] = self._candidate_value(selected_value['qsc'], 'qsc')
-                        self.MWR.qsc = candidate_value['qsc']
-                        if equivalent_E < self.MWR.qsc*_lambda:
+                        
+                        if equivalent_E < candidate_value['qsc']*_lambda:
                             _pass = True
+                            self.MWR.qsc = candidate_value['qsc']
                             print('resampled, qsc>E')
                             _i_+=1; 
                             if _i_%1000 == 0:
                                 print('after {} runs, all sampled qsc values are to small, increase the upper range of qsc'.format(_i_))
                 
             else:
-                msg = "minimum possible k value results in too much erosion"
+                msg = "the erosion coeficient k causes erosion that exceeds qsc, reduce k or increase qsc to avoid model instability"
                 raise ValueError(msg)  
         else:
             print('E<qsc')
-
+            
+        return candidate_value, jump_size
+    
     def _candidate_value(self, selected_value, key):
         """determine the candidate parameter value as a random value from
         a normal distribution with mean equal to the presently selected value and
-        standard deviation equal to the jump size"""   
+        standard deviation equal to the jump size, following MCMC sampler approach
+        implemented in LeCoz et al., 2014. See BaRatin training materials,
+        MCMCRegression.xlsx"""   
         min_val = self.params[key][0]
         max_val = self.params[key][1]
         
@@ -551,8 +534,8 @@ class MWRu_calibrator():
 
 
     def _adjust_jump_size(self, acceptance_ratio):
-        """following LeCoz et al., 2014, adjust jump variance based on acceptance
-        ratio"""
+        """following LeCoz et al., 2014 (see the MCMC tutorials), adjust jump 
+        variance based on acceptance ratio"""
 
         if acceptance_ratio < self.alpha_min:
             factor = self.phi_minus**0.5
@@ -584,16 +567,10 @@ class MWRu_calibrator():
             if i == 0:
                 for key in self.params:
                     selected_value[key] = self.params[key][2]
-            # select a candidate valye for the jump
+            # select a new candidate values for the jump
             for key in self.params:
                 candidate_value[key], jump_size[key] = self._candidate_value(selected_value[key], key)
-            # liklihood of parameter given the min and max values
 
-            prior_t = 1  # THIS NEEDS TO GO AFTER _check_E_lessthan_lambda_times_qsc
-            for key in self.params:
-                prior_ = self._prior_probability(candidate_value[key], key)
-                prior[key] = prior_
-                prior_t = prior_t*prior_ # likelihood of all parameter values
 
             # update instance parameter values
             for key in self.params:
@@ -607,32 +584,41 @@ class MWRu_calibrator():
                     # adjust thickness of landslide with id = 1
                     self.MWR._grid.at_node['soil__thickness'][self.MWR._grid.at_node['mass__wasting_id'] == 1] = candidate_value[key]
             
+            # check that erosion E doesn't exceed qsc
+            # if k or qsc are a calibration parameter, will adjust k or qsc util E<qsc
             if self.qsc_constraint:
-                self._check_E_lessthan_lambda_times_qsc(candidate_value, jump_size, selected_value)
+                candidate_value, jump_size = self._check_E_lessthan_lambda_times_qsc(candidate_value, jump_size, selected_value) # move this, check if cadidate_value changes, 
             
-            # run simulation with updated parameter
+            # likelihood of each candidate parameter value given the min and max values
+            prior_t = 1  # THIS NEEDS TO GO AFTER _check_E_lessthan_lambda_times_qsc and MWR variables are updated
+            for key in self.params:
+                prior_ = self._prior_probability(candidate_value[key], key)
+                prior[key] = prior_
+                prior_t = prior_t*prior_ # likelihood (product of liklihoods) of all parameter values            
+            
+            
+            # run simulation with updated candadite parameters
             self.it = i
             self._simulation()
-            if self.method == "omega":
-                omegaT = self._omegaT(metric = "runout")
+            if self.calibration_method == "extent_only":
+                omegaT = self._omegaT(metric = "entire_runout_extent")
                 candidate_posterior = prior_t*omegaT
-            elif self.method == "both":
+            elif self.calibration_method == "extent_and_sediment":
                 # get modeled deposition profile
                 self.mbLdf_m = self._channel_profile_deposition("modeled")
 
-                # MSE of Qt
-                MSE_Qt = self._MSE_Qt()
+                # mean square error of the sediment transport profile (MSE_Qs)
+                MSE_Qs = self._MSE_Qs()
                 
                 # omegaT
-                omegaT = self._omegaT(metric = self.omega_metric)
+                omegaT = self._omegaT(metric = self.extent_metric)
                 
-                # volumetric square error
-                Vse = self._Vse(metric = self.omega_metric)
+                # square error of the modeled DoD (SE_DoD)
+                SE_DoD = self._SE_DoD(metric = self.extent_metric)
                 
-                # DTE = self._deposition_thickness_error()
-                
-                # determine psoterior likilhood: product of RMSE, omegaT and prior liklihood
-                candidate_posterior = prior_t*omegaT*(1/MSE_Qt)*(1/Vse)#*(1/RMSE_pf)*(1/RMSE_map)#*DTE
+                # determine posterior likilhood: product of prior liklihood, omegaT, Qt 
+                candidate_posterior = prior_t*omegaT*(1/MSE_Qs)*(1/SE_DoD)
+               
                 # candidate_posterior = (1/RMSE_map)
             # decide to jump or not to jump
             if i == 0:
@@ -659,13 +645,10 @@ class MWRu_calibrator():
             for key in self.params:
                 p_table = p_table+[jump_size[key], candidate_value[key],selected_value[key]]
                 p_nms = p_nms+['jump_size_'+key, 'candidate_value_'+key, 'selected_value_'+key]
-            if self.method == "omega":
+            if self.calibration_method == "extent_only":
                 self.LHList.append([i, self.MWR.c, prior_t, omegaT,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
-            elif self.method == "RMSE":
-                self.LHList.append([i, self.MWR.c, prior_t, MSE_Qt,1/RMSE_pf,1/RMSE_map,candidate_posterior,acceptance_ratio, rv, msg, selected_posterior]+p_table)
-            elif self.method == "both":
-                # self.LHList.append([i, self.MWR.c, self.TMV, self.Qtm, prior_t, omegaT, MSE_Qt**0.5, Vse**0.5, RMSE_pf, RMSE_map, DTE, candidate_posterior, acceptance_ratio, rv, msg, selected_posterior]+p_table)
-                self.LHList.append([i, self.MWR.c, self.TMV, self.Qtm, prior_t, omegaT, MSE_Qt**0.5, Vse**0.5, candidate_posterior, acceptance_ratio, rv, msg, selected_posterior]+p_table)
+            elif self.calibration_method == "extent_and_sediment":
+                self.LHList.append([i, self.MWR.c, self.TMV, self.Qtm, prior_t, omegaT, MSE_Qs**0.5, SE_DoD**0.5, candidate_posterior, acceptance_ratio, rv, msg, selected_posterior]+p_table)
 
             # adjust jump size every N_cycles
             if i%self.N_cycles == 0:
@@ -680,13 +663,10 @@ class MWRu_calibrator():
                               msg))
 
         self.LHvals = pd.DataFrame(self.LHList)
-        if self.method == "omega":
+        if self.calibration_method == "extent_only":
             self.LHvals.columns = ['iteration', 'model iterations', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
-        elif self.method == "RMSE":
-            self.LHvals.columns = ['iteration', 'model iterations', 'prior', '1/RMSE','1/RMSE p','1/RMSE m', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
-        elif self.method == "both":
-            # self.LHvals.columns = ['iteration', 'model iterations', 'total_mobilized_volume', 'obs_mean_total_flow',  'prior', 'omegaT','MSE_Qt^1/2','Vse^1/2', 'RMSE_pf', 'RMSE_map', 'DTE', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
-            self.LHvals.columns = ['iteration', 'model iterations', 'total_mobilized_volume', 'obs_mean_total_flow',  'prior', 'omegaT','MSE_Qt^1/2','Vse^1/2', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+        elif self.calibration_method == "extent_and_sediment":
+            self.LHvals.columns = ['iteration', 'model iterations', 'total_mobilized_volume', 'obs_mean_total_flow',  'prior', 'omegaT','MSE_Qs^1/2','SE_DoD^1/2', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
 
         self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] # {'qsc': selected_value_SD, 'k': selected_value_cs}
 
@@ -829,7 +809,7 @@ def define_profile_nodes(mg):
 def profile_plot(mg, pnodes, pnodedist, ef = 2, xlim = None, ylim = None, aspect = None, figsize = None, fs = 8):
     """function for plotting profile of observed pre- and post-failure topography"""
     y_dem = mg.at_node['topographic__elevation'][pnodes]
-    y_demdf_o = y_dem+mg.at_node['dem_dif_o'][pnodes]*ef
+    y_demdf_o = y_dem+mg.at_node['DoD_o'][pnodes]*ef
 
     if figsize:
         fig, ax = plt.subplots(figsize=figsize)
