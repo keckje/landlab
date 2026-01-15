@@ -39,29 +39,6 @@ class MWRu_calibrator():
     will allow the user to exclude watery-like runout behavior
     save data for plots
     
-    #
-
-    Examples
-    ----------
-    1. Import necessary packages and components
-    
-    2. Define raster model grid representation of topography and landslide
-            topography
-            flow directions
-            regolith
-    
-    3. Instantiate MassWastingRunout
-    
-    4. Define parameter ranges for Calibrator
-            for detailed explanation of how to pick parameter values, see paper
-    
-    5. Instantiate Calibrator
-    
-    6. Run Calibrator
-    
-    7. List example liklihood scores for a MCMC chain that is 10 jumps long
-
-
 
     """
 
@@ -84,7 +61,9 @@ class MWRu_calibrator():
                  alpha_max = 0.5,# 0.44#0.5
                  phi_minus = 0.9,
                  phi_plus = 1.1,
-                 qsc_constraint = True):
+                 qsc_constraint = True,
+                 show_progress = False):
+        
         """
         Parameters
         ----------
@@ -156,7 +135,7 @@ class MWRu_calibrator():
         self.phi_minus = phi_minus
         self.phi_plus = phi_plus
         self.qsc_constraint = qsc_constraint 
-
+        self.show_progress = show_progress
 
     def __call__(self, max_number_of_runs = 50):
         """instantiate the class"""
@@ -465,7 +444,8 @@ class MWRu_calibrator():
                         if candadite_equivalent_E < self.MWR.qsc*_lambda:
                             _pass = True
                             self.MWR.k = candidate_value['k']
-                            print('resampled, E<qsc')
+                            if self.show_progress:
+                                print('iteration {}, resampled, E<qsc'.format(self.it))
                             
                         _i_+=1; 
                         if _i_%1000 == 0:
@@ -485,7 +465,8 @@ class MWRu_calibrator():
                         if equivalent_E < candidate_value['qsc']*_lambda:
                             _pass = True
                             self.MWR.qsc = candidate_value['qsc']
-                            print('resampled, qsc>E')
+                            if self.show_progress:
+                                print('iteration {}, resampled, qsc>E'.format(self.it))
                             _i_+=1; 
                             if _i_%1000 == 0:
                                 print('after {} runs, all sampled qsc values are to small, increase the upper range of qsc'.format(_i_))
@@ -493,8 +474,6 @@ class MWRu_calibrator():
             else:
                 msg = "the erosion coeficient k causes erosion that exceeds qsc, reduce k or increase qsc to avoid model instability"
                 raise ValueError(msg)  
-        else:
-            print('E<qsc')
             
         return candidate_value, jump_size
     
@@ -584,25 +563,28 @@ class MWRu_calibrator():
     def _jump_or_stay(self, candidate_value, candidate_posterior, selected_value):
         """given the candidate posterior, decide to use the candidate or stay
         at the presently selected value"""
-            if self.it == 0:
-                acceptance_ratio = 1 # always accept the first candidate vlue
-            else:
-                acceptance_ratio = min(1, candidate_posterior/self.selected_posterior)
-           # pick a random number between 0 and 1 assuming a uniform distribution
-           # if number less than acceptance ratio, go with new parameter value.
-           # if larger than ratio go with old parameter value
-           # for first jump, probability will always be less than or equal to
-           # acceptance ratio (1)
-            rv = self.maker.uniform(0,1,1)
-            if rv < acceptance_ratio:
-                self.selected_posterior = candidate_posterior
-                for key in self.params:
-                    selected_value[key] = candidate_value[key]
-                msg = 'jumped to new value'; self.ar.append(1)
-            else :
-                # selected_value = selected_value
-                msg = 'staying put'; self.ar.append(0)
-            return selected_value, acceptance_ratio, rv, msg
+        if self.it == 0:
+            acceptance_ratio = 1 # always accept the first candidate vlue
+        else:# run MWR
+        # example_square_MWRu.run_one_step()
+
+
+            acceptance_ratio = min(1, candidate_posterior/self.selected_posterior)
+        # pick a random number between 0 and 1 assuming a uniform distribution
+        # if number less than acceptance ratio, go with new parameter value.
+        # if larger than ratio go with old parameter value
+        # for first jump, probability will always be less than or equal to
+        # acceptance ratio (1)
+        rv = self.maker.uniform(0,1,1)
+        if rv < acceptance_ratio:
+            self.selected_posterior = candidate_posterior
+            for key in self.params:
+                selected_value[key] = candidate_value[key]
+            msg = 'jumped to the candidate value'; self.ar.append(1)
+        else :
+            # selected_value = selected_value
+            msg = 'staying at the selected value'; self.ar.append(0)
+        return selected_value, acceptance_ratio, rv, msg
                 
 
     def _MCMC_sampler(self, number_of_runs):
@@ -612,7 +594,7 @@ class MWRu_calibrator():
         Landslide average thickness (t_avg) adjusted at landslide with id = 1.
         If other landslide ids, thickness at those landslides will not be adjusted.
         """
-        self.LHList = []
+        self.MCMC_stats_list = []
         self.trial_Qs_profiles = {}
         self.trial_runout_maps = {}
         self.ar = [] # list for tracking acceptance ratio
@@ -657,13 +639,13 @@ class MWRu_calibrator():
             p_table = []
             p_nms = []
             for key in self.params:
-                # statistics saved depend on which parameter values were adjusted
+                # the statistics saved depend on which parameter values were adjusted
                 p_table = p_table+[jump_size[key], candidate_value[key], selected_value[key]]
                 p_nms = p_nms+['jump_size_'+key, 'candidate_value_'+key, 'selected_value_'+key]
             if self.calibration_method == "extent_only":
-                self.LHList.append([self.it, self.MWR.c, prior_t, omegaT,candidate_posterior, acceptance_ratio, rv, msg, self.selected_posterior]+p_table)
+                self.MCMC_stats_list.append([self.it, self.MWR.c, prior_t, omegaT,candidate_posterior, acceptance_ratio, rv, msg, self.selected_posterior]+p_table)
             elif self.calibration_method == "extent_and_sediment":
-                self.LHList.append([self.it, self.MWR.c, self.TMV, self.Qtm, prior_t, omegaT, MSE_Qs**0.5, SE_DoD**0.5, candidate_posterior, acceptance_ratio, rv, msg, self.selected_posterior]+p_table)
+                self.MCMC_stats_list.append([self.it, self.MWR.c, self.TMV, self.Qtm, prior_t, omegaT, MSE_Qs**0.5, SE_DoD**0.5, candidate_posterior, acceptance_ratio, rv, msg, self.selected_posterior]+p_table)
 
             # adjust jump size if it has been N_cycles iterations since the last adjustment
             if self.it%self.N_cycles == 0:
@@ -671,21 +653,18 @@ class MWRu_calibrator():
                 self._adjust_jump_size(mean_acceptance_ratio)
                 self.ar = [] # reset acceptance ratio tracking list
 
-            # print('MCMC iteration: {}, likelihood:{}, acceptance ratio:{}, random value:{},{}'.format(
-            #                   self.it, np.round(candidate_posterior, decimals = 5),
-            #                   np.round(acceptance_ratio, decimals = 3),
-            #                   np.round(rv, decimals = 3), 
-            #                   msg))
-
-        # organize MCMC statistics into a single pandas dataframe
-        self.LHvals = pd.DataFrame(self.LHList)
+            if self.show_progress and self.it%50 == 0:        
+                print('MCMC iteration: {}'.format(self.it))
+        
+        # after number_of_runs iterations, organize MCMC statistics into a single dataframe
+        self.MCMC_stats = pd.DataFrame(self.MCMC_stats_list)
         if self.calibration_method == "extent_only":
-            self.LHvals.columns = ['iteration', 'model iterations', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+            self.MCMC_stats.columns = ['iteration', 'model iterations', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
         elif self.calibration_method == "extent_and_sediment":
-            self.LHvals.columns = ['iteration', 'model iterations', 'total_mobilized_volume', 'obs_mean_total_flow',  'prior', 'omegaT','MSE_Qs^1/2','SE_DoD^1/2', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+            self.MCMC_stats.columns = ['iteration', 'model iterations', 'total_mobilized_volume', 'obs_mean_total_flow',  'prior', 'omegaT','MSE_Qs^1/2','SE_DoD^1/2', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
 
         # get parameter set that results in highest posterior value
-        self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] 
+        self.calibration_values = self.MCMC_stats[self.MCMC_stats['selected_posterior'] == self.MCMC_stats['selected_posterior'].max()] 
 
 
 def plot_node_field_with_shaded_dem(mg, field, save_name= None, plot_name = None, figsize = (12,9.5), 
