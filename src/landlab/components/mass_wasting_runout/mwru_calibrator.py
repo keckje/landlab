@@ -411,8 +411,7 @@ class MWRu_calibrator():
 
 
     def _determine_typical_shear_stress(self):
-        """
-        determine a typical debris flow basal shear stress value, used for 
+        """determine a typical debris flow basal shear stress value, used for 
         estimating an upper limit of the erosion coefficient and lower limit of
         threhosld flux qsc
         """
@@ -550,12 +549,12 @@ class MWRu_calibrator():
 
 
     def _compute_candidate_value_prior_likelihood(self, candidate_value):
-        """compute the prior likelihood of the candidate values"""
+        """compute the prior likelihood of the candidate values as the 
+        product of the prior probability of each parameter value"""
         prior_t = 1
         for key in self.params:
             prior_ = self._prior_probability(candidate_value[key], key)
-            # prior[key] = prior_
-            prior_t = prior_t*prior_ # likelihood (product of liklihoods) of all parameter values            
+            prior_t = prior_t*prior_ # likelihood (product of likelihoods) of all parameter values            
         return prior_t    
     
     
@@ -623,99 +622,42 @@ class MWRu_calibrator():
         # prior = {}
         jump_size = {}
         for self.it in range(number_of_runs):
+            
+            # get candidate parameter values
             # if first iteration, used the provided optimal parameter value as the first candidate
             if self.it == 0:
                 for key in self.params:
                     selected_value[key] = self.params[key][2]
+                    
             # for all other iterations, select a new candidate parameter value
             for key in self.params:
                 candidate_value[key], jump_size[key] = self._candidate_value(selected_value[key], key)
 
             # update MWR parameter values
             self._update_MWR_parameter_values(candidate_value)
-            # #### def update_MWR_parameter_values(candidate_value):
-            # for key in self.params:
-            #     if key == 'qsc':
-            #         self.MWR.qsc = candidate_value[key]
-            #     if key == 'k':
-            #         self.MWR.k = candidate_value[key]
-            #     if key == 'slpc':
-            #         self.MWR.slpc = candidate_value[key] # slpc is a list
-            #     if key == "t_avg":
-            #         # adjust thickness of landslide with id = 1
-            #         self.MWR._grid.at_node['soil__thickness'][self.MWR._grid.at_node['mass__wasting_id'] == 1] = candidate_value[key]
-            # ####
-            
-            # a check that erosion E doesn't exceed qsc
+
+            # a check that erosion E doesn't exceed qsc for the candidate parameters
             # if k or qsc are a calibration parameter, will adjust k or qsc util E<qsc and update MWR parameter values
             if self.qsc_constraint:
                 candidate_value, jump_size = self._check_E_lessthan_lambda_times_qsc(candidate_value, jump_size, selected_value) # move this, check if cadidate_value changes, 
             
             # likelihood of each candidate parameter value given the min and max values
             prior_t = self._compute_candidate_value_prior_likelihood(candidate_value)
-            #### def compute_candidate_value_prior_liklihood(candidate_value):
-            # prior_t = 1
-            # for key in self.params:
-            #     prior_ = self._prior_probability(candidate_value[key], key)
-            #     prior[key] = prior_
-            #     prior_t = prior_t*prior_ # likelihood (product of liklihoods) of all parameter values            
-            # #### return prior_t
-            
-            # run simulation with updated candadite parameters
-            # self.i = i
+ 
+            # run simulation with updated candidate parameters
             self._simulation()
             
             # determine candidate parameter posterior likelihood value (posterior pdf value) 
             candidate_posterior, omegaT, MSE_Qs, SE_DoD = self._determine_posterior_likelihood(prior_t)
-            # #### def determine_posterior_likelihood(prior_t):
-            # if self.calibration_method == "extent_only":
-            #     omegaT = self._omegaT(metric = "entire_runout_extent")
-            #     candidate_posterior = prior_t*omegaT
-            # elif self.calibration_method == "extent_and_sediment":
-            #     # get modeled deposition profile
-            #     self.mbLdf_m = self._channel_profile_deposition("modeled")
-
-            #     # mean square error of the sediment transport profile (MSE_Qs)
-            #     MSE_Qs = self._MSE_Qs()
-                
-            #     # omegaT
-            #     omegaT = self._omegaT(metric = self.extent_metric)
-                
-            #     # square error of the modeled DoD (SE_DoD)
-            #     SE_DoD = self._SE_DoD(metric = self.extent_metric)
-                
-            #     # determine posterior likilhood: product of prior liklihood, omegaT, Qt 
-            #     candidate_posterior = prior_t*omegaT*(1/MSE_Qs)*(1/SE_DoD)
-            # #### return candidate_posterior
             
-            
-            # decide to jump or not to jump from the present parameter set
-            
+            # decide to jump or not to jump from the presently selected parameter set
             selected_value, acceptance_ratio, rv, msg = self._jump_or_stay(candidate_value, candidate_posterior, selected_value)
-            #  if i == 0:
-            #      acceptance_ratio = 1 # always accept the first candidate vlue
-            #  else:
-            #      acceptance_ratio = min(1, candidate_posterior/self.selected_posterior)
-            # # pick a random number between 0 and 1 assuming a uniform distribution
-            # # if number less than acceptance ratio, go with new parameter value.
-            # # if larger than ratio go with old parameter value
-            # # for first jump, probability will always be less than or equal to
-            # # acceptance ratio (1)
-            #  rv = self.maker.uniform(0,1,1)
-            #  if rv < acceptance_ratio:
-            #      self.selected_posterior = candidate_posterior
-            #      for key in self.params:
-            #          selected_value[key] = candidate_value[key]
-            #      msg = 'jumped to new value'; self.ar.append(1)
-            #  else :
-            #      selected_value = selected_value
-            #      msg = 'staying put'; self.ar.append(0)
-            #### 
             
-            # save MCMC chain statisitcs for post-calibration analysis of algorithm performance
+            # save statistics of each MCMC iteration
             p_table = []
             p_nms = []
             for key in self.params:
+                # statistics saved depend on which parameter values were adjusted
                 p_table = p_table+[jump_size[key], candidate_value[key], selected_value[key]]
                 p_nms = p_nms+['jump_size_'+key, 'candidate_value_'+key, 'selected_value_'+key]
             if self.calibration_method == "extent_only":
@@ -723,19 +665,19 @@ class MWRu_calibrator():
             elif self.calibration_method == "extent_and_sediment":
                 self.LHList.append([self.it, self.MWR.c, self.TMV, self.Qtm, prior_t, omegaT, MSE_Qs**0.5, SE_DoD**0.5, candidate_posterior, acceptance_ratio, rv, msg, self.selected_posterior]+p_table)
 
-            # adjust jump size every N_cycles
+            # adjust jump size if it has been N_cycles iterations since the last adjustment
             if self.it%self.N_cycles == 0:
                 mean_acceptance_ratio = np.array(self.ar).mean()
                 self._adjust_jump_size(mean_acceptance_ratio)
                 self.ar = [] # reset acceptance ratio tracking list
 
-            print('MCMC iteration: {}, likelihood:{}, acceptance ratio:{}, random value:{},{}'.format(
-                              self.it, np.round(candidate_posterior, decimals = 5),
-                              np.round(acceptance_ratio, decimals = 3),
-                              np.round(rv, decimals = 3), 
-                              msg))
+            # print('MCMC iteration: {}, likelihood:{}, acceptance ratio:{}, random value:{},{}'.format(
+            #                   self.it, np.round(candidate_posterior, decimals = 5),
+            #                   np.round(acceptance_ratio, decimals = 3),
+            #                   np.round(rv, decimals = 3), 
+            #                   msg))
 
-        # summarize MCMC chain statistics
+        # organize MCMC statistics into a single pandas dataframe
         self.LHvals = pd.DataFrame(self.LHList)
         if self.calibration_method == "extent_only":
             self.LHvals.columns = ['iteration', 'model iterations', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
@@ -743,7 +685,7 @@ class MWRu_calibrator():
             self.LHvals.columns = ['iteration', 'model iterations', 'total_mobilized_volume', 'obs_mean_total_flow',  'prior', 'omegaT','MSE_Qs^1/2','SE_DoD^1/2', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
 
         # get parameter set that results in highest posterior value
-        self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] # {'qsc': selected_value_SD, 'k': selected_value_cs}
+        self.calibration_values = self.LHvals[self.LHvals['selected_posterior'] == self.LHvals['selected_posterior'].max()] 
 
 
 def plot_node_field_with_shaded_dem(mg, field, save_name= None, plot_name = None, figsize = (12,9.5), 
