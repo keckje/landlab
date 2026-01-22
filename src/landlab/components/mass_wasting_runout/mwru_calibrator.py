@@ -24,7 +24,7 @@ class MWRu_calibrator():
     TODO:   See other beyesian calibration apporaches that use more than two variables
             to figure out ways for visualizing results.
             
-            Add a option for jumping in one parameter direction at a time rather
+            Add an option for jumping in one parameter direction at a time rather
             than all parameters as presently implemented
             
             Make jump_size input a vector, if len(jump_size) == 1, all variables use same value
@@ -44,7 +44,7 @@ class MWRu_calibrator():
 
     def __init__(self,
                  MassWastingRunout,
-                 params,
+                 MCMC_adjusted_parameters,
                  el_l,
                  el_h,
                  runout_profile_nodes,
@@ -73,9 +73,10 @@ class MWRu_calibrator():
                 topographic__steepest_slope
                 DoD_o
 
-        params : list of lists
-            each list is the min, max and optimal parameter value. Used to define
-            the parameter space used by the MCMC sampler
+        MCMC_adjusted_parameters : dictionary
+            Defines the parameter space sampled by the MCMC algorithm.
+            Each key is one of the adjustable parameters (presently qsc, k, slpc and t_avg)
+            The value for each key is a list of the min, max and optimal parameter value, in that order. 
 
         el_l : float
             lower limit of elevation range included in analysis.
@@ -108,6 +109,7 @@ class MWRu_calibrator():
 
         N_cycles: int
             Number of iterations between updates to the jump size based on MCMC acceptance ratio
+            
         """
 
         self.MWR = MassWastingRunout
@@ -136,6 +138,7 @@ class MWRu_calibrator():
         self.phi_plus = phi_plus
         self.qsc_constraint = qsc_constraint 
         self.show_progress = show_progress
+
 
     def __call__(self, max_number_of_runs = 50):
         """instantiate the class"""
@@ -414,7 +417,6 @@ class MWRu_calibrator():
                                       self.MWR.h,
                                       self.MWR.s,
                                       self.MWR.g)
-            
 
 
     def _check_E_lessthan_lambda_times_qsc(self, candidate_value, jump_size, selected_value):
@@ -477,6 +479,7 @@ class MWRu_calibrator():
             
         return candidate_value, jump_size
     
+    
     def _candidate_value(self, selected_value, key):
         """determine the candidate parameter value as a random value from
         a normal distribution with mean equal to the presently selected value and
@@ -524,7 +527,10 @@ class MWRu_calibrator():
                 self.MWR.slpc = candidate_value[key] # slpc is a list
             if key == "t_avg":
                 # adjust thickness of landslide with id = 1
-                self.MWR._grid.at_node['soil__thickness'][self.MWR._grid.at_node['mass__wasting_id'] == 1] = candidate_value[key]        
+                self.MWR._grid.at_node['soil__thickness'][self.MWR._grid.at_node['mass__wasting_id'] == 1] = candidate_value[key]
+            else:
+                msg = "{} is not an adjustible parameter, correct the MCMC_adjusted_parameters input".format(key)
+                raise ValueError(msg)  
 
 
     def _compute_candidate_value_prior_likelihood(self, candidate_value):
@@ -699,6 +705,7 @@ def plot_node_field_with_shaded_dem(mg, field, save_name= None, plot_name = None
     if save_name is not None:
         plt.savefig(save_name+'.png', dpi = 300, bbox_inches='tight')
 
+
 def define_profile_nodes(mg):
     """begininng from above the mass wasting source area, map the runout profile. 
     Mass wasting runout flow volume will be computed at each node along the runoutprofile"""
@@ -827,6 +834,7 @@ def profile_plot(mg, pnodes, pnodedist, ef = 2, xlim = None, ylim = None, aspect
         plt.xlim([xlim])
     if ylim:
         plt.ylim([ylim])
+
 
 def profile_distance(mg, xsd):
     """small function to get distance between profile nodes. Nodes must be ordered
