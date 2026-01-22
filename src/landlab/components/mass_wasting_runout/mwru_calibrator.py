@@ -129,7 +129,7 @@ class MWRu_calibrator():
         if self.mg.has_field("particle__diameter", at="node"):
             self.initial_particle_diameter = self.mg.at_node["particle__diameter"].copy()
         self.plot_tf = plot_tf
-        self.DoD_m_dict ={} # for dedegging
+        self.DoD_m_dict ={}
         self._maker(seed)
         self.jstracking = [] # for tracking jumps
         self.alpha_min = alpha_min
