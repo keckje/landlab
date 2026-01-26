@@ -1,10 +1,3 @@
-# TO DO
-# 2 add test with remove tribs to map_rmg_nodes_to_nmg_links, pull request 2
-# 3 tests for map_nmg1_links_to_nmg2_links, pull request 3
-# 0 add upside down channel network to confest
-# 1 cleanup pull request 1, add tests to coincident node function
-# # WHEN pull request for CNGT is done, update MWRo, eroder, mapper, DHG
-
 
 import itertools
 from collections.abc import Sequence
