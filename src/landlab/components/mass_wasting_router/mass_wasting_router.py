@@ -9,8 +9,8 @@ from landlab import imshow_grid, imshow_grid_at_node
 from landlab.components.mass_wasting_router.landslide_mapper import LandslideMapper as LM
 from landlab.components.mass_wasting_runout import MassWastingRunout as MWRu
 from landlab.components.mass_wasting_router.mass_wasting_eroder import MassWastingEroder as MWE
-from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsMapper
-import landlab.utils.channel_network_grid_tools as gt
+from landlab.utils.channel_network_grid_tools_all import ChannelNetworkToolsMapper
+import landlab.utils.channel_network_grid_tools_all as gt
 
 class MassWastingRouter(Component):
     

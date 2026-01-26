@@ -12,7 +12,7 @@ from landlab.components import(FlowDirectorD8,
                                 FlowDirectorMFD, 
                                 FlowDirectorSteepest)
 
-from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsInterpretor
+from landlab.utils.channel_network_grid_tools_all import ChannelNetworkToolsInterpretor
 
 
 class LandslideMapper(Component):

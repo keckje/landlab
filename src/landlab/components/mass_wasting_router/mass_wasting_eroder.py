@@ -6,8 +6,8 @@ from landlab import Component, FieldError
 from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFinderAndRouter,FlowDirectorSteepest)
 from landlab import imshow_grid, imshow_grid_at_node
 # from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
-from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsInterpretor, ChannelNetworkToolsMapper
-import landlab.utils.channel_network_grid_tools as gt
+from landlab.utils.channel_network_grid_tools_all import ChannelNetworkToolsInterpretor, ChannelNetworkToolsMapper
+import landlab.utils.channel_network_grid_tools_all as gt
 
 class MassWastingEroder(Component):
     

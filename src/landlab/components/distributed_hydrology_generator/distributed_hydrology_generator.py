@@ -28,8 +28,8 @@ import xarray as xr
 from landlab import Component, FieldError
 from landlab.plot import graph
 from landlab.io import read_esri_ascii
-from landlab.utils.channel_network_grid_tools import ChannelNetworkToolsMapper
-import landlab.utils.channel_network_grid_tools as gt
+# from landlab.utils.channel_network_grid_tools_all import ChannelNetworkToolsMapper
+import landlab.utils.channel_network_grid_tools_all as gt
 
 class DistributedHydrologyGenerator(Component):
 
