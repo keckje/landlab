@@ -52,7 +52,7 @@ class MWRu_calibrator():
                  prior_distribution = "uniform",
                  calibration_method = 'extent_and_sediment',
                  extent_metric = "entire_runout_extent",
-                 RMSE_metric = "Vu",
+                 RMSE_metric = "EA_u",
                  jump_size = 0.2,
                  N_cycles = 10,
                  plot_tf = True,
@@ -64,7 +64,8 @@ class MWRu_calibrator():
                  qsc_constraint = True,
                  show_progress = False):
         
-        """
+        """Instantiate a MWR_calibrator class
+        
         Parameters
         ----------
         MassWastingRunout: instantiated mass wasting runout that contains a
@@ -100,7 +101,7 @@ class MWRu_calibrator():
             can be "entire_runout_extent", "deposition_extent_only" or "scour_extent_only". Default is "entire_runout_extent"
 
         RMSE_metric: string
-            can be 'Vu','Vd','dV','Vt'. Default is "Vd"
+            can be 'EA_u','EA_d','E_u','A_d'. Default is "EA_u"
 
         jump_size: float
             standard deviation of jump size for MCMC algorithm expressed as ratio of
@@ -114,7 +115,7 @@ class MWRu_calibrator():
 
         self.MWR = MassWastingRunout
         self.mg = MassWastingRunout.grid
-        self.params = params
+        self.params = MCMC_adjusted_parameters
         self.el_l = el_l
         self.el_h = el_h
         self.runout_profile_nodes = runout_profile_nodes
@@ -141,7 +142,7 @@ class MWRu_calibrator():
 
 
     def __call__(self, max_number_of_runs = 50):
-        """instantiate the class"""
+        """run the calibrator max_number_runs interations"""
         if self.calibration_method == "extent_and_sediment":
             # get profile of observed total flow
             self.mbLdf_o = self._channel_profile_deposition("observed")
@@ -220,49 +221,72 @@ class MWRu_calibrator():
             el = dem[cn]
 
             # at point cn along the profile, produces 4 different metrics:
-
-            # metric 1, Vt: cumulative aggradation downslope of point cn
-            dp = demd[demd>0]; dem_dp = dem[demd>0]
-            dpe = np.nansum(dp[(dem_dp<el)&(dem_dp>=self.el_l)])
-            Vt = dpe*dA # multiply by cell area to get volume
+            # metric 1, A_d: cumulative aggradation downslope of point cn
+            A_d = self._downslope_A(dem, demd, el)
             
-            # metric 2, dV: cumulative scour upstream of point cn
-            sc = demd[demd<0]; dem_sc = dem[demd<0]
-            sce = np.nansum(sc[(dem_sc>el)&(dem_sc<=self.el_h)])
-            dV = sce*dA # multiply by cell area to get volume
+            # metric 2, E_u: cumulative scour upstream of point cn
+            E_u = self._upslope_E(dem, demd, el)
 
-            # metric 3, Vd: cumulative erosion and aggradation downslope of point cn
-            dd = np.nansum(demd[(dem<=el) & (dem>=self.el_l)])
-            Vd = dd*dA
+            # metric 3, EA_d: cumulative erosion and aggradation downslope of point cn
+            EA_d = self._downslope_A_and_E(dem, demd, el)
+
             
-            # metric 4, Vu: cumulative flow volume past point cn
-            #               equivalent to the cumulative erosion and aggradation 
-            #               upslope of point cn * -1.
-            du = np.nansum(demd[(dem>=el) & (dem<=self.el_h)])*-1  # equation 28
-            Vu = du*dA # equation 28
+            # metric 4, EA_u: cumulative flow volume past point cn equivalent to the cumulative erosion 
+            # and aggradation upslope of point cn * -1., equivalent to Qs, eq. 27"""
+            EA_u = self._Qs(dem, demd, el)
 
             # get node distance
             rd = runout_profile_distance[runout_profile_nodes == cn]
             # get node slope
             cns = node_slope[cn]
             
-            return Vu, Vd, dV, Vt, cns, cn, rd, el
+            return EA_u, EA_d, E_u, A_d, cns, cn, rd, el
 
         dem_m = mg.at_node['topographic__elevation']
+        #### dem should be mg.at_node['topographic__initial_elevation']??? test results with Cascade 2021
         if datatype == "modeled":
             demd = mg.at_node['DoD_m']
-            dem = mg.at_node['topographic__elevation'] 
+            # dem = mg.at_node['topographic__elevation'] 
         elif datatype == "observed":
             demd = mg.at_node['DoD_o']
-            dem = mg.at_node['topographic__initial_elevation']+demd
+            # dem = mg.at_node['topographic__initial_elevation']+demd 
+            
+        dem = mg.at_node['topographic__initial_elevation']
 
         mbL = []
         for cn in runout_profile_nodes:
             mbL.append(cv_mass_change(cn))
         mbLdf = pd.DataFrame(mbL)
-        mbLdf.columns = ['Vu','Vd','dV','Vt', 'slope', 'node','runout_profile_distance','elevation']
+        mbLdf.columns = ['EA_u','EA_d','E_u','A_d', 'slope', 'node','runout_profile_distance','elevation']
         return mbLdf
 
+    def _downslope_A(self, dem, demd, el):
+        """profile metric 1, A_d: cumulative aggradation downslope of point cn"""
+        dp = demd[demd>0]; dem_dp = dem[demd>0]
+        dpe = np.nansum(dp[(dem_dp<=el)&(dem_dp>=self.el_l)])
+        A_d = dpe*self.mg.dx*self.mg.dx # multiply by cell area to get volume  
+        return A_d
+    
+    def _upslope_E(self, dem, demd, el):
+        """profile metric 2, E_u: cumulative scour upslope (up-elevation) of point cn"""
+        sc = demd[demd<0]; dem_sc = dem[demd<0]
+        sce = np.nansum(sc[(dem_sc>=el)&(dem_sc<=self.el_h)])
+        E_u = sce*self.mg.dx*self.mg.dx   
+        return E_u
+    
+    def _downslope_A_and_E(self, dem, demd, el):
+        """profile metric 3, EA_d: cumulative erosion and aggradation downslope of point cn"""
+        dd = np.nansum(demd[(dem<=el) & (dem>=self.el_l)])
+        EA_d = dd*self.mg.dx*self.mg.dx 
+        return EA_d
+    
+    def _Qs(self, dem, demd, el):
+        """profile metric 4, EA_u: cumulative flow volume past point cn equivalent to the cumulative erosion 
+        and aggradation upslope of point cn * -1., equivalent to Qs, eq. 27"""
+        du = np.nansum(demd[(dem>=el) & (dem<=self.el_h)])*-1  # equation 28
+        EA_u = du*self.mg.dx*self.mg.dx
+        return EA_u
+    
 
     def _omegaT(self, metric = 'entire_runout_extent'):
         """ determines intersection, over estimated area and underestimated area of
@@ -521,11 +545,11 @@ class MWRu_calibrator():
         for key in self.params:
             if key == 'qsc':
                 self.MWR.qsc = candidate_value[key]
-            if key == 'k':
+            elif key == 'k':
                 self.MWR.k = candidate_value[key]
-            if key == 'slpc':
+            elif key == 'slpc':
                 self.MWR.slpc = candidate_value[key] # slpc is a list
-            if key == "t_avg":
+            elif key == "t_avg":
                 # adjust thickness of landslide with id = 1
                 self.MWR._grid.at_node['soil__thickness'][self.MWR._grid.at_node['mass__wasting_id'] == 1] = candidate_value[key]
             else:
