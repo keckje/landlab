@@ -36,8 +36,7 @@ class MWRu_calibrator():
     
     
     
-    is _check_E_lessthan_lambda_times_qsc needed -  yes, but not as critical. Keeping
-    will allow the user to exclude watery-like runout behavior
+    Note - _check_E_lessthan_lambda_times_qsc funeeded -  
     save data for plots
     
 
@@ -58,8 +57,8 @@ class MWRu_calibrator():
                  N_cycles = 10,
                  plot_tf = True,
                  seed = None,
-                 alpha_min = 0.1,# 0.23 #0.1
-                 alpha_max = 0.5,# 0.44#0.5
+                 alpha_min = 0.1,
+                 alpha_max = 0.5,
                  phi_minus = 0.9,
                  phi_plus = 1.1,
                  qsc_constraint = True,
@@ -77,7 +76,7 @@ class MWRu_calibrator():
 
         MCMC_adjusted_parameters : dictionary
             Defines the parameter space sampled by the MCMC algorithm.
-            Each key is one of the adjustable parameters (presently qsc, k, slpc and t_avg)
+            Each key is one of the adjustable parameters (presently qsc, k, slpc, landslide_thickness_uniform, soil_thickness_uniform, landslide_thickness_multiplier, soil_thickness_multiplier)
             The value for each key is a list of the min, max and optimal parameter value, in that order. 
 
         el_l : float
@@ -116,7 +115,25 @@ class MWRu_calibrator():
 
         self.MWR = MassWastingRunout
         self.mg = MassWastingRunout.grid
-        self.params = MCMC_adjusted_parameters
+        
+        # check MCMC_adjusted_parameters parameter and parameter ranges are reasonable
+        pvals = np.array(list(MCMC_adjusted_parameters.values()))
+        min_p = pvals[:,0]; max_p = pvals[:,1];   opt_p = pvals[:,2];
+        if np.any(pvals <0):
+            raise ValueError("check MCMC_adjusted_parameters for negative values")
+        elif np.any((min_p>max_p) == True):
+            raise ValueError("check MCMC_adjusted_parameters, minimum value less than the maximum value")
+        elif np.any((opt_p<min_p) == True) or np.any((opt_p>max_p) == True):
+            raise ValueError("check MCMC_adjusted_parameters, optimal value outside of the minimum and maximum values")                
+        elif "soil_thickness_uniform" in MCMC_adjusted_parameters.keys() and "soil_thickness_multiplier" in MCMC_adjusted_parameters.keys():
+                msg = "candidate values include both soil_thickness_uniform and soil_thickness_multiplier parameters, pick one"
+                raise ValueError(msg)         
+        elif "landslide_thickness_uniform" in MCMC_adjusted_parameters.keys() and "landslide_thickness_multiplier" in MCMC_adjusted_parameters.keys():
+                msg = "candidate values include both landslide_thickness_uniform and landslide_thickness_multiplier parameters, pick one"
+                raise ValueError(msg)  
+        else:
+            self.params = MCMC_adjusted_parameters
+            
         self.el_l = el_l
         self.el_h = el_h
         self.runout_profile_nodes = runout_profile_nodes
@@ -149,10 +166,15 @@ class MWRu_calibrator():
         self.DoD_m_dict ={}
         self._maker(seed)
         self.jstracking = [] # for tracking jumps
-        self.alpha_min = alpha_min
-        self.alpha_max = alpha_max
-        self.phi_minus = phi_minus
-        self.phi_plus = phi_plus
+        
+        if (alpha_min < 0 or alpha_min > 1)  or  alpha_max < alpha_min or alpha_max > 1 or phi_minus < 0 or phi_plus < phi_minus:
+            msg = "check adaptable jump variance parameters alpha and phi"
+            raise ValueError(msg)  
+        else:
+            self.alpha_min = alpha_min
+            self.alpha_max = alpha_max
+            self.phi_minus = phi_minus
+            self.phi_plus = phi_plus
         self.qsc_constraint = qsc_constraint 
         self.show_progress = show_progress
         # determine the typical shear stress value given field observed flow characteristics
@@ -168,8 +190,10 @@ class MWRu_calibrator():
             self.TMV = (-1*(self.mg.at_node['DoD_o'][self.mg.at_node['DoD_o']<0]).sum())*self.mg.dx*self.mg.dy
             # mean total flow
             self.profile_metric_mean = self.mbLdf_o[self.profile_metric].mean()
-
-            
+        else:
+            self.TMV = np.nan
+            self.profile_metric_mean = np.nan
+                
         self._MCMC_sampler(max_number_of_runs)
 
     
@@ -180,7 +204,6 @@ class MWRu_calibrator():
 
     def _simulation(self):
         """reset mg to initial conditions, run the MWR, save the DoD"""
-        
         # reset the dem to the initial dem and soil to initial soil depth
         self.MWR.grid.at_node['topographic__elevation'] = self.MWR.grid.at_node['topographic__initial_elevation'].copy()
         self._update_topographic_slope()
@@ -373,6 +396,7 @@ class MWRu_calibrator():
             plt.title(nm)
             plt.legend()
             plt.show()  
+            
         return MSE_Qs
 
 
@@ -437,7 +461,7 @@ class MWRu_calibrator():
                                       self.MWR.g)
 
 
-    def _candidate_value(self, selected_value, key):
+    def _get_a_candidate_value(self, selected_value, key):
         """determine the candidate parameter value as a random value from
         a normal distribution with mean equal to the presently selected value and
         standard deviation equal to the jump size, following MCMC sampler approach
@@ -449,7 +473,7 @@ class MWRu_calibrator():
         # get the jump size
         jump_size = self.jump_size*(max_val-min_val)
         pass_ = False
-        # candidate value cant be outside of the max and min values
+        # candidate value can't be outside of the max and min values
         while pass_ is False:
             candidate_value = self.maker.normal(selected_value, jump_size)
             if (candidate_value < min_val) or (candidate_value > max_val):
@@ -474,7 +498,7 @@ class MWRu_calibrator():
             # if k is a calibration parameter, first apply constraint to k, since model is very sensitive to qsc
             if self.params.get('k'):
                 # check if k calibration range is low enough
-                equivalent_E_min = erosion_rate(self.params['k'][2]-4*self.jump_size*(self.params['k'][1]-self.params['k'][0]),self.tau,self.MWR.f,self.mg.dx)*self.mg.dx # if erosion from k-four standard deviations (jumpsize)) greater than qsc, then the lower range needs to be decreased
+                equivalent_E_min = erosion_rate(max(self.params['k'][2]-4*self.jump_size*(self.params['k'][1]-self.params['k'][0]),self.params['k'][0]),self.tau,self.MWR.f,self.mg.dx)*self.mg.dx # if erosion from k-four standard deviations (jumpsize)) greater than qsc, then the lower range needs to be decreased
                 print('equivalent_E min: {}, qsc: {}'.format(equivalent_E_min, self.MWR.qsc))
                 if equivalent_E_min>self.MWR.qsc*_lambda:
                     msg = "initial erosion coefficient k results in erosion depth>>qsc, decrease initial k and/or decrase it's min and max values"
@@ -483,7 +507,7 @@ class MWRu_calibrator():
                     _pass = False
                     _i_ = 0
                     while _pass is False:  # repeatedly jump from the selected parameters until candidate_equivalent_E < qsc*_lambda
-                        candidate_values['k'], jump_sizes['k'] = self._candidate_value(selected_values['k'], 'k')
+                        candidate_values['k'], jump_sizes['k'] = self._get_a_candidate_value(selected_values['k'], 'k')
                         candidate_equivalent_E = erosion_rate(candidate_values['k'],self.tau,self.MWR.f,self.mg.dx)*self.mg.dx
                         if candidate_equivalent_E < self.MWR.qsc*_lambda:
                             _pass = True
@@ -497,14 +521,14 @@ class MWRu_calibrator():
             # if k is not a calibration parameter (k is fixed), then adjust qsc to meet constraint
             elif self.params.get('qsc'): # candidate values have already been transfered to MWR at this point
                 # check if qsc calibration range is high enough
-                if equivalent_E > self.params['qsc'][2]+4*self.jump_size*(self.params['qsc'][1]-self.params['qsc'][0])*_lambda: # if erosion is less than lambda*(qsc+four standard deviations (jumpsize)), then the upper range needs to be increased
+                if equivalent_E > self.params['qsc'][2]+min(4*self.jump_size*(self.params['qsc'][1]-self.params['qsc'][0]),self.params['qsc'][1])*_lambda: # if erosion is less than lambda*(qsc+four standard deviations (jumpsize)), then the upper range needs to be increased
                     msg = "maximum possible qsc value is less than erosion caused by k value"
                     raise ValueError(msg)   
                 else: # if high enough, randomly select a qsi value until that value exceeds the erosion equivalent of the k value
                     _pass = False
                     _i_ = 0
                     while _pass is False: # repeatedly jump from the selected parameters until candidate_equivalent_E < qsc*_lambda
-                        candidate_values['qsc'], jump_sizes['qsc'] = self._candidate_value(selected_values['qsc'], 'qsc')
+                        candidate_values['qsc'], jump_sizes['qsc'] = self._get_a_candidate_value(selected_values['qsc'], 'qsc')
                         if equivalent_E < candidate_values['qsc']*_lambda:
                             _pass = True
                             self.MWR.qsc = candidate_values['qsc']
@@ -523,22 +547,24 @@ class MWRu_calibrator():
     
 
 
-    def _adjust_jump_size(self, acceptance_ratio):
+    def _adjust_jump_variance(self, acceptance_ratio):
         """following LeCoz et al., 2014 (see the MCMC tutorials), adjust jump 
         variance based on acceptance ratio"""
 
-        if acceptance_ratio < self.alpha_min:
-            factor = self.phi_minus**0.5
-        elif acceptance_ratio > self.alpha_max:
+        if acceptance_ratio < self.alpha_min: # if acceptance ratio too low, reduce jump variance to increase acceptance rate
+            factor = self.phi_minus**0.5 # other approaches multiply by the factor without the square root, doing it this way reduces the factor
+        elif acceptance_ratio > self.alpha_max: # if to high, increase jump variance
             factor = self.phi_plus**0.5
         else:
             factor = 1
+        
         self.jump_size = self.jump_size*factor
         self.jstracking.append(self.jump_size)
         
     
     def _update_MWR_parameter_values(self, candidate_values):
         """update MWR parameter values with candidate values"""
+  
         for key in self.params:
             if key == 'qsc':
                 self.MWR.qsc = candidate_values[key]
@@ -546,9 +572,18 @@ class MWRu_calibrator():
                 self.MWR.k = candidate_values[key]
             elif key == 'slpc':
                 self.MWR.slpc = candidate_values[key] # slpc is a list
-            elif key == "t_avg":
-                # adjust thickness of landslide with id = 1
-                self.MWR._grid.at_node['soil__thickness'][self.MWR._grid.at_node['mass__wasting_id'] == 1] = candidate_values[key]
+            elif key == "landslide_thickness_uniform":
+                self.MWR._grid.at_node['soil__thickness'][self.MWR._grid.at_node['mass__wasting_id'] >= 1] = candidate_values[key]
+            elif key == "soil_thickness_uniform":
+                self.MWR._grid.at_node['soil__thickness'][self.MWR._grid.at_node['mass__wasting_id'] < 1] = candidate_values[key]
+            elif key == "landslide_thickness_multiplier":
+                self.MWR._grid.at_node['soil__thickness'][self.MWR._grid.at_node['mass__wasting_id'] >= 1] = ( 
+                self.MWR._grid.at_node['soil__thickness'][self.MWR._grid.at_node['mass__wasting_id'] >= 1]*candidate_values[key]
+                )
+            elif key == "soil_thickness_multiplier":
+                self.MWR._grid.at_node['soil__thickness'][self.MWR._grid.at_node['mass__wasting_id'] < 1] = (
+                self.MWR._grid.at_node['soil__thickness'][self.MWR._grid.at_node['mass__wasting_id'] < 1]*candidate_values[key]
+                )
             else:
                 msg = "{} is not an adjustible parameter, correct the MCMC_adjusted_parameters input".format(key)
                 raise ValueError(msg)  
@@ -570,24 +605,26 @@ class MWRu_calibrator():
     def _determine_posterior_likelihood(self, prior_t):
         """determine the posterior likelihood of the candidate parameter values"""
         if self.calibration_method == "extent_only":
-            omegaT = self._omegaT(metric = "entire_runout_extent")
-            candidate_posterior = prior_t*omegaT
+            self.omegaT = self._omegaT(metric = self.extent_metric)
+            self.MSE_Qs = np.nan # neither of these metrics are run but need a value for MCMC_stats table
+            self.SE_DoD = np.nan
+            candidate_posterior = prior_t*self.omegaT
         elif self.calibration_method == "extent_and_sediment":
             # get modeled deposition profile
             self.mbLdf_m = self._channel_profile_deposition("modeled")
 
             # mean square error of the sediment transport profile (MSE_Qs)
-            MSE_Qs = self._MSE_Qs()
+            self.MSE_Qs = self._MSE_Qs()
             
             # omegaT
-            omegaT = self._omegaT(metric = self.extent_metric)
+            self.omegaT = self._omegaT(metric = self.extent_metric)
             
             # square error of the modeled DoD (SE_DoD)
-            SE_DoD = self._SE_DoD(metric = self.extent_metric)
+            self.SE_DoD = self._SE_DoD(metric = self.extent_metric)
             
             # determine posterior likilhood: product of prior liklihood, omegaT, Qt 
-            candidate_posterior = prior_t*omegaT*(1/MSE_Qs)*(1/SE_DoD)
-        return candidate_posterior, omegaT, MSE_Qs, SE_DoD
+            candidate_posterior = prior_t*self.omegaT*(1/self.MSE_Qs)*(1/self.SE_DoD)
+        return candidate_posterior
     
     
     def _jump_or_stay(self, candidate_values, candidate_posterior, selected_values):
@@ -596,15 +633,12 @@ class MWRu_calibrator():
         if self.it == 0:
             acceptance_ratio = 1 # always accept the first candidate vlue
         else:# run MWR
-        # example_square_MWRu.run_one_step()
-
-
             acceptance_ratio = min(1, candidate_posterior/self.selected_posterior)
         # pick a random number between 0 and 1 assuming a uniform distribution
         # if number less than acceptance ratio, go with new parameter value.
-        # if larger than ratio go with old parameter value
-        # for first jump, probability will always be less than or equal to
-        # acceptance ratio (1)
+        # if larger than ratio go with old parameter value 
+        # (new parameter has a probability of not being accepted equal to 1-acceptance ratio)
+        # for first jump, the probability of not being accepted is 0
         rv = self.maker.uniform(0,1,1)
         if rv < acceptance_ratio:
             self.selected_posterior = candidate_posterior
@@ -630,21 +664,20 @@ class MWRu_calibrator():
         # dictionaries to store trial values
         selected_values = {}
         candidate_values = {}
-        # prior = {}
         jump_sizes = {}
         for self.it in range(number_of_runs):
             
-            # get candidate parameter values
-            # if first iteration, used the provided optimal parameter value as the first selected value
+            
+            # if first iteration, use the provided optimal parameter value as the selected values
             if self.it == 0:
                 for key in self.params:
                     selected_values[key] = self.params[key][2]
-                    
-            # for all other iterations, select a new candidate parameter value
+       
+            # get candidate parameter values that will be used to run the model and become the new selected values based on model performance and chance
             for key in self.params:
-                candidate_values[key], jump_sizes[key] = self._candidate_value(selected_values[key], key)
+                candidate_values[key], jump_sizes[key] = self._get_a_candidate_value(selected_values[key], key)
 
-            # update MWR parameter values
+            # update MWR parameter values with candadite values
             self._update_MWR_parameter_values(candidate_values)
 
             # a check that erosion E doesn't exceed qsc for the candidate parameters
@@ -652,34 +685,33 @@ class MWRu_calibrator():
             if self.qsc_constraint:
                 candidate_values, jump_sizes = self._check_E_lessthan_lambda_times_qsc(candidate_values, jump_sizes, selected_values)
             
-            # likelihood of each candidate parameter value given the min and max values
+            # prior likelihood of each candidate parameter value given the min and max values and distiribution type (self.prior_distribution)
             prior_t = self._compute_candidate_value_prior_likelihood(candidate_values)
  
             # run simulation with updated candidate parameters
             self._simulation()
             
             # determine candidate parameter posterior likelihood value (posterior pdf value) 
-            candidate_posterior, omegaT, MSE_Qs, SE_DoD = self._determine_posterior_likelihood(prior_t)
+            candidate_posterior = self._determine_posterior_likelihood(prior_t)
             
             # decide to jump or not to jump from the presently selected parameter set
             selected_values, acceptance_ratio, rv, msg = self._jump_or_stay(candidate_values, candidate_posterior, selected_values)
             
-            # save statistics of each MCMC iteration
+            # save statistics of parameters adjusted by the MCMC algorithm
             p_table = []
             p_nms = []
             for key in self.params:
-                # the statistics saved depend on which parameter values were adjusted
                 p_table = p_table+[jump_sizes[key], candidate_values[key], selected_values[key]]
                 p_nms = p_nms+['jump_size_'+key, 'candidate_value_'+key, 'selected_value_'+key]
-            if self.calibration_method == "extent_only":
-                self.MCMC_stats_list.append([self.it, self.MWR.c, prior_t, omegaT,candidate_posterior, acceptance_ratio, rv, msg, self.selected_posterior]+p_table)
-            elif self.calibration_method == "extent_and_sediment":
-                self.MCMC_stats_list.append([self.it, self.MWR.c, self.TMV, self.profile_metric_mean, prior_t, omegaT, MSE_Qs**0.5, SE_DoD**0.5, candidate_posterior, acceptance_ratio, rv, msg, self.selected_posterior]+p_table)
+            # if self.calibration_method == "extent_only":
+            #     self.MCMC_stats_list.append([self.it, self.MWR.c, prior_t, omegaT,candidate_posterior, acceptance_ratio, rv, msg, self.selected_posterior]+p_table)
+            # elif self.calibration_method == "extent_and_sediment":
+            self.MCMC_stats_list.append([self.it, self.MWR.c, self.TMV, self.profile_metric_mean, prior_t, self.omegaT, self.MSE_Qs**0.5, self.SE_DoD**0.5, candidate_posterior, acceptance_ratio, rv, msg, self.selected_posterior]+p_table)
 
             # adjust jump size for next iteration if it has been N_cycles iterations since the last adjustment
             if self.it%self.N_cycles == 0:
                 mean_acceptance_ratio = np.array(self.ar).mean()
-                self._adjust_jump_size(mean_acceptance_ratio)
+                self._adjust_jump_variance(mean_acceptance_ratio)
                 self.ar = [] # reset acceptance ratio tracking list
             
             # print progress to screen
@@ -688,10 +720,10 @@ class MWRu_calibrator():
         
         # after number_of_runs iterations, organize MCMC statistics into a single dataframe
         self.MCMC_stats = pd.DataFrame(self.MCMC_stats_list)
-        if self.calibration_method == "extent_only":
-            self.MCMC_stats.columns = ['iteration', 'model iterations', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
-        elif self.calibration_method == "extent_and_sediment":
-            self.MCMC_stats.columns = ['iteration', 'model iterations', 'total_mobilized_volume', 'obs_mean_total_flow',  'prior', 'omegaT','MSE_Qs^1/2','SE_DoD^1/2', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+        # if self.calibration_method == "extent_only":
+        #     self.MCMC_stats.columns = ['iteration', 'model iterations', 'prior', 'omegaT', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
+        # elif self.calibration_method == "extent_and_sediment":
+        self.MCMC_stats.columns = ['iteration', 'model iterations', 'total_mobilized_volume', 'obs_mean_total_flow',  'prior', 'omegaT','MSE_Qs^1/2','SE_DoD^1/2', 'candidate_posterior', 'acceptance_ratio', 'random value', 'msg', 'selected_posterior']+p_nms
 
         # get parameter set that results in highest posterior value
         self.calibration_values = self.MCMC_stats[self.MCMC_stats['selected_posterior'] == self.MCMC_stats['selected_posterior'].max()] 
