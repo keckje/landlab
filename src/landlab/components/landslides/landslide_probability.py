@@ -422,7 +422,7 @@ class LandslideProbability(Component):
             Set as None to use saturated__thickness_distribution.
             (default='uniform')
         groundwater__recharge_min_value: float, optional (mm/d)
-            minium groundwater recharge for 'uniform' (default=20.)
+            minimum groundwater recharge for 'uniform' (default=20.)
         groundwater__recharge_max_value: float, optional (mm/d)
             maximum groundwater recharge for 'uniform' (default=120.)
         groundwater__recharge_mean: float, optional (mm/d)
@@ -455,7 +455,7 @@ class LandslideProbability(Component):
         seed: int, optional
             seed for random number generation. if seed is assigned any value
             other than the default value of zero, it will create different
-            sequence. To create a certain sequence repititively, use the same
+            sequence. To create a certain sequence repetitively, use the same
             value as input for seed.
         """
         # Initialize seeded random number generation
@@ -579,7 +579,7 @@ class LandslideProbability(Component):
         node specific parameters, creating distributions of these parameters,
         and calculating the index by sampling these distributions 'n' times.
 
-        The index is calculated from the 'infinite slope stabilty
+        The index is calculated from the 'infinite slope stability
         factor-of-safety equation' in the format of Pack RT, Tarboton DG,
         and Goodwin CN (1998),The SINMAP approach to terrain stability mapping.
 
