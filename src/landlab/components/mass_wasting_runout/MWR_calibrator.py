@@ -75,7 +75,7 @@ class MWR_Calibrator():
         MCMC_adjusted_parameters : dictionary
             Defines the parameter space sampled by the MCMC algorithm.
             Each key is one of the adjustable parameters (presently qsc, k, slpc, landslide_thickness_uniform, soil_thickness_uniform, landslide_thickness_multiplier, soil_thickness_multiplier)
-            The value for each key is a list of the min, max and optimal parameter value, in that order. 
+            The value for each key is a list of the minimum, maximum and starting parameter value, in that order. 
 
         el_l : float
             lower limit of elevation range included in analysis.
@@ -102,18 +102,33 @@ class MWR_Calibrator():
             can be 'Qs','EA_d','E_u' or 'A_d'. Default is "Qs"
 
         jump_size: float
-            standard deviation of jump size for MCMC algorithm expressed as ratio of
-            the jump size to the range between the minimum and maximum parameter values
-            default: jump_size = 0.2
+            paramter that controls the MCMC jump size. The MCMC jump size is randomly determined from
+            a normal distribution centered on the selected parameter value from the last MCMC iteration
+            with a standard deviation defined as jump_size*(max parameter value - min parameter value).
 
         N_cycles: int
-            Number of iterations between updates to the jump size based on MCMC acceptance ratio
+            Number of iterations the MCMC algorithm jumps before computing the acceptance ratio and comparing to
+            the minimum and maximum acceptance ratio thresholds. If the acceptance ratio is less than or more than 
+            the thresholds (alpha_min and alpha_max), the jumpsize is adjusted. 
         
         E_less_than_qsc_constraint: bool
             A check that erosion E doesn't exceed qsc*lambda for the candidate parameters
             If k or qsc are a calibration parameter, will adjust k or qsc util E<qsc*lambda and update MWR parameter values
             E is determined from k and the typical flow depth and slope in the shear zone, both saved as 
-               variables of the MWR isntance. Turning this on will exclude uparameterizations that result in  watery-like runoout from the calibration algorithm
+            variables of the MWR isntance. Turning this on will exclude uparameterizations that result in  watery-like runoout from the calibration algorithm
+        
+        alpha_min: float
+            minimum acceptance rate. If the acceptance rate is below this the jumps size is decreased. Default is 0.1.
+        
+        alpha_max: float
+            maximum acceptance rate. If the acceptance rate is above this, the jump size is increased. Default is 0.5.
+            
+        phi_minus: float
+            jump size is reduced by this factor as jump_size*phi_minus when too large. Defult is 0.9.
+            
+        phi_plus: float
+            jump size is increased by this factor as jump_size*phi_plus when too small. Defult is 1.1.
+        
         lambda_low_slope: float
             a user defined coefficient used in the E_less_than_qsc_constraint. For low slopes (<0.02), default is 1
         lambda_high_slope: float
@@ -132,7 +147,7 @@ class MWR_Calibrator():
         elif np.any((min_p>max_p) == True):
             raise ValueError("check MCMC_adjusted_parameters, minimum value less than the maximum value")
         elif np.any((opt_p<min_p) == True) or np.any((opt_p>max_p) == True):
-            raise ValueError("check MCMC_adjusted_parameters, optimal value outside of the minimum and maximum values")                
+            raise ValueError("check MCMC_adjusted_parameters, starting value outside of the minimum and maximum values")                
         elif "soil_thickness_uniform" in MCMC_adjusted_parameters.keys() and "soil_thickness_multiplier" in MCMC_adjusted_parameters.keys():
                 msg = "candidate values include both soil_thickness_uniform and soil_thickness_multiplier parameters, pick one"
                 raise ValueError(msg)         
@@ -678,7 +693,7 @@ class MWR_Calibrator():
         for self.it in range(number_of_runs):
             
             
-            # if first iteration, use the provided optimal parameter value as the selected values
+            # if first iteration, use the provided start parameter value as the selected values
             if self.it == 0:
                 for key in self.params:
                     selected_values[key] = self.params[key][2]
@@ -935,9 +950,9 @@ def profile_distance(mg, xsd):
     return np.array(dist)
 
 
-def view_profile_nodes(mg, xsd, field = 'DoD_o', clim = None, cmap = 'RdBu_r'):
+def view_profile_nodes(mg, xsd, field = 'DoD_o', clim = None, cmap = 'RdBu_r',figsize = (8,5)):
     """simple function for plotting profile nodes in plan view over any node field"""
-    plt.figure(figsize = (5,5))
+    plt.figure(figsize = figsize)
     imshow_grid_at_node(mg, field,cmap = cmap)
     if clim:
         plt.clim(clim)
