@@ -229,7 +229,7 @@ class MassWastingEroder(Component):
                                                   gt.get_link_nodes(self._nmgrid), 
                                                   remove_duplicates = True)
         
-        self.cn_to_nmg_link_mapper = gt.map_rmg_nodes_to_nmg_links(self._grid, self.xyDF, self.channel_and_terrace_nodes, remove_small_tribs = False)
+        self.cn_to_nmg_link_mapper = gt.map_rmg_nodes_to_nmg_links(self._grid, self.xyDF, self.channel_and_terrace_nodes)
 
 
         
@@ -528,7 +528,7 @@ class MassWastingEroder(Component):
                 mwlink = OrderedDict({'mw_unit':h,'pulse_volume':self.FEV[h],
                                       'raster_grid_cell_#':FEDn,'link_#':int(row['linkID'].values[0]),
                                       'coincident node':int(row['coincident_node'].values[0]),
-                                      'link_downstream_distance':row['dist'].values[0]})
+                                      'link_downstream_distance':row['coincident_node_downstream_dist'].values[0]})
                
                 Lmwlink.append(mwlink)
             parcelDF = pd.DataFrame(Lmwlink)
