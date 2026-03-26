@@ -450,6 +450,8 @@ class MassWastingRunout(Component):
         mask = self._grid.at_node["mass__wasting_id"] > 0
 
         # separate the mass wasting event nodes into individual events
+        # change this so that the timing of each event can be specified for each id
+        # if timing same, landslides of the same id are released simultaneously
         self.mw_ids = np.unique(self._grid.at_node["mass__wasting_id"][mask])
         innL = []  # innL is list of lists of nodes in each mass wasting event
         for mw_id in self.mw_ids:
@@ -730,6 +732,7 @@ class MassWastingRunout(Component):
         self.arqso = rqsoi
         if self._tracked_attributes:
             self.aratt = att
+
 
 
     def _E_A_qso_determine_attributes_v(self):
@@ -1080,26 +1083,25 @@ class MassWastingRunout(Component):
         slp_h = self.slpc * self._grid.dx
         zi = self._grid.at_node["topographic__elevation"][n]
         zo = self._determine_zo_v(n, zi, qsi)
-        #rule = (zi - zo) <= (slp_h)
-    
-        def eq(qsi, zo, zi, slp_h):
-            """given an array of qsi, zo, zi, slp_h, returns an array of h depths"""
-            dx = self._grid.dx
-            sc = self.slpc
-            s = (zi - zo) / dx
-            sd = sc - s
-            D1 = sc * dx / 2
-            a = 0.5 * dx * sd
-            b = D1 - 0.5 * dx * sd
-            c = -qsi
-            N1 = -b + (((b**2) - 4 * a * c) ** 0.5) / (2 * a)
-            N2 = -b - (((b**2) - 4 * a * c) ** 0.5) / (2 * a) # is there ever a situation where N! and N2 are nan values? Check needed?
-            ndn = np.round(np.max([N1,N2,np.ones(len(N1))],axis=0))
-            A = np.min([(1 / ndn) * qsi + ((ndn - 1) / 2) * dx * sd, qsi],axis=0)
-            return A
+
+        dx = self._grid.dx
+        sc = self.slpc
+        s = (zi - zo) / dx
+        sd = sc - s
+        D1 = sc * dx / 2
+        a = 0.5 * dx * sd
+        b = D1 - 0.5 * dx * sd
+        c = -qsi
+        radicand = (b**2) - 4 * a * c # doing this to avoid warning when taking sqrt of negative
+        sqrt = np.sqrt(radicand, where=(radicand >= 0), out=np.zeros_like(a, dtype=float))
+        N1 = -b + (sqrt) / (2 * a)
+        N2 = -b - (sqrt) / (2 * a)
+        ndn = np.round(np.max([N1,N2,np.ones(len(N1))],axis=0))
+        A = np.min([(1 / ndn) * qsi + ((ndn - 1) / 2) * dx * sd, qsi],axis=0)
+
         # where slope is less than critical, apply the aggradation rule, otherwise
         # aggradation is zero
-        A_f = np.where((zi - zo) <= (slp_h),eq(qsi, zo, zi, slp_h), 0)
+        A_f = np.where((zi - zo) <= (slp_h),A, 0)
         return A_f
 
 
