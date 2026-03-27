@@ -1203,14 +1203,13 @@ class MassWastingRunout(Component):
             is eroded, attribute value is zero"""
             # if A + self._grid.at_node["soil__thickness"][n] - E > 0:
             inatt = self._grid.at_node[key][n]
-            n_att = (inatt * (self._grid.at_node["soil__thickness"][n] - E)+ att_in[key] * A) / (A + self._grid.at_node["soil__thickness"][n] - E)
-            # else:
-            #     n_att = 0
-            n_att = np.where(A + self._grid.at_node["soil__thickness"][n] - E <= 0, 0, n_att)
-            # this error message may not be needed
-            # if (n_att < 0) or (np.isnan(n_att)) or (np.isinf(n_att)):
-            #     msg = "node particle diameter is negative, nan or inf"
-            #     raise ValueError(msg)
+            
+            atts = np.zeros_like(A)
+            mask = (A + self._grid.at_node["soil__thickness"][n] - E)>0
+            atts_non_zero = (inatt[mask] * (self._grid.at_node["soil__thickness"][n][mask] - E[mask])+ att_in[key][mask] * A[mask]) / (A[mask] + self._grid.at_node["soil__thickness"][n][mask] - E[mask])
+            atts[mask] = atts_non_zero
+            n_att = atts
+
             return n_att
     
         n_att_d = {}
@@ -1246,14 +1245,11 @@ class MassWastingRunout(Component):
         ### already vecotrized, done
         att_out = {}
         for key in self._tracked_attributes:
-            # att_out[key] = #np.sum( # this np sum does nothing because it is applied to a single float value
-            att_out[key] = (att_up[key] * E + att_in[key] * (qsi - A)) / (qsi - A + E)
-            #)
-            check_val = att_out[key]
-            # print(att_out)
-            # if (check_val < 0) or (np.isnan(check_val)) or (np.isinf(check_val)):
-            #     msg = f"out-flowing {key} is zero, negative, nan or inf"
-            #     raise ValueError(msg)
+            atts = np.zeros_like(qsi)
+            mask = (qsi - A + E)>0
+            atts_non_zero = (att_up[key][mask] * E[mask] + att_in[key][mask] * (qsi[mask] - A[mask])) / (qsi[mask] - A[mask] + E[mask])
+            atts[mask] = atts_non_zero
+            att_out[key] = atts
         return att_out
 
 
