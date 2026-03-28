@@ -472,7 +472,7 @@ class MassWastingRunout(Component):
                 self.saver.prep_mw_data_containers(mw_i, mw_id)
 
             # Algorithm 1, prepare initial mass wasting material (debritons) for release
-            self._prep_initial_mass_wasting_material_v(inn, mw_i)
+            self._prep_initial_mass_wasting_material(inn, mw_i)
 
             # self.arndn_r[mw_id].append(self.arndn)
             if self.save:
@@ -562,7 +562,9 @@ class MassWastingRunout(Component):
     def _prep_initial_mass_wasting_material(self, inn, mw_i):
         """THIS FUNCTION NEEDS TO LOOP THROUGH EACH NODE BECAUSE MOTION OF UPSLOPE 
         NODES IS DEPDENDENT ON HOW DOWNSLOPE NODES MODIFY THE TERRAIN, NOT A SIMULTANEOUS
-        MOVEMENT LIKE LATER ITERATIONS OF THE MODEL
+        MOVEMENT LIKE LATER ITERATIONS OF THE MODEL => REWRITE SO THAT FIRST NODE
+        SLOPE IS SURFACE SLOPE AND THEN SUBTRACT ALL DEBRISTONS FROM SURFACE IN ONE
+        COMPUTATION TO GET INTIAL LANDSLIDE LIST
         Algorithm 1 - from an initial source area (landslide), prepare the
         initial lists of receiving nodes and incoming fluxes and attributes
         and remove the source material from the DEM
@@ -673,6 +675,8 @@ class MassWastingRunout(Component):
         # order source area nodes from lowest to highest elevation
         node_z = self._grid.at_node.dataset["topographic__elevation"][inn]
         sorted_nodes = inn[np.argsort(node_z)]
+        
+        
 
         for ci, ni in enumerate(sorted_nodes):
             # regolith (soil) thickness at node. soil thickness in source area
