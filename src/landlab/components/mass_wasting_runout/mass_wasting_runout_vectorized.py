@@ -8,8 +8,8 @@ from landlab.components import FlowDirectorMFD
 from landlab.components.mass_wasting_runout.mass_wasting_saver import MassWastingSaver
 
 ##TODO
-# fix aggradation function so that it donest spit out a warning, check that it is applied corectly, are there nan values from the function?
-# speed up _determine_rn_proportions_attributes_v
+# effective_qsi set to True or remove as option
+# max_flow_depth_observed_in_field provide a default value
 # reduce number of np concat calls
 # clean up
 
@@ -21,6 +21,8 @@ class MassWastingRunout(Component):
     the regolith. This model is intended for modeling the runout extent, topographic
     change and sediment transport caused by a mapped landslide(s) or landslides
     inferred from a landslide hazard map.
+    
+    This verions is 5x faster than the original but always tracks attributes
 
 
     Examples
@@ -549,9 +551,9 @@ class MassWastingRunout(Component):
                     # outgoing node flux (arqso) and node attributes (artt) are updated
                     # for the next iteration
                 self.arndn = self.arndn_ns.astype(int)
-                print(f"donor nodes:{self.arndn}")
+                # print(f"donor nodes:{self.arndn}")
                 self.arn = self.arn_ns.astype(int)
-                print(f"receiver nodes:{self.arn}")
+                # print(f"receiver nodes:{self.arn}")
                 self.arqso = self.arqso_ns  #
                 if self.track_attributes:
                     self.aratt = self.aratt_ns
@@ -773,8 +775,6 @@ class MassWastingRunout(Component):
         
         slpn = self.grid.at_node["topographic__steepest_slope"][n].max(axis=1)
         
-        # qsi_ = min(qsi, self.qsi_max)
-        # print(f"iteration {self.c}, qsi:{qsi}")
         if self.effective_qsi:
             qsi_ = np.where(qsi<self.qsi_max,qsi,self.qsi_max)
         else:
@@ -783,7 +783,8 @@ class MassWastingRunout(Component):
         # critical slope
         slpc = self.a * self._grid.at_node["drainage_area"][n] ** self.b if self.variable_slpc else np.full(len(n), self.slpc)
         
-        # incoming attributes    
+        # incoming attributes
+        
         att_in  = self._attributes_in_v(n, qsi) 
            
         # first compute an aggradation value at all nodes               
@@ -899,9 +900,6 @@ class MassWastingRunout(Component):
         qso = qso#[can_flow]
         E = E#[can_flow]
         A = A#[can_flow]
-        for key in self._tracked_attributes:
-            att_up[key] = att_up[key]#can_flow]
-            att_in[key] = att_in[key]#[can_flow]
         # outgoing attributes
         if self._tracked_attributes:
             # print(f"att_up 22222 = {att_up}")
