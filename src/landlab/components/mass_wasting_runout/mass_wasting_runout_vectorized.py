@@ -472,7 +472,7 @@ class MassWastingRunout(Component):
                 self.saver.prep_mw_data_containers(mw_i, mw_id)
 
             # Algorithm 1, prepare initial mass wasting material (debritons) for release
-            self._prep_initial_mass_wasting_material(inn, mw_i)
+            self._prep_initial_mass_wasting_material_v(inn, mw_i)
 
             # self.arndn_r[mw_id].append(self.arndn)
             if self.save:
@@ -648,7 +648,97 @@ class MassWastingRunout(Component):
             self.aratt = att
             
 
-    def _prep_initial_mass_wasting_material_v(self, inn, mw_i):
+    # def _prep_initial_mass_wasting_material_v(self, inn, mw_i):
+    #     """THIS FUNCTION NEEDS TO LOOP THROUGH EACH NODE BECAUSE MOTION OF UPSLOPE 
+    #     NODES IS DEPDENDENT ON HOW DOWNSLOPE NODES MODIFY THE TERRAIN, NOT A SIMULTANEOUS
+    #     MOVEMENT LIKE LATER ITERATIONS OF THE MODEL, SMALL MODIFICATIONS TO MATCH
+    #     FORMAT OF NEW FUNCTIONS AND GET RID OF NP CONCATENATE
+    #     Algorithm 1 - from an initial source area (landslide), prepare the
+    #     initial lists of receiving nodes and incoming fluxes and attributes
+    #     and remove the source material from the DEM
+
+    #     Parameters
+    #     ----------
+    #     inn: np.array
+    #          node id's that make up the area of the initial mass wasting area
+    #     mw_i: int
+    #         index of the initial mass wasting area (e.g., if there are two landslides
+    #                                                 the first landslide will be mw_i = 0,
+    #                                                 the second will be mw_i = 0)
+    #     """
+    #     # data containers for initial recieving node, outgoing flux and attributes
+    #     rni = np.array([])
+    #     rqsoi = np.array([])
+    #     if self._tracked_attributes:
+    #         att = dict.fromkeys(self._tracked_attributes, np.array([]))
+
+    #     # order source area nodes from lowest to highest elevation
+    #     node_z = self._grid.at_node.dataset["topographic__elevation"][inn]
+    #     sorted_nodes = inn[np.argsort(node_z)]
+        
+        
+
+    #     #for ci, ni in enumerate(sorted_nodes):
+    #         # regolith (soil) thickness at node. soil thickness in source area
+    #         # represents landslide thickness
+    #     s_t = self._grid.at_node.dataset["soil__thickness"].values[ni]
+
+    #     # remove soil (landslide) thickness at node
+    #     self._grid.at_node.dataset["topographic__elevation"][ni] = (
+    #         self._grid.at_node.dataset["topographic__elevation"][ni] - s_t
+    #     )
+
+    #     # update soil thickness at node (now = 0)
+    #     self._grid.at_node["soil__thickness"][ni] = (
+    #         self._grid.at_node["soil__thickness"][ni] - s_t
+    #     )
+
+    #     if (
+    #         ci > 0
+    #     ):  # use surface slope for first node to start movement of landslide
+    #         # for all other nodes, update slope to reflect material removed from DEM
+    #         self._update_topographic_slope()
+
+    #         # get receiving nodes of node ni in mw index mw_i
+    #         rn = self._grid.at_node.dataset["flow__receiver_node"].values[ni]
+    #         rn = rn[np.where(rn != -1)]
+
+    #         # receiving proportion of qso from cell n to each downslope cell
+    #         rp = self._grid.at_node.dataset["flow__receiver_proportions"].values[ni]
+    #         rp = rp[np.where(rp > 0)]  # only downslope cells considered
+
+    #         # initial mass wasting thickness
+    #         imw_t = s_t
+    #         # get flux out of node ni
+    #         qso = imw_t
+    #         # divide into proportions going to each receiving node
+    #         rqso = rp * qso
+
+    #         if self._tracked_attributes:
+    #             # get initial mass wasting attributes moving (out) of node ni
+    #             self.att_ar_out = {}
+    #             for key in self._tracked_attributes:
+    #                 att_val = self._grid.at_node.dataset[key].values[ni]
+    #                 # particle diameter to each recieving node
+    #                 self.att_ar_out[key] = np.ones(len(rqso)) * att_val
+
+    #                 # attribute value is zero at node after reglith leaves
+    #                 self._grid.at_node[key][ni] = 0
+
+    #                 att[key] = np.concatenate((att[key], self.att_ar_out[key]), axis=0)
+
+    #         # append receiving node ids, fluxes and attributes to initial lists
+    #         rni = np.concatenate((rni, rn), axis=0)
+    #         rqsoi = np.concatenate((rqsoi, rqso), axis=0)
+
+    #     self.arndn = np.ones([len(rni)]) * np.nan
+    #     self.arn = rni.astype(int) # ensure node id is stored as an int
+    #     self.arqso = rqsoi
+    #     if self._tracked_attributes:
+    #         self.aratt = att
+
+    
+    def _prep_initial_mass_wasting_material_v(self, inn, mw_i):#, lowest_node_index, lowest_nodes):
         """THIS FUNCTION NEEDS TO LOOP THROUGH EACH NODE BECAUSE MOTION OF UPSLOPE 
         NODES IS DEPDENDENT ON HOW DOWNSLOPE NODES MODIFY THE TERRAIN, NOT A SIMULTANEOUS
         MOVEMENT LIKE LATER ITERATIONS OF THE MODEL, SMALL MODIFICATIONS TO MATCH
@@ -656,7 +746,7 @@ class MassWastingRunout(Component):
         Algorithm 1 - from an initial source area (landslide), prepare the
         initial lists of receiving nodes and incoming fluxes and attributes
         and remove the source material from the DEM
-
+    
         Parameters
         ----------
         inn: np.array
@@ -671,71 +761,89 @@ class MassWastingRunout(Component):
         rqsoi = np.array([])
         if self._tracked_attributes:
             att = dict.fromkeys(self._tracked_attributes, np.array([]))
-
-        # order source area nodes from lowest to highest elevation
+    
+        
+    # order source area nodes from lowest to highest elevation
         node_z = self._grid.at_node.dataset["topographic__elevation"][inn]
         sorted_nodes = inn[np.argsort(node_z)]
+        # temporarily define this variables, will be an input to final function
+        lowest_node_index = 0
+        lowest_nodes = sorted_nodes[lowest_node_index]
         
+        ni = inn # 
         
-
-        for ci, ni in enumerate(sorted_nodes):
-            # regolith (soil) thickness at node. soil thickness in source area
-            # represents landslide thickness
-            s_t = self._grid.at_node.dataset["soil__thickness"].values[ni]
-
-            # remove soil (landslide) thickness at node
-            self._grid.at_node.dataset["topographic__elevation"][ni] = (
-                self._grid.at_node.dataset["topographic__elevation"][ni] - s_t
-            )
-
-            # update soil thickness at node (now = 0)
-            self._grid.at_node["soil__thickness"][ni] = (
-                self._grid.at_node["soil__thickness"][ni] - s_t
-            )
-
-            if (
-                ci > 0
-            ):  # use surface slope for first node to start movement of landslide
-                # for all other nodes, update slope to reflect material removed from DEM
-                self._update_topographic_slope()
-
-            # get receiving nodes of node ni in mw index mw_i
-            rn = self._grid.at_node.dataset["flow__receiver_node"].values[ni]
-            rn = rn[np.where(rn != -1)]
-
-            # receiving proportion of qso from cell n to each downslope cell
-            rp = self._grid.at_node.dataset["flow__receiver_proportions"].values[ni]
-            rp = rp[np.where(rp > 0)]  # only downslope cells considered
-
-            # initial mass wasting thickness
-            imw_t = s_t
-            # get flux out of node ni
-            qso = imw_t
-            # divide into proportions going to each receiving node
-            rqso = rp * qso
-
-            if self._tracked_attributes:
-                # get initial mass wasting attributes moving (out) of node ni
-                self.att_ar_out = {}
-                for key in self._tracked_attributes:
-                    att_val = self._grid.at_node.dataset[key].values[ni]
-                    # particle diameter to each recieving node
-                    self.att_ar_out[key] = np.ones(len(rqso)) * att_val
-
-                    # attribute value is zero at node after reglith leaves
-                    self._grid.at_node[key][ni] = 0
-
-                    att[key] = np.concatenate((att[key], self.att_ar_out[key]), axis=0)
-
+        s_t = self._grid.at_node["soil__thickness"][ni]
+    
+        # initial mass wasting thickness
+        imw_t = s_t
+        # get flux out of node ni
+        qso = imw_t
+            
+        # get lowest nodes receiver nodes and proportions before updating slope
+        # get receiving nodes of node ni in mw index mw_i
+        rn_l = self._grid.at_node.dataset["flow__receiver_node"].values[lowest_nodes]
+        # rn_l = rn_l[np.where(rn_l != -1)]
+    
+        # receiving proportion of qso from cell n to each downslope cell
+        rp_l = self._grid.at_node.dataset["flow__receiver_proportions"].values[lowest_nodes]
+        # rp_l = rp_l[np.where(rp_l > 0)]  # only downslope cells considered
+    
+        # remove soil (landslide) thickness at node
+        self._grid.at_node["topographic__elevation"][ni] = (
+            self._grid.at_node["topographic__elevation"][ni] - s_t
+        )
+    
+        # update soil thickness at node (now = 0)
+        self._grid.at_node["soil__thickness"][ni] = (
+            self._grid.at_node["soil__thickness"][ni] - s_t
+        )
+    
+        # update slope to reflect material moving along slip surface of landslide for rest of body
+        self._update_topographic_slope()
+    
+        # get receiving nodes of node ni in mw index mw_i
+        rn = self._grid.at_node.dataset["flow__receiver_node"].values[ni]
+        # switch lowest node receiver info into rn and rp arrays
+        rn[lowest_node_index] = rn_l
+        rn = rn[np.where(rn != -1)]
+    
+        # receiving proportion of qso from cell n to each downslope cell
+        rp = self._grid.at_node.dataset["flow__receiver_proportions"].values[ni]
+        # switch lowest node receiver info into rn and rp arrays
+        rp[lowest_node_index] = rp_l
+        # divide into proportions going to each receiving node
+        rqso = rp * qso.reshape(len(qso),1)
+        mask = np.where(rp > 0)
+        rp = rp[mask]  # only downslope cells considered
+        rqso = rqso[mask]  # apply same filte to rqso
+        # create a node array that can also be masked
+        ni_array = ni.reshape(len(ni),1)*(np.ones((len(ni),8)))
+        nodes = ni_array[mask].astype(int)
+    
+    
+        if self._tracked_attributes:
+            # get initial mass wasting attributes moving (out) of node ni
+            #att_ar_out = {}
+            for key in self._tracked_attributes:
+                att_val = self._grid.at_node.dataset[key].values[nodes]
+                # particle diameter to each recieving node
+                # att_ar_out[key] = att_val # np.ones(len(rqso)) * att_val
+    
+                # attribute value is zero at node after reglith leaves
+                self._grid.at_node[key][ni] = 0
+    
+                att[key] = att_val # att_ar_out # np.concatenate((att[key], self.att_ar_out[key]), axis=0) # redunant?
+    
             # append receiving node ids, fluxes and attributes to initial lists
-            rni = np.concatenate((rni, rn), axis=0)
-            rqsoi = np.concatenate((rqsoi, rqso), axis=0)
-
+            rni = rn #np.concatenate((rni, rn), axis=0)
+            rqsoi = rqso # np.concatenate((rqsoi, rqso), axis=0)
+ 
         self.arndn = np.ones([len(rni)]) * np.nan
         self.arn = rni.astype(int) # ensure node id is stored as an int
         self.arqso = rqsoi
         if self._tracked_attributes:
             self.aratt = att
+
 
 
 
