@@ -655,13 +655,10 @@ class MassWastingRunout(Component):
     
 
     def _prep_initial_mass_wasting_material_v(self, inn, mw_i):#, lowest_node_index, lowest_nodes):
-        """THIS FUNCTION NEEDS TO LOOP THROUGH EACH NODE BECAUSE MOTION OF UPSLOPE 
-        NODES IS DEPDENDENT ON HOW DOWNSLOPE NODES MODIFY THE TERRAIN, NOT A SIMULTANEOUS
-        MOVEMENT LIKE LATER ITERATIONS OF THE MODEL, SMALL MODIFICATIONS TO MATCH
-        FORMAT OF NEW FUNCTIONS AND GET RID OF NP CONCATENATE
-        Algorithm 1 - from an initial source area (landslide), prepare the
-        initial lists of receiving nodes and incoming fluxes and attributes
-        and remove the source material from the DEM
+        """Modified version of Algorithm 1 - from an initial source area (landslide), 
+        prepare the initial lists of receiving nodes and incoming fluxes and attributes
+        and remove the source material from the DEM. This version removes the 
+        initial landslide in one operation and then computes slope just once.
     
         Parameters
         ----------
