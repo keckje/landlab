@@ -403,24 +403,27 @@ class MassWastingRunout(Component):
         self.itL = itL
         self.run_id = run_id
 
+        # if using grain size dependent erosion, check
+        # particle_diameter is included as an attribute
+        if (                 
+            self.grain_shear
+            and "particle__diameter" not in self._tracked_attributes
+        ):
+            raise ValueError(
+                "'particle__diameter' not included as field in grid and/or"
+                " key in tracked_attributes"
+            )
+
+        # check attributes are included in grid
         if tracked_attributes:
             self.track_attributes = True
 
-            # check attributes are included in grid
+            
             for key in self._tracked_attributes:
                 if not self._grid.has_field(key, at="node"):
                     raise ValueError(f"{key} not included as field in grid")
 
-            # if using grain size dependent erosion, check
-            # particle_diameter is included as an attribute
-            if (                                    ##### NEED TO MOVE THIS CHECK OUT OF ABOVE IF STATEMENT
-                self.grain_shear
-                and "particle__diameter" not in self._tracked_attributes
-            ):
-                raise ValueError(
-                    "'particle__diameter' not included as field in grid and/or"
-                    " key in tracked_attributes"
-                )
+
         else:
             self.track_attributes = False
 
@@ -474,8 +477,8 @@ class MassWastingRunout(Component):
                 self.saver.prep_mw_data_containers(mw_i, mw_id)
 
             # Algorithm 1, prepare initial mass wasting material (debritons) for release
-            # self._prep_initial_mass_wasting_material_v(inn, mw_i)
-            self._prep_initial_mass_wasting_material(inn, mw_i)
+            self._prep_initial_mass_wasting_material_v(inn, mw_i)
+            # self._prep_initial_mass_wasting_material(inn, mw_i)
 
             # self.arndn_r[mw_id].append(self.arndn)
             if self.save:
@@ -543,7 +546,7 @@ class MassWastingRunout(Component):
 
                 # optional settlment of deposits and redistribution of attributes
                 if self.settle_deposit:
-                    self._settle()
+                    # self._settle()
                     self._update_topographic_slope()
                 # if self.c < self.itL-1: # for last iteration in a run truncated by the itL constraint, don't update class variables for next step
                     # once all nodes in this iteration have been processed, the lists of receiving
@@ -784,9 +787,10 @@ class MassWastingRunout(Component):
         slpc = self.a * self._grid.at_node["drainage_area"][n] ** self.b if self.variable_slpc else np.full(len(n), self.slpc)
         
         # incoming attributes
-        
-        att_in  = self._attributes_in_v(n, qsi) 
-           
+        if self._tracked_attributes:
+            att_in  = self._attributes_in_v(n, qsi) 
+        else:
+            att_in = None           
         # first compute an aggradation value at all nodes               
         A_ = self._aggradation_v(qsi, n)
         # where slp less than qsc, sett aggradation equal to qsi
@@ -803,8 +807,9 @@ class MassWastingRunout(Component):
             E = np.where(A>0,0,E)
             Tau = np.where(A>0,0,Tau)
             u = np.where(A>0,0,u)
-            for key in self._tracked_attributes:
-                att_up[key] = np.where(A>0,0,att_up[key])
+            if self._tracked_attributes:
+                for key in self._tracked_attributes:
+                    att_up[key] = np.where(A>0,0,att_up[key])
         # flux out
         qso = qsi - A + E
         # small qso are considered zero
@@ -817,8 +822,10 @@ class MassWastingRunout(Component):
             self.saver.save_flow_stats(E, A, qsi, slpn, Tau, u)
         
         # updated attribute values at node
-        n_att = self._attributes_node_v(n, att_in, E, A)
-        
+        if self._tracked_attributes:
+            n_att = self._attributes_node_v(n, att_in, E, A)
+        else:
+            n_att = None        
         # list of deposition depths at cells in iteration
         self.D_L.append(A)
         
@@ -925,11 +932,17 @@ class MassWastingRunout(Component):
                 
         # this part will already work as written
         # store receiving nodes and fluxes in temporary arrays
-        self.arndn_ns = np.concatenate((self.arndn_ns, rndn_final), axis=0)
         # next iteration donor nodes
-        self.arn_ns = np.concatenate((self.arn_ns, rn_final), axis=0)
+        self.arndn_ns = np.concatenate((self.arndn_ns, rndn_final), axis=0)
         # next iteration receiving nodes
+        self.arn_ns = np.concatenate((self.arn_ns, rn_final), axis=0)
+        # next iteration qsi
         self.arqso_ns = np.concatenate((self.arqso_ns, rqso_final), axis=0)
+        self.arnL.append(rn_final) # get rid of these later, right now used for tests
+        self.arqsoL.append(rqso_final)
+        self.arndnL.append(rndn_final)
+
+
 
 
     def _determine_qsi_v(self):
@@ -1257,7 +1270,7 @@ class MassWastingRunout(Component):
         ### already vecotrized, done
         att_out = {}
         for key in self._tracked_attributes:
-            atts = np.zeros_like(qsi)
+            atts = np.zeros_like(qsi, dtype = float)
             mask = (qsi - A + E)>0
             atts_non_zero = (att_up[key][mask] * E[mask] + att_in[key][mask] * (qsi[mask] - A[mask])) / (qsi[mask] - A[mask] + E[mask])
             atts[mask] = atts_non_zero
