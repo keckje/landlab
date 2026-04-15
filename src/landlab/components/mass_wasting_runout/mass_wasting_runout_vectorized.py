@@ -8,9 +8,6 @@ from landlab.components import FlowDirectorMFD
 from landlab.components.mass_wasting_runout.mass_wasting_saver import MassWastingSaver
 
 ##TODO
-# effective_qsi set to True or remove as option
-# max_flow_depth_observed_in_field provide a default value
-# reduce number of np concat calls
 # clean up
 
 
@@ -22,7 +19,7 @@ class MassWastingRunout(Component):
     change and sediment transport caused by a mapped landslide(s) or landslides
     inferred from a landslide hazard map.
     
-    This verions is 5x faster than the original but always tracks attributes
+    This verions is 5x faster than the original
 
 
     Examples
