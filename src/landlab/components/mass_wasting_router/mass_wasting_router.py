@@ -12,6 +12,8 @@ from landlab.components.mass_wasting_router.mass_wasting_eroder import MassWasti
 from landlab.utils.channel_network_grid_tools_all import ChannelNetworkToolsMapper
 import landlab.utils.channel_network_grid_tools_all as gt
 
+
+
 class MassWastingRouter(Component):
     
 
@@ -45,6 +47,9 @@ class MassWastingRouter(Component):
     listed below.
 
     author: Jeff Keck
+    
+    
+    #TODO: make terrace width vary with contributing area, e.g., 3 cells wide at mouth and only 1 cell wide in tributaries with cascade morhpology or lower
     '''
     _name = 'MassWastingRouter'
 
