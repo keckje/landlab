@@ -906,17 +906,21 @@ def define_profile_nodes(mg):
     return pnodes, pnodedist, Lxy 
 
 
-def profile_plot(mg, pnodes, pnodedist, ef = 2, xlim = None, ylim = None, aspect = None, figsize = None, fs = 8):
+def profile_plot(mg, pnodes, pnodedist=None, field = None, ef = 2, xlim = None, ylim = None, aspect = None, figsize = None, fs = 8):
     """function for plotting profile of observed pre- and post-failure topography"""
     y_dem = mg.at_node['topographic__elevation'][pnodes]
-    y_demdf_o = y_dem+mg.at_node['DoD_o'][pnodes]*ef
-
+    if field is None:
+        y_demdf = y_dem+mg.at_node['DoD_o'][pnodes]*ef
+    else:
+        y_demdf = y_dem+mg.at_node[field][pnodes]*ef
+    if pnodedist is None:
+        pnodedist = profile_distance(mg, pnodes)
     if figsize:
         fig, ax = plt.subplots(figsize=figsize)
     else:
         fig, ax = plt.subplots(figsize=(3,5))
     plt.plot(pnodedist,y_dem,'k-', alpha = .66, linewidth = 1, label = 'pre-runout-DEM')
-    plt.plot(pnodedist,y_demdf_o,'k--', alpha = 0.66, linewidth = 1, label = 'post-runout-DEM')
+    plt.plot(pnodedist,y_demdf,'k--', alpha = 0.66, linewidth = 1, label = 'post-runout-DEM')
     plt.grid(alpha = 0.5)
     plt.legend(fontsize = fs)
     ax.tick_params(axis = 'both', which = 'major', labelsize = fs)
@@ -935,19 +939,14 @@ def profile_plot(mg, pnodes, pnodedist, ef = 2, xlim = None, ylim = None, aspect
 
 def profile_distance(mg, xsd):
     """small function to get distance between profile nodes. Nodes must be ordered
-    from downstream to upstream (lowest to highest)"""
-
-    x = mg.node_x[xsd]
-    y = mg.node_y[xsd]
-
-    def path(x,y):
-        return(((x[0]-x[1])**2+(y[0]-y[1])**2)**.5)
-    dist = [0]
-    for i in range(len(x)-1):
-        x_ = x[i:i+2]
-        y_ = y[i:i+2]
-        dist.append(dist[i]+path(x_,y_))
-    return np.array(dist)
+    from downstream to upstream (lowest to highest)""" 
+    x1 = mg.node_x[xsd[0:-1]]
+    y1 = mg.node_y[xsd[0:-1]]
+    x2 = mg.node_x[xsd[1:]]
+    y2 = mg.node_y[xsd[1:]]    
+    dist = ((x2-x1)**2+(y2-y1)**2)**.5
+    distc =  np.concatenate((np.array([0]), dist.cumsum()))
+    return np.array(distc)
 
 
 def view_profile_nodes(mg, xsd, field = 'DoD_o', clim = None, cmap = 'RdBu_r',figsize = (8,5)):
