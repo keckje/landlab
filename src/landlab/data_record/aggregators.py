@@ -11,9 +11,9 @@ from requireit import require_length_at_least
 from landlab.data_record._aggregators import (
     aggregate_items_as_count as _aggregate_items_as_count,
 )
-# from landlab.data_record._aggregators import (
-#     aggregate_items_as_gmean as _aggregate_items_as_gmean,
-# )
+from landlab.data_record._aggregators import (
+    aggregate_items_as_gmean as _aggregate_items_as_gmean,
+)
 from landlab.data_record._aggregators import (
     aggregate_items_as_mean as _aggregate_items_as_mean,
 )
