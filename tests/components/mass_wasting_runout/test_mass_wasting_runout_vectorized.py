@@ -638,9 +638,9 @@ class TestErosion:
 
     def test_inertial_normal_1(self, example_square_MWRu):
         """"""
-        n = 24
-        qsi = 2
-        slope = 0.087489
+        n = np.array([24])
+        qsi = np.array([2])
+        slope = np.array([0.087489])
         example_square_MWRu.slpc = 0.01
         depth = qsi
         example_square_MWRu.itL = 0
@@ -652,9 +652,9 @@ class TestErosion:
 
     def test_inertial_normal_2(self, example_square_MWRu):
         """"""
-        n = 24
-        qsi = 2
-        slope = 0.087489
+        n = np.array([24])
+        qsi = np.array([2])
+        slope = np.array([0.087489])
         example_square_MWRu.slpc = 0.1
         depth = qsi
         example_square_MWRu.itL = 0
@@ -666,9 +666,9 @@ class TestErosion:
 
     def test_inertial_boundary_1(self, example_square_MWRu):
         """"""
-        n = 24
-        qsi = 2
-        slope = 0.05
+        n = np.array([24])
+        qsi = np.array([2])
+        slope = np.array([0.05])
         example_square_MWRu.slpc = 0.05
         depth = qsi
         example_square_MWRu.itL = 0

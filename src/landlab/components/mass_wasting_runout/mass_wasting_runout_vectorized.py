@@ -1188,8 +1188,11 @@ class MassWastingRunout(Component):
             # Sum them up grouped by the node ID in 'DebrisFlows.arn'
             attribute_weighted_sums = np.bincount(self.arn, weights=weights, minlength=max_id+1)
             
-            attributes[key] = attribute_weighted_sums[n] / qsi
-            
+            # prepopulate an array of zeros
+            attributes_ = np.zeros_like(qsi, dtype = float)
+            mask = qsi>0
+            attributes_[mask] = attribute_weighted_sums[n][mask] / qsi[mask]
+            attributes[key] = attributes_
             # set attributes to zero where no qsi, this step may not be needed    
             attributes[key] = np.where(qsi == 0, 0, attributes[key])
         return attributes
@@ -1275,7 +1278,10 @@ class MassWastingRunout(Component):
 def flow_velocity(Dp, h, s, g):
     ### already vecotrized, done
     us = (g * h * s) ** 0.5
-    u = us * 5.75 * np.log10(h / Dp)
+    u = np.zeros_like(us, dtype = float)
+    mask = h>0
+    u_non_zero = us[mask] * 5.75 * np.log10(h[mask] / Dp[mask])
+    u[mask] = u_non_zero
     return u
 
 
@@ -1283,8 +1289,11 @@ def shear_stress_grains(vs, ros, Dp, h, s, g):
     ### already vecotrized, done
     theta = np.arctan(s)
     phi = np.arctan(0.32)
-    u = flow_velocity(Dp, h, s, g)
-    dudz = u / h
+    mask = h>0
+    u= flow_velocity(Dp[mask], h[mask], s[mask], g)
+    dudz = np.zeros_like(h, dtype = float)
+    dudz_non_zero = u / h[mask]
+    dudz[mask] = dudz_non_zero
     Tcn = np.cos(theta) * vs * ros * (Dp**2) * (dudz**2)
     tau = Tcn * np.tan(phi)
     return tau
