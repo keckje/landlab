@@ -646,6 +646,111 @@ def map_rmg_nodes_to_nmg_links(
 
     return rmg_nodes_to_nmg_links_mapper
 
+
+def map_rmg_nodes_to_nmg_links_new(
+    grid,
+    nmg_link_to_rmg_coincident_nodes_mapper,
+    rmg_nodes,
+    remove_small_trib_factor=None,
+):
+    """Map the nodes representing the channel location in a DEM to the closest
+    network model grid location. Network model grid location is described in
+    terms of link id and distance down link, measured from the inlet node (tail)
+    of the link.
+
+    Parameters
+    ----------
+    grid : raster model grid
+        needs to have node field "drainage_area"
+    nmg_link_to_rmg_coincident_nodes_mapper : pandas dataframe
+        each row of the dataframe lists the link ID, the coincident node ID,
+        the downstream distance of the coincident node, the x and y coordinates
+        of the coincident node and the drainage area of the link
+    rmg_nodes : np.array
+        an array of node ids to be mapped to the nmg links
+    remove_small_tribs : None or int
+        If int, channel nodes whose contributing area is much less than the contributing
+        area of the closest link are not matched to the link. Where "much less"
+        is defined as being less than the contributing area to the link divided by the factor
+        "remove_small_trib_factor". If None, then the outlet node of small tributaries
+        could be mapped to larger, main stem reaches of the channel network model.
+        Default is remove_small_trib_factor = None
+
+    Returns
+    -------
+    rmg_nodes_to_nmg_links_mapper : pandas dataframe
+        each row of the dataframe lists the node ID, the link ID the node has been
+        mapped too, the closest nmg-link-coincident node ID, the drainage area
+        of the link and the drainage area of the node
+
+    """
+
+    def dist_between_nmg_and_rmg_nodes(row, xc, yc):
+        """distance between channel node and link node"""
+        return _dist_func(xc, row["x"], yc, row["y"])
+
+    link_ = []
+    node_drainage_area_ = []
+    linkID_ = []
+    coincident_node_downstream_dist_ = []
+    coincident_node_ = []
+    link_drainage_area_ = []
+    
+    for n in rmg_nodes:  # for each rmg node
+        xc = grid.node_x[n]
+        yc = grid.node_y[n]
+        # compute the distance to all link coincident rmg nodes
+        # dist = nmg_link_to_rmg_coincident_nodes_mapper.apply(
+        #     lambda row: dist_between_nmg_and_rmg_nodes(row, xc, yc), axis=1
+        # )
+        
+        dist = _dist_func(xc, nmg_link_to_rmg_coincident_nodes_mapper['x'],
+                          yc, nmg_link_to_rmg_coincident_nodes_mapper['y'])
+        
+        
+        # pick closest coincident node and corresponding link
+        # if more than one (which can happen because the confluence between two
+        # links overlay the same node), pick link with largest contributing area
+        mask = dist == dist.min()
+        linkID = nmg_link_to_rmg_coincident_nodes_mapper["linkID"][mask]
+        coincident_node_downstream_dist = nmg_link_to_rmg_coincident_nodes_mapper["coincident_node_downstream_dist"][mask]
+        coincident_node = nmg_link_to_rmg_coincident_nodes_mapper["coincident_node"][mask]
+        link_drainage_area = nmg_link_to_rmg_coincident_nodes_mapper["link_drainage_area"][mask]        
+
+        bigger_link = link_drainage_area == link_drainage_area.max()
+
+        node_drainage_area_.append(grid.at_node["drainage_area"][n])  # add node drainage area to attributes
+        linkID_.append(linkID[bigger_link])
+        coincident_node_downstream_dist_.append(coincident_node_downstream_dist[bigger_link])
+        coincident_node_.append(coincident_node[bigger_link])
+        link_drainage_area_.append(link_drainage_area[bigger_link])
+
+
+    rmg_nodes_to_nmg_links_mapper = pd.concat(link_)
+    rmg_nodes_to_nmg_links_mapper["node"] = rmg_nodes
+    # organize column order in mapper
+    rmg_nodes_to_nmg_links_mapper = rmg_nodes_to_nmg_links_mapper[
+        [
+            "node",
+            "linkID",
+            "coincident_node",
+            "coincident_node_downstream_dist",
+            "link_drainage_area",
+            "node_drainage_area",
+        ]
+    ].reset_index(drop=True)
+
+    if (
+        remove_small_trib_factor
+    ):  # check for small tributary nodes assigned to link and remove them
+        rmg_nodes_to_nmg_links_mapper = _remove_small_tribs(
+            rmg_nodes_to_nmg_links_mapper,
+            nmg_link_to_rmg_coincident_nodes_mapper,
+            remove_small_trib_factor,
+        )
+
+    return rmg_nodes_to_nmg_links_mapper
+
 # def _remove_small_tribs(rmg_nodes_to_nmg_links_mapper, nmg_link_to_rmg_coincident_nodes_mapper):
 #     """remove channel rmg nodes mapped to link that represent first order channels
 #     not represented by the network model grid"""
