@@ -676,8 +676,8 @@ def map_rmg_nodes_to_nmg_links_new(
         the drainage area of the link
     rmg_nodes : np.array
         an array of node ids to be mapped to the nmg links
-    remove_small_trib_ratio : None or int
-        If int, channel nodes whose contributing area is much less than the contributing
+    remove_small_trib_ratio : None or float
+        If float, channel nodes whose contributing area is much less than the contributing
         area of the mapped link are ignored. Where "much less" is defined as being less 
         than the contributing area of the mapped link times the "remove_small_trib_ratio".
         If specified as None, then channel nodes whose contributing area is much less than 
@@ -753,7 +753,6 @@ def map_rmg_nodes_to_nmg_links_new(
     return rmg_nodes_to_nmg_links_mapper
 
 
-# # Try to use cdist
 
 def map_rmg_nodes_to_nmg_links_fast(
     grid,
@@ -761,7 +760,14 @@ def map_rmg_nodes_to_nmg_links_fast(
     rmg_nodes,
     remove_small_trib_ratio=None,
 ):
-    """Map the nodes representing the channel location in a DEM to the closest
+    """
+    # this version uses scipy cdist, which limits the ability to resolve ties
+    when nodes are the same distance from the link to the first node, rather 
+    than the node with the largest contributing area, as implemented in the other
+    versions...not going to use this version
+
+
+    Map the nodes representing the channel location in a DEM to the closest
     network model grid location. Network model grid location is described in
     terms of link id and distance down link, measured from the inlet node (tail)
     of the link.
@@ -776,7 +782,7 @@ def map_rmg_nodes_to_nmg_links_fast(
         of the coincident node and the drainage area of the link
     rmg_nodes : np.array
         an array of node ids to be mapped to the nmg links
-    remove_small_tribs : None or int
+    remove_small_tribs : None or float
         If int, channel nodes whose contributing area is much less than the contributing
         area of the closest link are not matched to the link. Where "much less"
         is defined as being less than the contributing area to the link multiplied by
@@ -856,8 +862,8 @@ def _remove_small_tribs_new(
 
     for link in np.unique(nmg_link_to_rmg_coincident_nodes_mapper["linkID"]):
         if link in rmg_nodes_to_nmg_links_mapper["linkID"]:
-            # first get the coincident rmg node that represents the inlet to the link
-            # as the node with shortest downstream distance from inlet
+            # first get the coincident rmg node mapped to the link inlet
+            # (i.e., the coincident node with shortest downstream distance from link inlet)
             mask1 = nmg_link_to_rmg_coincident_nodes_mapper["linkID"] == link
             min_dist = nmg_link_to_rmg_coincident_nodes_mapper[
                 "coincident_node_downstream_dist"
@@ -870,11 +876,10 @@ def _remove_small_tribs_new(
             )
             inlet_coincident_node = nmg_link_to_rmg_coincident_nodes_mapper[
                 "coincident_node"
-            ][mask1*mask2][0]
-            # now get the contributing area of the rmg channel node mapped to the link
-            # inlet (inlet_CA).
-            # if a small tributary node is also mapped to the link inlet, there may be
-            # more than one contributing area associated with the inlet
+            ][mask1*mask2]#[0] # zero index needed?
+            # now get the contributing area of the rmg node mapped to the link
+            # inlet coincident node (inlet_CA). The inlet_CA value will be used to 
+            # screen small tributary nodes.
             mask3 = (
                 rmg_nodes_to_nmg_links_mapper["coincident_node"]
                 == inlet_coincident_node
@@ -882,13 +887,21 @@ def _remove_small_tribs_new(
             inlet_CA_ = rmg_nodes_to_nmg_links_mapper["node_drainage_area"][
                 mask3
             ]
+            # But, if a small tributary node happens to also be mapped to the link inlet, there may be
+            # more than one contributing area associated with the inlet
+            # # if there is more than one, choose the large contributing area
+            #  if (
+            #     len(inlet_CA_) > 1
+            # ):
+            #     inlet_CA = inlet_CA_.max()      
+            # if there is more than one, remove the contributing area that is much less than the link contributing area
+            # Where "much less" is defined as being less than the contributing area to the link divided by the factor "remove_small_trib_ratio"
             if (
                 len(inlet_CA_) > 1
-            ):  # if there is more than one, remove the contributing area that is much less than the link contributing area
-                # Where "much less" is defined as being less than the contributing area to the link divided by the factor "remove_small_trib_ratio"
+            ):  
                 mask4 = (
                     inlet_CA_
-                    > rmg_nodes_to_nmg_links_mapper["link_drainage_area"][0]
+                    > rmg_nodes_to_nmg_links_mapper["link_drainage_area"][0] # 
                     * remove_small_trib_ratio
                 )
                 inlet_CA = inlet_CA_[mask4]
@@ -1180,7 +1193,6 @@ def plot_nmgrids(nmgrid_1, nmgrid_2):
 #     return link_mapper
 
 
-
 def map_nmg1_links_to_nmg2_links(nmgrid_1, nmgrid_2, number_of_points=11, plot_grids = False):
     """given two slightly different network model grids of the same channel network,
     map each link from one network model grid (nmgrid_1) to the closest (based on
@@ -1272,7 +1284,6 @@ def map_nmg1_links_to_nmg2_links(nmgrid_1, nmgrid_2, number_of_points=11, plot_g
     return link_mapper
         
 
-
 def map_rmg_channel_nodes_to_nmg_nodes(grid, nmgrid, acn):
     """ find rmg channel node that is closest to each node at the head and 
     tail of each link in the nmg.
@@ -1290,6 +1301,30 @@ def map_rmg_channel_nodes_to_nmg_nodes(grid, nmgrid, acn):
         mdn = xyDF.index[(nmg_node_dist == offset).values][0]# index of minimum distance node, use first value
         nmg_node_to_cn_mapper[i] = acn[mdn] # rmg node mapped to nmg node i         
     return nmg_node_to_cn_mapper
+
+
+def map_rmg_channel_nodes_to_nmg_nodes_new(grid, nmgrid, acn):
+    sublist1 = np.array([grid.node_x[acn], grid.node_y[acn]]).T#nmgrid_1_link_points[["X", "Y"]]  # get points that represent nmgrid_1
+    sublist2 = np.array([nmgrid.node_x,nmgrid.node_y]).T#nmgrid_2_link_points[["X", "Y"]]  # get points that represent nmgrid_2
+    # create the distance matrix, which lists the distance between all nmgrid_1 and nmgrid_2 points
+    distance_matrix = cdist(
+        sublist2, sublist1, metric="euclidean"
+    )  
+    # find the minimum values
+    closest_point_indices = np.argmin(
+        distance_matrix, axis=1
+    )  
+    # create a matrix of grid node IDs
+    nodeID_array = np.tile(
+        acn, (nmgrid.number_of_nodes, 1)
+    )
+    # get the ID of the closest node
+    closest_node_IDs = nodeID_array[
+        np.arange(len(sublist2)), closest_point_indices
+    ]  
+
+    # return as a dict with keys as nmgrid link ID, values as ID of closest rmg node 
+    return dict(zip(nmgrid.nodes, closest_node_IDs))
 
 
 def transfer_nmg2_link_field_to_nmg1_link_field(nmgrid_2, nmgrid_1, link_mapper, link_field, default_value = np.nan):
@@ -1327,7 +1362,8 @@ def transfer_nmg_link_field_to_rmg_channel_node_field(grid, nmgrid, nmg_field, r
     
     for i, link in enumerate(nmgrid.active_links):
         value = nmgrid.at_link[nmg_field][link]
-        link_nodes =  cn_to_nmg_link_mapper['coincident_node'][cn_to_nmg_link_mapper['linkID'] == link].values
+        # link_nodes =  cn_to_nmg_link_mapper['coincident_node'][cn_to_nmg_link_mapper['linkID'] == link]
+        link_nodes =  cn_to_nmg_link_mapper['node'][cn_to_nmg_link_mapper['linkID'] == link]
         grid.at_node[rmg_field][link_nodes] = value
         
         
@@ -1339,7 +1375,8 @@ def transfer_rmg_channel_node_field_to_nmg_link_field(grid, nmgrid, rmg_field, n
         nmgrid.at_link[nmg_field] = np.ones(nmgrid.number_of_links)*default_value
     
     for i, link in enumerate(nmgrid.active_links):
-        link_nodes =  cn_to_nmg_link_mapper['coincident_node'][cn_to_nmg_link_mapper['linkID'] == link].values
+        #link_nodes =  cn_to_nmg_link_mapper['coincident_node'][cn_to_nmg_link_mapper['linkID'] == link]
+        link_nodes =  cn_to_nmg_link_mapper['node'][cn_to_nmg_link_mapper['linkID'] == link]
         if len(link_nodes)>0: # if link_nodes is not empty
             if metric == 'mean':
                 value = grid.at_node[rmg_field][link_nodes].mean()
@@ -1353,25 +1390,43 @@ def transfer_rmg_channel_node_field_to_nmg_link_field(grid, nmgrid, rmg_field, n
                 raise ValueError('metric "{}" not an option'.format(metric))
             nmgrid.at_link[nmg_field][link] = value
 
-def update_rmg_channel_location_and_mapping(grid, nmgrid, Ct, BFt, terrace_width, link_nodes, nmg_link_to_rmg_coincident_nodes_mapper):
+
+def update_rmg_channel_location_and_mapping(grid, nmgrid, Ct, BFt, terrace_width, link_nodes, nmg_link_to_rmg_coincident_nodes_mapper, remove_small_trib_ratio = None):
     """if the DEM changes, this function remaps channel and terrace nodes and updates 
     the mappers"""
     
     acn = extract_channel_nodes(grid,Ct)
     fcn = extract_channel_nodes(grid,BFt)
+
+    acn_to_nmg_links_mapper = map_rmg_nodes_to_nmg_links_new(grid, nmg_link_to_rmg_coincident_nodes_mapper, acn, remove_small_trib_ratio)
+    fcn_to_nmg_links_mapper = map_rmg_nodes_to_nmg_links_new(grid, nmg_link_to_rmg_coincident_nodes_mapper, fcn, remove_small_trib_ratio)
+
+
+    # remove small tributaries from the all channel node array
+    # by checking for node contributing areas that are much less than the inlet node contributing area
+    if remove_small_trib_ratio:
+        acn = np.isin(acn, acn_to_nmg_links_mapper ['node'])
+        fcn = np.isin(fcn, fcn_to_nmg_links_mapper ['node'])
+        
     tn = extract_terrace_nodes(grid, terrace_width, acn, fcn)
-    cn_to_nmg_link_mapper = map_rmg_nodes_to_nmg_links(grid, nmg_link_to_rmg_coincident_nodes_mapper, acn)
-    tn_to_nmg_link_mapper = map_rmg_nodes_to_nmg_links(grid, nmg_link_to_rmg_coincident_nodes_mapper, tn)
-    nmg_node_to_cn_mapper = map_rmg_channel_nodes_to_nmg_nodes(grid, nmgrid, acn)
+    tn_to_nmg_links_mapper = map_rmg_nodes_to_nmg_links_new(grid, nmg_link_to_rmg_coincident_nodes_mapper, tn)
+    nmg_node_to_cn_mapper = map_rmg_channel_nodes_to_nmg_nodes_new(grid, nmgrid, acn)
     
     return {'acn':acn,
             'fcn':fcn,
             'tn':tn,
             'nmg_link_to_rmg_coincident_nodes_mapper':nmg_link_to_rmg_coincident_nodes_mapper,
-            'cn_to_nmg_link_mapper':cn_to_nmg_link_mapper,
-            'tn_to_nmg_link_mapper':tn_to_nmg_link_mapper,            
+            'cn_to_nmg_links_mapper':cn_to_nmg_links_mapper,
+            'tn_to_nmg_links_mapper':tn_to_nmg_links_mapper,            
             'nmg_node_to_cn':nmg_node_to_cn_mapper}
     
+
+
+
+
+
+
+
 
 
 
