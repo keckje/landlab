@@ -6,7 +6,7 @@ from landlab import Component, FieldError
 from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFinderAndRouter,FlowDirectorSteepest)
 from landlab import imshow_grid, imshow_grid_at_node
 # from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
-from landlab.utils.channel_network_grid_tools_all import ChannelNetworkToolsInterpretor, ChannelNetworkToolsMapper
+#from landlab.utils.channel_network_grid_tools_all import ChannelNetworkToolsInterpretor, ChannelNetworkToolsMapper
 import landlab.utils.channel_network_grid_tools_all as gt
 
 class MassWastingEroder(Component):
@@ -22,11 +22,10 @@ class MassWastingEroder(Component):
 
 
     TODO: 
-            need a more reliable method for differentiating between eroded and landslide eroded cells
-            mass wasting disturbed cells are provided outside of eroder, 
-            update erosion equations to: min(ax^b-c, 0) that scales with flow rate.
-            erode channel node elevations using flow rate at grid cell
-          record datetime of each timestep
+            daily_erosion_depth is determined as a function of effective stress in DHG, should make erosion depth a function in mass_wasting_eroder that uses shear stress from DHG. That way it can be parameterized as part of eroder
+            need a more reliable method for differentiating between eroded and landslide eroded cells, mass wasting disturbed cells are provided outside of eroder, 
+            get rid of dataframe operations, replace with dict and numpy
+            record datetime of each timestep
           add parameter for using different router and option to have no terrace cells (for models with larger grid cells)
 
     author: Jeff Keck
@@ -133,16 +132,6 @@ class MassWastingEroder(Component):
             raise FieldError(
                 'A flow__receiver_node field is required as a component input!')  
 
-        # instantiate channel network grid tools or use  provided instance
-        # if gti != None:
-        #     self.gti = gti
-        #     self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid)
-        # else:
-        #     self.gti = ChannelNetworkToolsInterpretor(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
-        #     self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid)
-            
-        # self.gt = ChannelNetworkGridTools(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
-
         self.rnodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1]) #nodes in single column array
                
         ### NM Grid characteristics
@@ -173,33 +162,11 @@ class MassWastingEroder(Component):
 
 
         #### these functions may have already been run
-        # if not hasattr(gti,"ChannelNodes"):
-            # self.gti.extract_channel_nodes(Ct,BCt)
-        # if not hasattr(gti,"TerraceNodes"):
-            # self.gti.extract_terrace_nodes()
-        # self.terrace_nodes = terrace_nodes #gt.self.gti.TerraceNodes
-        # self.channel_nodes = channel_nodes # self.gti.ChannelNodes
-        # self.channel_and_terrace_nodes = np.unique(np.concatenate((self.terrace_nodes, self.channel_nodes))) # change to channel_and_terrace_nodes
         self.define_channel_and_terrace_nodes()
         
         
-        # if not hasattr(gti,"xyDF"):
-            # self.xyDF = self.gtm.map_nmg_links_to_rmg_nodes(linknodes = self.linknodes,
-            #                         #active_links = self._nmgrid.active_links,
-            #                         nmgx = self.nmgridx, nmgy = self.nmgridy)
-            
-              
         self.map_channel_and_terrace_nodes_to_links()
-        # self.xyDF = gt.map_nmg_links_to_rmg_coincident_nodes(self._grid, 
-        #                                           self._nmgrid, 
-        #                                           gt.get_link_nodes(self._nmgrid), 
-        #                                           remove_duplicates = True)
-        
-        # self.cn_to_nmg_link_mapper = gt.map_rmg_nodes_to_nmg_links(self._grid, self.xyDF, self.channel_and_terrace_nodes, remove_small_tribs = False)
 
-            # self.Lnodelist = out[1] # all nodes that coincide with link
-            # self.Ldistlist = out[4] # the downstream distance of each node that coincide with link
-            # self.xyDF = out[5]
 
         ## define fluvial erosion rates of channel and terrace nodes (no fluvial erosion on hillslopes)
         self._DefineErosionRates()
@@ -218,18 +185,18 @@ class MassWastingEroder(Component):
 
 
     def define_channel_and_terrace_nodes(self):
-        self.channel_nodes = np.arange(self._grid.number_of_nodes)[self._grid.at_node['channel_nodes'].astype(bool)]    
+        self.channel_nodes = np.arange(self._grid.number_of_nodes)[self._grid.at_node['fluvial_channel_nodes'].astype(bool)]    
         self.terrace_nodes = np.arange(self._grid.number_of_nodes)[self._grid.at_node['terrace_nodes'].astype(bool)] 
         self.channel_and_terrace_nodes = np.unique(np.concatenate((self.terrace_nodes, self.channel_nodes)))
         
 
     def map_channel_and_terrace_nodes_to_links(self):
-        self.xyDF = gt.map_nmg_links_to_rmg_coincident_nodes(self._grid, 
+        self.xyDF = gt.map_nmg_links_to_rmg_coincident_nodes_new(self._grid, 
                                                   self._nmgrid, 
                                                   gt.get_link_nodes(self._nmgrid), 
                                                   remove_duplicates = True)
         
-        self.cn_to_nmg_link_mapper = gt.map_rmg_nodes_to_nmg_links(self._grid, self.xyDF, self.channel_and_terrace_nodes)
+        self.cn_to_nmg_link_mapper = gt.map_rmg_nodes_to_nmg_links_new(self._grid, self.xyDF, self.channel_and_terrace_nodes)
 
 
         
@@ -416,7 +383,7 @@ class MassWastingEroder(Component):
 
                     
                 tn_mask = np.isin(self.FENodes,self.terrace_nodes)
-                fr_FED = self._grid.at_node['daily_erosion_depth'][self.FENodes] # this will be replaced by shear stress aproximation above
+                fr_FED = self._grid.at_node['daily_erosion_depth'][self.FENodes] # daily_erosion_depth is determined as a function of effective stress in DHG, should make erosion depth a function in mass_wasting_eroder that uses shear stress from DHG. That way it can be parameterized as part of eroder
                 
                 # max erosion rate is FED, if less than FED, then fluvial erosion rate
                 FED_ = np.where(fr_FED>FED,FED,fr_FED)#FED #  
@@ -524,13 +491,22 @@ class MassWastingEroder(Component):
             # for each FE node, find it in
             Lmwlink = []
             for h, FEDn in enumerate(self.FENodes): # all eroded cells that are also channel or terrace nodes
-                row = self.cn_to_nmg_link_mapper[self.cn_to_nmg_link_mapper['node'] == FEDn]
+                # row = self.cn_to_nmg_link_mapper[self.cn_to_nmg_link_mapper['node'] == FEDn]
+                # mwlink = OrderedDict({'mw_unit':h,'pulse_volume':self.FEV[h],
+                #                       'raster_grid_cell_#':FEDn,'link_#':int(row['linkID'].values[0]),
+                #                       'coincident node':int(row['coincident_node'].values[0]),
+                #                       'link_downstream_distance':row['coincident_node_downstream_dist'].values[0]})
+               
+                # Lmwlink.append(mwlink)
+                
+                mask = self.cn_to_nmg_link_mapper['node'] == FEDn
                 mwlink = OrderedDict({'mw_unit':h,'pulse_volume':self.FEV[h],
-                                      'raster_grid_cell_#':FEDn,'link_#':int(row['linkID'].values[0]),
-                                      'coincident node':int(row['coincident_node'].values[0]),
-                                      'link_downstream_distance':row['coincident_node_downstream_dist'].values[0]})
+                                      'raster_grid_cell_#':FEDn,'link_#':int(self.cn_to_nmg_link_mapper['linkID'][mask]),
+                                      'coincident node':int(self.cn_to_nmg_link_mapper['coincident_node'][mask]),
+                                      'link_downstream_distance':self.cn_to_nmg_link_mapper['coincident_node_downstream_dist'][mask]})
                
                 Lmwlink.append(mwlink)
+                
             parcelDF = pd.DataFrame(Lmwlink)
             pLinkDistanceRatio = parcelDF.apply(LDistanceRatio,axis=1)
             pLinkDistanceRatio.name = 'normalized_downstream_distance'

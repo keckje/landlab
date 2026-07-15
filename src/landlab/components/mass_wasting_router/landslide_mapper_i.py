@@ -11,7 +11,7 @@ from landlab.components import(FlowDirectorD8,
                                 FlowDirectorDINF, 
                                 FlowDirectorMFD, 
                                 FlowDirectorSteepest)
-
+from landlab.utils.channel_network_grid_tools_all import ChannelNetworkToolsInterpretor
 import landlab.utils.channel_network_grid_tools_all as gt
 
 
@@ -99,15 +99,15 @@ class LandslideMapper(Component):
         PartOfChannel_buffer = 10, # may not need this parameter            
         mass_wasting_threshold = 0.75,  # landslide mapping parameters
         threshold_type = "greater_than",
-        min_mw_cells = 1
+        min_mw_cells = 1,
+        gti = None,
         ):
 
         
+        # call __init__ from parent classes
+        # super().__init__(grid, nmgrid, Ct, BCt)
+        
         super().__init__(grid)
-
-        self.nodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1],1)
-        self.rnodes = grid.nodes.reshape(grid.shape[0]*grid.shape[1]) #nodes in single column array
-
 
         if 'topographic__elevation' in grid.at_node:
             self.dem = grid.at_node['topographic__elevation']
@@ -121,12 +121,6 @@ class LandslideMapper(Component):
             self.frnode = grid.at_node['flow__receiver_node']
             self.xdif = grid.node_x[self.frnode]-grid.node_x # change in x from node to receiver node
             self.ydif = (grid.node_y[self.frnode]-grid.node_y)*-1 #, change in y from node to receiver node...NOTE: flip direction of y axis so that up is positve
-
-
-            # self.frnode = grid.at_node['flow__receiver_node']
-            # self.xdif = grid.node_x[self.frnode]-grid.node_x[self.rnodes] # change in x from node to receiver node
-            # self.ydif = (grid.node_y[self.frnode]-grid.node_y[self.rnodes])*-1 #, change i
-
         else:
             raise FieldError(
                 'A flow__receiver_node field is required as a component input!')  
@@ -143,15 +137,31 @@ class LandslideMapper(Component):
             self.mwclump = grid.at_node['mass__wasting_clumps']
         else:
             self.mwclump = grid.add_zeros('node',
-                                        'mass__wasting_clumps')      
+                                        'mass__wasting_clumps')
 
         if 'channel_nodes' in grid.at_node:
             self.channel_nodes = grid.nodes.flatten()[grid.at_node['channel_nodes'].astype(bool)]
         else:
             raise FieldError(
-                'A channel_nodes field is required as a component input!')                   
- 
-       
+                'A channel_nodes field is required as a component input!')                                           
+
+        # instantiate channel network grid tools or use provided instance
+        if gti != None:
+            self.gti = gti
+            # check if ChannelNodes already created                   
+        else:
+            self.gti = ChannelNetworkToolsInterpretor(grid = grid,Ct = Ct,BCt = BCt)
+
+        # if gtm != None:
+        #     self.gtm = gtm
+        # else:
+        #     self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
+
+
+        if not hasattr(gti,"ChannelNodes"):
+            self.gti.extract_channel_nodes(Ct,BCt)
+
+        
         ### prep LandslideMapper
         self.MW_to_C_threshold = MW_to_channel_threshold # maximum distance [m] from channel for downslope clumping
         self.mass_wasting_threshold = mass_wasting_threshold # probability of landslide threshold
@@ -188,15 +198,16 @@ class LandslideMapper(Component):
         # boolean list of which grid cells are landslides
         self._this_timesteps_landslides = mask
 
-        a_th = a[mask] # Make all values less than threshold NaN
+        a_th = a[mask] #Make all values less than threshold NaN
 
-        # add new field to grid that contains all cells with annual probability greater than threshold
+        #add new field to grid that contains all cells with annual probability greater than threshold
         self.hmwprob = a_th #consider removing this instance variable
 
         # self.grid.at_node['high__MW_probability'] = self.hmwprob # change to mass__wasting_potential
 
-        # create mass wasting unit list
-        self.LS_cells = self._grid.nodes.flatten()[mask]
+        #create mass wasting unit list
+        self.LS_cells = self.gti.nodes[mask].flatten() # could just use rnodes
+        # print(self.LS_cells)
 
                 
     def AdjCells(self,n):
@@ -211,9 +222,10 @@ class LandslideMapper(Component):
             
             #change to use mg.adjacent_nodes_at_node[] and mg.diagonal_adjacent_nodes_at_node[]
     
-            '''           
-            gc = self._grid.shape[1] #number of columns
-            gr = self._grid.shape[0] #number of rows
+            '''
+            gc = self.gti.gc
+            gr = self.gti.gr
+            
             u = n-gc
             ur = n-gc+1
             r = n+1
@@ -266,6 +278,8 @@ class LandslideMapper(Component):
         acn - list of int, adjacent cell number
         '''
         
+        # xd = self.gti.xdif[n]
+        # yd = self.gti.ydif[n]
         xd = self.xdif[n]
         yd = self.ydif[n]
         
@@ -390,9 +404,12 @@ class LandslideMapper(Component):
                 
             }[x]
         
-        
+            
+        # ydal = self.gti.ydif[ac]
+        # xdal = self.gti.xdif[ac]
         ydal = self.ydif[ac]
         xdal = self.xdif[ac]
+
         
         #create mask for adjacent cells using  check if not divergent (True) or divergent (false)
         if yd > 0 and xd == 0:
@@ -468,7 +485,7 @@ class LandslideMapper(Component):
         return group
 
     
-    def _downslopecells(self,StartCell):
+    def _downslopecells(self,StartCell): # add channel_nodes as an input
         '''MWR
         compute distance between a given cell and the nearest downslope channel 
         network cell. distance is computed to POCbuffer distance from channel network
@@ -492,14 +509,16 @@ class LandslideMapper(Component):
         c = 0
         
         loc.append(int(StartCell))
+        # dist.append((self.gti.xdif[int(StartCell)]**2+self.gti.ydif[int(StartCell)]**2)**.5)
         dist.append((self.xdif[int(StartCell)]**2+self.ydif[int(StartCell)]**2)**.5)
-
+                       
         flow = True
         
         while flow == True:
             
             slope  = self._grid.at_node['topographic__slope'][loc[c]]
             #compute distance between deposit and all debris flow network cells
+            # cdist, nc = self.gti.min_distance_to_network(loc[c],  ChType = 'debrisflow') # change this to gt.min_distance_to_network(self._grid, channel_nodes, loc[c])
             cdist, nc = gt.min_distance_to_network(self._grid, self.channel_nodes, loc[c])
             #TO DO need to change so that if distance to network is less than minimum, then stop
             
@@ -508,7 +527,8 @@ class LandslideMapper(Component):
             # print(cdist)
             if cdist > self.POCbuffer: # downslope distance measured to POCbuffer from channel    
                 loc.append(self._grid.at_node['flow__receiver_node'][loc[c]])
-                dist.append((self.xdif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2+self.ydif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2)**.5)                
+                # dist.append((self.gti.xdif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2+self.gti.ydif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2)**.5)
+                dist.append((self.xdif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2+self.ydif[self._grid.at_node['flow__receiver_node'][loc[c]]]**2)**.5) 
                 c=c+1
                 if loc[-1] == loc[-2]: # check that runout is not stuck at same node # NEED TO DEBUG
                     break

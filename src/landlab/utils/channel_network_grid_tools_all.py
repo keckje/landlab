@@ -1416,7 +1416,7 @@ def update_rmg_channel_location_and_mapping(grid, nmgrid, Ct, BFt, terrace_width
             'fcn':fcn,
             'tn':tn,
             'nmg_link_to_rmg_coincident_nodes_mapper':nmg_link_to_rmg_coincident_nodes_mapper,
-            'cn_to_nmg_links_mapper':cn_to_nmg_links_mapper,
+            'cn_to_nmg_links_mapper':acn_to_nmg_links_mapper,
             'tn_to_nmg_links_mapper':tn_to_nmg_links_mapper,            
             'nmg_node_to_cn':nmg_node_to_cn_mapper}
     
@@ -1909,4 +1909,5 @@ class ChannelNetworkToolsMapper(ChannelNetworkToolsBase):
                 else:
                     raise ValueError('metric "{}" not an option'.format(metric))
                 self._nmgrid.at_link[nmg_field][link] = value
+            
             
