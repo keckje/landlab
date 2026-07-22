@@ -264,7 +264,7 @@ class MassWastingRouter(Component):
         self.terrace_nodes =  gt.extract_terrace_nodes(self._grid, self.terrace_width, self.all_channel_nodes, self.fluvial_channel_nodes)
         gt.define_true_elements(self._grid, 'terrace_nodes', 'node', self.terrace_nodes)
         ## create the nmg to rmg node mapper
-        self.nmg_node_to_cn_mapper = gt.map_rmg_channel_nodes_to_nmg_nodes_new(self._grid, self._nmgrid, self.fluvial_channel_nodes)
+        self.nmg_node_to_cn_mapper = gt.map_rmg_channel_nodes_to_nmg_nodes(self._grid, self._nmgrid, self.fluvial_channel_nodes)
         # define nmg node elevation based on rmg channel nodes...this is only needed 
         # during run one step, move to run_one_step, slope is then recomputed in 
         # NST's run_one_step

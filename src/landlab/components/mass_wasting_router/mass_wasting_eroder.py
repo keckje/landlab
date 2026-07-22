@@ -5,8 +5,6 @@ from collections import OrderedDict
 from landlab import Component, FieldError
 from landlab.components import (FlowDirectorMFD, FlowAccumulator, DepressionFinderAndRouter,FlowDirectorSteepest)
 from landlab import imshow_grid, imshow_grid_at_node
-# from landlab.utils.channel_network_grid_tools import ChannelNetworkGridTools
-#from landlab.utils.channel_network_grid_tools_all import ChannelNetworkToolsInterpretor, ChannelNetworkToolsMapper
 import landlab.utils.channel_network_grid_tools_all as gt
 
 class MassWastingEroder(Component):
@@ -191,12 +189,12 @@ class MassWastingEroder(Component):
         
 
     def map_channel_and_terrace_nodes_to_links(self):
-        self.xyDF = gt.map_nmg_links_to_rmg_coincident_nodes_new(self._grid, 
+        self.xyDF = gt.map_nmg_links_to_rmg_coincident_nodes(self._grid, 
                                                   self._nmgrid, 
                                                   gt.get_link_nodes(self._nmgrid), 
                                                   remove_duplicates = True)
         
-        self.cn_to_nmg_link_mapper = gt.map_rmg_nodes_to_nmg_links_new(self._grid, self.xyDF, self.channel_and_terrace_nodes)
+        self.cn_to_nmg_link_mapper = gt.map_rmg_nodes_to_nmg_links(self._grid, self.xyDF, self.channel_and_terrace_nodes)
 
 
         

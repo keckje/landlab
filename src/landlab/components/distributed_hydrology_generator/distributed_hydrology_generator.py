@@ -28,7 +28,7 @@ import xarray as xr
 from landlab import Component, FieldError
 from landlab.plot import graph
 from landlab.io import read_esri_ascii
-# from landlab.utils.channel_network_grid_tools_all import ChannelNetworkToolsMapper
+
 import landlab.utils.channel_network_grid_tools_all as gt
 
 class DistributedHydrologyGenerator(Component):
@@ -97,11 +97,6 @@ class DistributedHydrologyGenerator(Component):
         # determine run option based on user input
         # if both a nmg and rmg provided, will be option 1 or 2
         if (nmgrid != None) and (grid != None):
-            # option 1 and 2 update flow, updating flow requires ChannelNetworkToolsMapper
-            # if gtm != None:
-            #     self.gtm = gtm
-            # else:
-            #     self.gtm = ChannelNetworkToolsMapper(grid = grid, nmgrid = nmgrid, Ct = Ct,BCt = BCt)
             # option 1, a dtw dictionary is provided and flow and depth to water table will be updated
             if DHSVM_dtw_dict != None:
                 self.opt = 1
@@ -205,7 +200,8 @@ class DistributedHydrologyGenerator(Component):
         # tau_dict
         if tao_dict != None:
             self.tao_dict = tao_dict
-        else:
+        else: # default values from Castro and Jackson, 2001 (need to confirm), Table 4, 
+              # which are in imperial units. This is metric version, with area in km2 and output grains:cm, width:m and depth:m
             self.tao_dict = {'gHG':[0.15,-0.08], 'wHG':[2.205, 0.38], 'dHG':[0.274, 0.24]}       
 
 
