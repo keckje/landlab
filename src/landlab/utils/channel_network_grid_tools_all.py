@@ -914,6 +914,8 @@ def get_upslope_nodes(grid):
 
 
 def floodplain_mapper(grid,
+                      acn,
+                      upslope_dictionary,
                       channel_initiation_DA = 5000,
                       BFD_parameters = [0.274, 0.24],
                       BFD_factor = 50,
@@ -928,6 +930,10 @@ def floodplain_mapper(grid,
     grid : raster model grid
         Needs the node field "drainage_area", which describes the topographic drainage
         area upslope of each node in m^2
+    upslope_dictionary: dict
+        keys are the channel nodes, values are the indicies of all nodes upslope of the channel node
+    cn : np array of int
+         array of all node ids included in the channel network
     channel_initiation_DA : int
         Topographic drainage area at which channels initiate, in m^2. The default is 5000.
     BFD_parameters : list of length 2
@@ -952,11 +958,11 @@ def floodplain_mapper(grid,
     hg_c = BFD_parameters[0]
     hg_e = BFD_parameters[1]
     
-    # create the upslope dictionary, upslope nodes to all nodes in grid
-    upslope_dictionary = get_upslope_nodes(grid)
+    # # create the upslope dictionary, upslope nodes to all nodes in grid
+    # upslope_dictionary = get_upslope_nodes(grid)
     
-    # get all channel nodes
-    acn = gt.extract_channel_nodes(grid, channel_initiation_DA)
+    # # get all channel nodes
+    # acn = extract_channel_nodes(grid, channel_initiation_DA)
     
     # add a floodplain_channel_node field. nodes that are not channel or floodplain
     # initially, this is just the ids (index value) of each node
@@ -986,3 +992,68 @@ def floodplain_mapper(grid,
         
     return fn, fn_cn
 
+
+
+def floodplain_mapper_fast(grid,
+                      acn,
+                      upslope_dictionary,
+                      channel_initiation_DA=5000,
+                      BFD_parameters=[0.274, 0.24],
+                      BFD_factor=50):
+    """
+    Map the floodplain for each node by finding all channel nodes and then for each
+    channel node, finding all non-channel nodes whose elevation is within some 
+    multiple of the nodes elevation plus the bankfull flow depth scaled by a factor.
+    # refactored by gemini
+    """
+    hg_c = BFD_parameters[0]
+    hg_e = BFD_parameters[1]
+    
+    # 1. Bind grid fields to local variables to avoid dictionary lookups in the loop
+    z = grid.at_node['topographic__elevation']
+    da = grid.at_node['drainage_area']
+    
+    # 2. Initialize tracking arrays
+    # fn_cn starts as the node IDs themselves
+    fn_cn = np.arange(grid.number_of_nodes)
+    
+    # Use a boolean array to track floodplain nodes. 
+    # This completely eliminates the need for np.unique() and np.concatenate() in the loop.
+    is_floodplain = np.zeros(grid.number_of_nodes, dtype=bool)
+    is_floodplain[acn] = True # Channel nodes are inherently part of the 'fn' return
+    
+    # 3. Sort channel nodes by drainage area (descending)
+    cn_drainage_area = da[acn]
+    sorted_indices = np.argsort(cn_drainage_area)[::-1]
+    acn_sorted = acn[sorted_indices]
+    
+    # 4. PRE-CALCULATE thresholds and elevations for the loop
+    # Vectorizing this math outside the loop saves thousands of redundant exponentiations
+    thresholds = BFD_factor * hg_c * (da[acn_sorted] / 1e6)**hg_e
+    elevations = z[acn_sorted]
+    
+    # 5. Execute the downstream-to-upstream loop
+    for node, threshold_depth, el in zip(acn_sorted, thresholds, elevations):
+        up_nodes = upslope_dictionary[node]
+        
+        # Skip if there are no upslope nodes
+        if not up_nodes:
+            continue
+            
+        # Convert the dictionary list to a numpy array for masking
+        up_nodes_arr = np.array(up_nodes, dtype=int)
+        
+        # Boolean mask for elevation threshold
+        floodplain_mask = z[up_nodes_arr] < (el + threshold_depth)
+        
+        # Extract the valid nodes
+        valid_nodes = up_nodes_arr[floodplain_mask]
+        
+        # Assign values directly using the boolean arrays (O(1) operation)
+        is_floodplain[valid_nodes] = True
+        fn_cn[valid_nodes] = node
+        
+    # 6. Convert the boolean mask back into an array of node indices at the very end
+    fn = np.where(is_floodplain)[0]
+    
+    return fn, fn_cn
