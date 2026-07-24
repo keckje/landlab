@@ -1006,8 +1006,7 @@ def floodplain_mapper_fast(grid,
     multiple of the nodes elevation plus the bankfull flow depth scaled by a factor.
     # refactored by gemini
     """
-    hg_c = BFD_parameters[0]
-    hg_e = BFD_parameters[1]
+
     
     # 1. Bind grid fields to local variables to avoid dictionary lookups in the loop
     z = grid.at_node['topographic__elevation']
@@ -1029,7 +1028,13 @@ def floodplain_mapper_fast(grid,
     
     # 4. PRE-CALCULATE thresholds and elevations for the loop
     # Vectorizing this math outside the loop saves thousands of redundant exponentiations
-    thresholds = BFD_factor * hg_c * (da[acn_sorted] / 1e6)**hg_e
+    if BFD_parameters: # if floodplain elevation defined as a function of bankfull flow depth
+        hg_c = BFD_parameters[0]
+        hg_e = BFD_parameters[1]
+        thresholds = BFD_factor * hg_c * (da[acn_sorted] / 1e6)**hg_e
+    else: # else, defined as a constant elevation above the channel
+        thresholds = BFD_factor*np.ones(len(acn_sorted))
+        
     elevations = z[acn_sorted]
     
     # 5. Execute the downstream-to-upstream loop
