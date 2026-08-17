@@ -134,8 +134,7 @@ def extract_channel_nodes(grid, Ct):
 
     Returns
     -------
-    cn : np array of int
-         array of all node ids included in the channel network
+    an np array of all node ids (indicies) included in the channel network
 
     """
     return np.flatnonzero(grid.at_node["drainage_area"] >= Ct)
@@ -874,9 +873,9 @@ def update_rmg_channel_location_and_mapping(grid, nmgrid, Ct, BFt, terrace_width
 
 def get_upslope_nodes(grid):
     """
-    Get all upslope contributing nodes using the flow__receiver_node and 
-    flow__reciever_node_order fields from FlowAccumulator, as corrected by 
-    DepressionFinderAndRouter.
+    Get the upslope contributing nodes to every node in the grid using the 
+    flow__receiver_node and flow__reciever_node_order fields from FlowAccumulator,
+    (NOTE, if there are pits in the DEM, be sure to them using DepressionFinderAndRouter).
     
     Parameters
     ----------
@@ -910,33 +909,38 @@ def get_upslope_nodes(grid):
             all_upslope_nodes_dict[receiver].append(node)
             # ...AND the receiver inherits everything already accumulated by the current node.
             all_upslope_nodes_dict[receiver].extend(all_upslope_nodes_dict[node])
-        
+            
     return all_upslope_nodes_dict
 
 
 def riparian_zone_mapper(grid,
                       acn,
                       upslope_dictionary,
-                      channel_initiation_DA=5000,
                       BFD_parameters=[0.274, 0.24],
                       BFD_factor=50):
-    """
-    SUMMARY.
+    """Finds all nodes in the riparian zone. The riparian zone is defined as the   
+    area between the channel bed and some fixed elevation or multiple of bankfull
+    flow above the channel bed. 
+    Returns an array of all nodes in the riparian zone (rz) and a riparian zone
+    mapper array (rz_cn) that lists the closest downstream channel node to each
+    riparian zone node.
 
     Parameters
     ----------
-    grid : TYPE
-        DESCRIPTION.
-    acn : TYPE
-        DESCRIPTION.
-    upslope_dictionary : TYPE
-        DESCRIPTION.
-    channel_initiation_DA : TYPE, optional
-        DESCRIPTION. The default is 5000.
-    BFD_parameters : TYPE, optional
-        DESCRIPTION. The default is [0.274, 0.24].
-    BFD_factor : TYPE, optional
-        DESCRIPTION. The default is 50.
+    grid : raster model grid
+        Needs the node fields "topographic__elevation" and drainage_area", which 
+        describes the topographic drainage area upslope of each node in m^2.
+    acn : np array
+        array of all node IDs included in the channel network
+    upslope_dictionary: dict
+        keys are the channel node ids (indice), values are the indicies of all nodes upslope of the channel node
+    BFD_parameters : list
+        coefficient (BFD_parameters[0]) and exponent (BFD_parameters[1]) of a 
+        hydraulic geometry estimate of the bankfull flow depth in m as a function
+        of contributing area (m^2)
+    BFD_factor : float
+        A fixed elevation (m) or factor multiplied by bankfull flow to define 
+        the upper extent of the riparian zone.
 
     Returns
     -------
