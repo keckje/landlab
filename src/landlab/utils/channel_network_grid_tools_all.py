@@ -527,7 +527,7 @@ def _remove_small_tribs(
             )
             inlet_coincident_node = nmg_link_to_rmg_coincident_nodes_mapper[
                 "coincident_node"
-            ][mask1*mask2]#[0] # zero index needed?
+            ][mask1*mask2]
             # now get the contributing area of the rmg node mapped to the link
             # inlet coincident node (inlet_CA). The inlet_CA value will be used to 
             # screen small tributary nodes.
@@ -541,7 +541,7 @@ def _remove_small_tribs(
             # But, if a small tributary node happens to also be mapped to the link inlet, there may be
             # more than one contributing area associated with the inlet   
             # if there is more than one, remove the contributing area that is much less than the link contributing area
-            # Where "much less" is defined as being less than the contributing area to the link divided by the factor "remove_small_trib_ratio"
+            # Where "much less" is defined as being less than the contributing area to the link times the factor "remove_small_trib_ratio"
             if (
                 len(inlet_CA_) > 1
             ):  
@@ -846,19 +846,19 @@ def update_rmg_channel_location_and_mapping(grid, nmgrid, Ct, BFt, terrace_width
     acn = extract_channel_nodes(grid,Ct)
     fcn = extract_channel_nodes(grid,BFt)
 
-    acn_to_nmg_links_mapper = map_rmg_nodes_to_nmg_links_new(grid, nmg_link_to_rmg_coincident_nodes_mapper, acn, remove_small_trib_ratio)
-    fcn_to_nmg_links_mapper = map_rmg_nodes_to_nmg_links_new(grid, nmg_link_to_rmg_coincident_nodes_mapper, fcn, remove_small_trib_ratio)
+    acn_to_nmg_links_mapper = map_rmg_nodes_to_nmg_links(grid, nmg_link_to_rmg_coincident_nodes_mapper, acn, remove_small_trib_ratio)
+    fcn_to_nmg_links_mapper = map_rmg_nodes_to_nmg_links(grid, nmg_link_to_rmg_coincident_nodes_mapper, fcn, remove_small_trib_ratio)
 
 
     # remove small tributaries from the all channel node array
     # by checking for node contributing areas that are much less than the inlet node contributing area
     if remove_small_trib_ratio:
-        acn = np.isin(acn, acn_to_nmg_links_mapper ['node'])
-        fcn = np.isin(fcn, fcn_to_nmg_links_mapper ['node'])
+        acn = acn_to_nmg_links_mapper['node']# np.isin(acn, acn_to_nmg_links_mapper['node'])
+        fcn = fcn_to_nmg_links_mapper['node']# np.isin(fcn, fcn_to_nmg_links_mapper['node'])
         
     tn = extract_terrace_nodes(grid, terrace_width, acn, fcn)
-    tn_to_nmg_links_mapper = map_rmg_nodes_to_nmg_links_new(grid, nmg_link_to_rmg_coincident_nodes_mapper, tn)
-    nmg_node_to_cn_mapper = map_rmg_channel_nodes_to_nmg_nodes_new(grid, nmgrid, acn)
+    tn_to_nmg_links_mapper = map_rmg_nodes_to_nmg_links(grid, nmg_link_to_rmg_coincident_nodes_mapper, tn)
+    nmg_node_to_cn_mapper = map_rmg_channel_nodes_to_nmg_nodes(grid, nmgrid, acn)
     
     return {'acn':acn,
             'fcn':fcn,
@@ -887,7 +887,8 @@ def get_upslope_nodes(grid):
     Returns
     -------
     upslope_dictionary: dict
-        keys are the channel nodes, values are the indicies of all nodes upslope of the channel node
+        keys are the channel node ids (indice), values are the indicies of all nodes upslope of the channel node
+        
     """
     # Initialize an empty list for every node in the grid
     all_upslope_nodes_dict = {node: [] for node in range(grid.number_of_nodes)}
@@ -896,7 +897,7 @@ def get_upslope_nodes(grid):
     receivers = grid.at_node['flow__receiver_node']
     
     # Node field 'flow__upstream_node_order' lists nodes from outlet to ridge.
-    # By reversing this array, we process the network from the ridges down to the outlets.
+    # By reversing this array, process the network from the ridges down to the outlets.
     top_down_order = reversed(grid.at_node['flow__upstream_node_order'])
     
     # Pass the lists downstream
@@ -909,126 +910,68 @@ def get_upslope_nodes(grid):
             all_upslope_nodes_dict[receiver].append(node)
             # ...AND the receiver inherits everything already accumulated by the current node.
             all_upslope_nodes_dict[receiver].extend(all_upslope_nodes_dict[node])
-            
+        
     return all_upslope_nodes_dict
 
 
-def floodplain_mapper(grid,
-                      acn,
-                      upslope_dictionary,
-                      channel_initiation_DA = 5000,
-                      BFD_parameters = [0.274, 0.24],
-                      BFD_factor = 50,
-                      ):
-    """
-    map the floodplain for each node by finding all channel nodes and then for each
-    channel node, finding all non-channel nodes whose elevation is within some 
-    multiple of the nodes elevation plus the bankfull flow depth scaled by a factor.
-    
-    Parameters
-    ----------
-    grid : raster model grid
-        Needs the node field "drainage_area", which describes the topographic drainage
-        area upslope of each node in m^2
-    upslope_dictionary: dict
-        keys are the channel nodes, values are the indicies of all nodes upslope of the channel node
-    cn : np array of int
-         array of all node ids included in the channel network
-    channel_initiation_DA : int
-        Topographic drainage area at which channels initiate, in m^2. The default is 5000.
-    BFD_parameters : list of length 2
-        The coefficent and exponent to a hydraulic geometry description of how 
-        bankfull flow dpeth varies with topographic drainage area The default is [0.274, 0.24].
-    BFD_factor : float
-        factor multiplied by the bankfull depth to define upper elevation of floodplain relative
-        to the channel node. The default is 50.
-
-    
-    Returns
-    -------
-    fn : np array
-        Indicies of all nodes that define the floodplain and channels. To get just
-        the floodplain nodes, remove the channel nodes using fn[np.isin(fn, acn, invert =True)]
-    fn_cn : np array
-        Node id that floodplain is mapped to. If not counted as a floodplain node, 
-        then fn_cn is simply the node indice (node id). Note, this output includes 
-        the channel nodes which are also mapped to themselves.
-    """
-    # define the bankfull flow hydraulic geometry parameters
-    hg_c = BFD_parameters[0]
-    hg_e = BFD_parameters[1]
-    
-    # # create the upslope dictionary, upslope nodes to all nodes in grid
-    # upslope_dictionary = get_upslope_nodes(grid)
-    
-    # # get all channel nodes
-    # acn = extract_channel_nodes(grid, channel_initiation_DA)
-    
-    # add a floodplain_channel_node field. nodes that are not channel or floodplain
-    # initially, this is just the ids (index value) of each node
-    fn_cn = grid.nodes.flatten()
-
-    # sort channel nodes by drainage area
-    cn_drainage_area = grid.at_node['drainage_area'][acn]
-    sorted_indices = np.argsort(cn_drainage_area)[::-1]
-    acn_sorted = acn[sorted_indices]
-    
-    # beginning at the most downstream reach and working upstream, for each channel
-    # node, find all uplope nodes that have an elevation below the node elevation +
-    # BFD_factor*bankfull depth and assign them the drainage
-    fn = acn
-    for node in acn_sorted:
-        # get all upslope nodes to node
-        CA = grid.at_node['drainage_area'][node] #m2 to km2
-        el = grid.at_node['topographic__elevation'][node]
-        
-        # define the bankfull depth and scale by the BFD_factor
-        threshold_depth = BFD_factor*hg_c*(CA/(1000**2))**hg_e
-        up_nodes = np.array(upslope_dictionary[node])
-        # upslope nodes within el_factor * the bankfull depth
-        floodplain_mask = grid.at_node['topographic__elevation'][up_nodes] < el+threshold_depth 
-        fn = np.unique(np.concatenate((fn,up_nodes[floodplain_mask])))
-        fn_cn[up_nodes[floodplain_mask]] = node
-        
-    return fn, fn_cn
-
-
-
-def floodplain_mapper_fast(grid,
+def riparian_zone_mapper(grid,
                       acn,
                       upslope_dictionary,
                       channel_initiation_DA=5000,
                       BFD_parameters=[0.274, 0.24],
                       BFD_factor=50):
     """
-    Map the floodplain for each node by finding all channel nodes and then for each
-    channel node, finding all non-channel nodes whose elevation is within some 
-    multiple of the nodes elevation plus the bankfull flow depth scaled by a factor.
-    # refactored by gemini
-    """
+    SUMMARY.
 
+    Parameters
+    ----------
+    grid : TYPE
+        DESCRIPTION.
+    acn : TYPE
+        DESCRIPTION.
+    upslope_dictionary : TYPE
+        DESCRIPTION.
+    channel_initiation_DA : TYPE, optional
+        DESCRIPTION. The default is 5000.
+    BFD_parameters : TYPE, optional
+        DESCRIPTION. The default is [0.274, 0.24].
+    BFD_factor : TYPE, optional
+        DESCRIPTION. The default is 50.
+
+    Returns
+    -------
+    rz : np.array
+        IDs (indicies) of all nodes mapped as a riparian zone node. NOTE: includes
+        the channel nodes acn. 
+    rz_cn : np.array
+        channel node assigned to each node in the raster model grid. If the node 
+        is not in the riparian zone, assigned node is self.
+    """
     
-    # 1. Bind grid fields to local variables to avoid dictionary lookups in the loop
+
+    # define elevation and drainage area from grid
     z = grid.at_node['topographic__elevation']
     da = grid.at_node['drainage_area']
     
-    # 2. Initialize tracking arrays
-    # fn_cn starts as the node IDs themselves
-    fn_cn = np.arange(grid.number_of_nodes)
+    # Initialize rz_cn tracking arrays. Indicie is node id. Value is channel
+    # node assigned to node. rz_cn starts as the node IDs themselves but becomes
+    # the channel node assigned to the node as the algorithm iterates over all 
+    # channel node upslope nodes
+    rz_cn = np.arange(grid.number_of_nodes)
     
-    # Use a boolean array to track floodplain nodes. 
-    # This completely eliminates the need for np.unique() and np.concatenate() in the loop.
-    is_floodplain = np.zeros(grid.number_of_nodes, dtype=bool)
-    is_floodplain[acn] = True # Channel nodes are inherently part of the 'fn' return
+    # Use a boolean array to track riparian zone nodes. 
+    is_rz = np.zeros(grid.number_of_nodes, dtype=bool)
+    is_rz[acn] = True # Channel nodes are part of the riparian zone
     
-    # 3. Sort channel nodes by drainage area (descending)
+    # Sort channel nodes by drainage area (descending). Riparian zone nodes
+    # will be assigned to multiple channel nodes. By working downstream to upstream,
+    # the most upstream node is assigned to the riparian zone node
     cn_drainage_area = da[acn]
     sorted_indices = np.argsort(cn_drainage_area)[::-1]
     acn_sorted = acn[sorted_indices]
     
-    # 4. PRE-CALCULATE thresholds and elevations for the loop
-    # Vectorizing this math outside the loop saves thousands of redundant exponentiations
-    if BFD_parameters: # if floodplain elevation defined as a function of bankfull flow depth
+    # PRE-CALCULATE elevation threshold for each channel node
+    if BFD_parameters: # if riparian zone is defined as a function of flow depth
         hg_c = BFD_parameters[0]
         hg_e = BFD_parameters[1]
         thresholds = BFD_factor * hg_c * (da[acn_sorted] / 1e6)**hg_e
@@ -1037,7 +980,7 @@ def floodplain_mapper_fast(grid,
         
     elevations = z[acn_sorted]
     
-    # 5. Execute the downstream-to-upstream loop
+    # Assign channel nodes to each riparian zone node, working downstream to upstream
     for node, threshold_depth, el in zip(acn_sorted, thresholds, elevations):
         up_nodes = upslope_dictionary[node]
         
@@ -1048,17 +991,17 @@ def floodplain_mapper_fast(grid,
         # Convert the dictionary list to a numpy array for masking
         up_nodes_arr = np.array(up_nodes, dtype=int)
         
-        # Boolean mask for elevation threshold
-        floodplain_mask = z[up_nodes_arr] < (el + threshold_depth)
+        # riparian zone mask for node (boolean mask for elevation threshold)
+        rz_mask = z[up_nodes_arr] < (el + threshold_depth)
         
-        # Extract the valid nodes
-        valid_nodes = up_nodes_arr[floodplain_mask]
+        # Extract the riparian zone nodes assigned to node
+        rz_nodes = up_nodes_arr[rz_mask]
         
-        # Assign values directly using the boolean arrays (O(1) operation)
-        is_floodplain[valid_nodes] = True
-        fn_cn[valid_nodes] = node
+        # update the is_rz boolean array and rz_cn tracking array
+        is_rz[rz_nodes] = True
+        rz_cn[rz_nodes] = node
         
-    # 6. Convert the boolean mask back into an array of node indices at the very end
-    fn = np.where(is_floodplain)[0]
+    # Convert the boolean mask back into an array of node indices
+    rz = np.where(is_rz)[0]
     
-    return fn, fn_cn
+    return rz, rz_cn
