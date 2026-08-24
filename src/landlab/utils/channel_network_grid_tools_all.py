@@ -875,7 +875,7 @@ def get_upslope_nodes(grid):
     """
     Get the upslope contributing nodes to every node in the grid using the 
     flow__receiver_node and flow__reciever_node_order fields from FlowAccumulator,
-    (NOTE, if there are pits in the DEM, be sure to them using DepressionFinderAndRouter).
+    (NOTE, if there are pits in the DEM, be sure to remove them using DepressionFinderAndRouter).
     
     Parameters
     ----------
