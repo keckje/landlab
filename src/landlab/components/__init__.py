@@ -44,6 +44,7 @@ from .flow_director import FlowDirectorDINF
 from .flow_director import FlowDirectorMFD
 from .flow_director import FlowDirectorSteepest
 from .fracture_grid import FractureGridGenerator
+from .geoenthalpy_delta import GeoEnthalpyDelta
 from .gflex import gFlex
 from .gravel_bedrock_eroder import GravelBedrockEroder
 from .gravel_river_transporter import GravelRiverTransporter
@@ -147,6 +148,7 @@ COMPONENTS = [
     FlowDirectorMFD,
     FlowDirectorSteepest,
     FractureGridGenerator,
+    GeoEnthalpyDelta,
     gFlex,
     GravelBedrockEroder,
     GravelRiverTransporter,
