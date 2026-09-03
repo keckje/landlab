@@ -907,7 +907,7 @@ def get_upslope_nodes(grid):
         if receiver != node:
             # The receiver inherits the current node.
             all_upslope_nodes_dict[receiver].append(node)
-            # ...AND the receiver inherits everything already accumulated by the current node.
+            # and the receiver inherits everything already accumulated by the current node.
             all_upslope_nodes_dict[receiver].extend(all_upslope_nodes_dict[node])
             
     return all_upslope_nodes_dict
@@ -919,11 +919,13 @@ def riparian_zone_mapper(grid,
                       BFD_parameters=[0.274, 0.24],
                       BFD_factor=50):
     """Finds all nodes in the riparian zone. The riparian zone is defined as the   
-    area between the channel bed and some fixed elevation or multiple of bankfull
-    flow above the channel bed. 
+    channel nodes (acn) and all adjacent nodes that have an elevation between the 
+    elevation of the closest downslope channel nodeand and some fixed elevation 
+    or multiple of bankfull flow above that closest downslope channel node elevation. 
     Returns an array of all nodes in the riparian zone (rz) and a riparian zone
     mapper array (rz_cn) that lists the closest downstream channel node to each
-    riparian zone node.
+    riparian zone node.NOTE: if a channel node is not within the elevation range
+    of a downslope channel node, the closest downstream channel node is itself.
 
     Parameters
     ----------
@@ -945,11 +947,13 @@ def riparian_zone_mapper(grid,
     Returns
     -------
     rz : np.array
-        IDs (indicies) of all nodes mapped as a riparian zone node. NOTE: includes
-        the channel nodes acn. 
+        IDs (indicies) of all nodes mapped as a riparian zone node. rz ncludes
+        the channel nodes. 
     rz_cn : np.array
-        channel node assigned to each node in the raster model grid. If the node 
-        is not in the riparian zone, assigned node is self.
+        channel node assigned to each riparian zone node in the raster model grid. 
+        If the riparian zone node is a channel node that is not within the elevation 
+        range of a downslope channel node, assigned node is self. Also, all non-riparian
+        zone nodes are assigned to self.
     """
     
 
@@ -974,7 +978,7 @@ def riparian_zone_mapper(grid,
     sorted_indices = np.argsort(cn_drainage_area)[::-1]
     acn_sorted = acn[sorted_indices]
     
-    # PRE-CALCULATE elevation threshold for each channel node
+    # first calculate elevation threshold for each channel node
     if BFD_parameters: # if riparian zone is defined as a function of flow depth
         hg_c = BFD_parameters[0]
         hg_e = BFD_parameters[1]
