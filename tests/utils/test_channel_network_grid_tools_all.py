@@ -207,6 +207,17 @@ def nmgrid_s_up(grid_up):
     return nmg_s_up
 
 
+@pytest.fixture
+def example_nmg_link_to_rmg_coincident_nodes_mapper(): 
+    nmg_link_to_rmg_coincident_nodes_mapper = {'linkID': np.array([0, 0, 0, 0, 1, 2, 2, 2]),
+                                        'coincident_node': np.array([ 3, 10, 16, 23, 30, 24, 31, 32]),
+                                        'x': np.array([30., 30., 20., 20., 20., 30., 30., 40.]),
+                                        'y': np.array([ 0., 10., 20., 30., 40., 30., 40., 40.]),
+                                        'coincident_node_downstream_dist': np.array([31.6227766 , 26.33648662, 15.79556109,  5.25463555,  4.99499499,
+                                                16.76491407, 11.16914836,  5.57338265]),
+                                        'link_drainage_area': np.array([2300., 2300., 2300., 2300., 1100., 1050., 1050., 1050.])}
+    return nmg_link_to_rmg_coincident_nodes_mapper
+
 @pytest.mark.parametrize(
     "array, choose, expected",
     (
@@ -1055,14 +1066,8 @@ class TestMapRMGNodesToNMGLinks:
 
     
 class TestRemoveSmallTribs:
-    def test_remove_small_tribs_1(self):
-        nmg_link_to_rmg_coincident_nodes_mapper = {'linkID': np.array([0, 0, 0, 0, 1, 2, 2, 2]),
-                                                    'coincident_node': np.array([ 3, 10, 16, 23, 30, 24, 31, 32]),
-                                                    'x': np.array([30., 30., 20., 20., 20., 30., 30., 40.]),
-                                                    'y': np.array([ 0., 10., 20., 30., 40., 30., 40., 40.]),
-                                                    'coincident_node_downstream_dist': np.array([31.6227766 , 26.33648662, 15.79556109,  5.25463555,  4.99499499,
-                                                            16.76491407, 11.16914836,  5.57338265]),
-                                                    'link_drainage_area': np.array([2300., 2300., 2300., 2300., 1100., 1050., 1050., 1050.])}
+    def test_remove_small_tribs_1(self, example_nmg_link_to_rmg_coincident_nodes_mapper):
+        """small trib at node 17, mapped to coincident node 16"""
         rmg_nodes_to_nmg_links_mapper = {'node': np.array([ 3,  9, 17, 23]),
                                         'linkID': np.array([0, 0, 0, 0]),
                                         'coincident_node_downstream_dist': np.array([31.6227766 , 26.33648662, 26.33648662,  5.25463555]),
@@ -1070,7 +1075,7 @@ class TestRemoveSmallTribs:
                                         'link_drainage_area': np.array([2300., 2300., 2300., 2300.]),
                                         'node_drainage_area': np.array([2900., 2300.,  100., 1600.])}
         # remove the small trib from rmg_nodes_to_nmg_links_mapper
-        rmg_nodes_to_nmg_links_mapper_corrected = gt._remove_small_tribs(rmg_nodes_to_nmg_links_mapper, nmg_link_to_rmg_coincident_nodes_mapper, remove_small_trib_ratio = 1/10)# cn_to_nmg_link_mapper)
+        rmg_nodes_to_nmg_links_mapper_corrected = gt._remove_small_tribs(rmg_nodes_to_nmg_links_mapper, example_nmg_link_to_rmg_coincident_nodes_mapper, remove_small_trib_ratio = 1/10)# cn_to_nmg_link_mapper)
 
 
         rmg_nodes_to_nmg_links_mapper_e = np.array([[   3.        ,    9.        ,   23.        ],
@@ -1083,12 +1088,70 @@ class TestRemoveSmallTribs:
         check_vals(np.array(list(rmg_nodes_to_nmg_links_mapper_corrected.values())),
                        rmg_nodes_to_nmg_links_mapper_e)
         
-    def test_remove_small_tribs_2(self):
+    def test_remove_small_tribs_2(self, example_nmg_link_to_rmg_coincident_nodes_mapper):
+        """channel node representing a small trib (node 4) is mapped to the outlet node (node 3)"""
+        rmg_nodes_to_nmg_links_mapper = {'node': np.array([ 3,  4,  9, 23]),
+                                        'linkID': np.array([0, 0, 0, 0]),
+                                        'coincident_node_downstream_dist': np.array([31.6227766 , 31.6227766 , 26.33648662,  5.25463555]),
+                                        'coincident_node': np.array([ 3,  3, 10, 23]),
+                                        'link_drainage_area': np.array([2300., 2300., 2300., 2300.]),
+                                        'node_drainage_area': np.array([2900.,  100., 2300., 1600.])}   
+        
+        rmg_nodes_to_nmg_links_mapper_corrected = gt._remove_small_tribs(rmg_nodes_to_nmg_links_mapper, example_nmg_link_to_rmg_coincident_nodes_mapper,remove_small_trib_ratio = 1/10)# cn_to_nmg_link_mapper)
+
+
+        rmg_nodes_to_nmg_links_mapper_e = np.array([[   3.        ,    9.        ,   23.        ],
+               [   0.        ,    0.        ,    0.        ],
+               [  31.6227766 ,   26.33648662,    5.25463555],
+               [   3.        ,   10.        ,   23.        ],
+               [2300.        , 2300.        , 2300.        ],
+               [2900.        , 2300.        , 1600.        ]])
+
+        check_vals(np.array(list(rmg_nodes_to_nmg_links_mapper_corrected.values())),
+                       rmg_nodes_to_nmg_links_mapper_e)
+        
+    def test_remove_small_tribs_3(self, example_nmg_link_to_rmg_coincident_nodes_mapper):
+        """channel node representing a small trib (node 24), mapped to the inlet node (node 23)"""
+        rmg_nodes_to_nmg_links_mapper = {'node': np.array([ 3,  9, 24, 23]),
+                                        'linkID': np.array([0, 0, 0, 0]),
+                                        'coincident_node_downstream_dist': np.array([31.6227766 , 26.33648662,  5.25463555,  5.25463555]),
+                                        'coincident_node': np.array([ 3, 10, 23, 23]),
+                                        'link_drainage_area': np.array([2300., 2300., 2300., 2300.]),
+                                        'node_drainage_area': np.array([2900., 2300.,  100., 1600.])}
+        
+        rmg_nodes_to_nmg_links_mapper_corrected = gt._remove_small_tribs(rmg_nodes_to_nmg_links_mapper, example_nmg_link_to_rmg_coincident_nodes_mapper, remove_small_trib_ratio = 1/10)
+        
+        rmg_nodes_to_nmg_links_mapper_e = np.array([[   3.        ,    9.        ,   23.        ],
+               [   0.        ,    0.        ,    0.        ],
+               [  31.6227766 ,   26.33648662,    5.25463555],
+               [   3.        ,   10.        ,   23.        ],
+               [2300.        , 2300.        , 2300.        ],
+               [2900.        , 2300.        , 1600.        ]])
+        
+        check_vals(np.array(list(rmg_nodes_to_nmg_links_mapper_corrected.values())),rmg_nodes_to_nmg_links_mapper_e)
         
         
-    def test_remove_small_tribs_3(self):
-    
-        
-    def test_remove_small_tribs_4(self):
+    def test_remove_small_tribs_4(self, example_nmg_link_to_rmg_coincident_nodes_mapper):
+        """channel node representing a small trib (node 24), mapped to the inlet
+        node (node 23) in an nmg_link_to_rmg_coincident_nodes_mapper that also 
+        has a node mapped to link 1"""
+        rmg_nodes_to_nmg_links_mapper = {'node': np.array([ 3,  9, 24, 23, 29]),
+                                        'linkID': np.array([0, 0, 0, 0, 1]),
+                                        'coincident_node_downstream_dist': np.array([31.6227766 , 26.33648662,  5.25463555,  5.25463555,  5.        ]),
+                                        'coincident_node': np.array([ 3, 10, 23, 23, 30]),
+                                        'link_drainage_area': np.array([2300., 2300., 2300., 2300., 1100.]),
+                                        'node_drainage_area': np.array([2900., 2300.,  100., 1600.,  500.])}
+
+
+        rmg_nodes_to_nmg_links_mapper_corrected = gt._remove_small_tribs(rmg_nodes_to_nmg_links_mapper, example_nmg_link_to_rmg_coincident_nodes_mapper,remove_small_trib_ratio = 1/10)
+        rmg_nodes_to_nmg_links_mapper_e = np.array([[   3.        ,    9.        ,   23.        ,   29.        ],
+               [   0.        ,    0.        ,    0.        ,    1.        ],
+               [  31.6227766 ,   26.33648662,    5.25463555,    5.        ],
+               [   3.        ,   10.        ,   23.        ,   30.        ],
+               [2300.        , 2300.        , 2300.        , 1100.        ],
+               [2900.        , 2300.        , 1600.        ,  500.        ]])
+
+        check_vals(np.array(list(rmg_nodes_to_nmg_links_mapper_corrected.values())),rmg_nodes_to_nmg_links_mapper_e)
+
         
         
