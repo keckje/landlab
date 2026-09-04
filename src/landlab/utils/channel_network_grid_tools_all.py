@@ -15,10 +15,12 @@ import matplotlib.pyplot as plt
 from landlab.components.flow_director.flow_director_steepest import FlowDirectorSteepest
 
 """
-A collection of tools for mapping values (e.g., flow, shear stress) between
-network model grids and a raster model grid representation of a channel network.
+A collection of tools for defining the channel network on the raster model grid
+and mapping values (e.g., flow, shear stress) between the raster model and network 
+model grid channel networks.
 """
 
+####PULL REQUEST 1
 
 def _create_lol(linkID, list_of_vals):
     """convert a list of values to a list of lists of values, where each sublist
@@ -411,9 +413,9 @@ def map_rmg_nodes_to_nmg_links(
     rmg_nodes,
     remove_small_trib_ratio=None,
 ):
-    """Map the nodes representing the channel location in a DEM to the closest
-    network model grid location. Network model grid location is described in
-    terms of link id and distance down link, measured from the inlet node (tail)
+    """Map the raster model grid channel nodes or any other series of nodes to 
+    the closest network model grid location. Network model grid location is described
+    in terms of link id and distance down link, measured from the inlet node (tail)
     of the link.
 
     Parameters
