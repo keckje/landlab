@@ -15,7 +15,12 @@ from landlab.components.flow_director.flow_director_steepest import FlowDirector
 """
 A collection of tools for defining the channel network on the raster model grid
 and mapping values (e.g., flow, shear stress) between the raster model and network 
-model grid channel networks."""
+model grid channel networks.
+
+TO DO - wait for correction to PR 1 to be accepted
+Then create a new PR 2, close the original PR 2 with message that links to new 
+PR 2 and why the original was closed
+"""
 
 #### PULL REQUEST 1
 
@@ -411,7 +416,9 @@ def map_rmg_nodes_to_nmg_links(
     rmg_nodes,
     remove_small_trib_ratio=None,
 ):
-    """Map the raster model grid channel nodes or any other series of nodes to
+    """TODO - make this a universal function, so that any grid can be used
+    change name to map_mg_nodes_to_nmg_linnks 
+    Map the raster model grid channel nodes or any other series of nodes to
     the closest network model grid location. Network model grid location is described
     in terms of link id and distance down link, measured from the inlet node (tail)
     of the link.
