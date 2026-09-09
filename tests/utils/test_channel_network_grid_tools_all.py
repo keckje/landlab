@@ -1,6 +1,8 @@
 import numpy as np
 import pytest
 from numpy.testing import assert_array_equal
+import matplotlib
+import matplotlib.pyplot as plt
 
 import landlab.utils.channel_network_grid_tools_all as gt
 from landlab import RasterModelGrid
@@ -209,7 +211,7 @@ def nmgrid_s_up(grid_up):
 
 @pytest.fixture
 def example_nmg_link_to_rmg_coincident_nodes_mapper(): 
-    nmg_link_to_rmg_coincident_nodes_mapper = {'linkID': np.array([0, 0, 0, 0, 1, 2, 2, 2]),
+    nmg_link_to_rmg_coincident_nodes_mapper = {'link_id': np.array([0, 0, 0, 0, 1, 2, 2, 2]),
                                         'coincident_node': np.array([ 3, 10, 16, 23, 30, 24, 31, 32]),
                                         'x': np.array([30., 30., 20., 20., 20., 30., 30., 40.]),
                                         'y': np.array([ 0., 10., 20., 30., 40., 30., 40., 40.]),
@@ -987,7 +989,7 @@ class TestMapRMGNodesToNMGLinks:
     def test_map_rmg_nodes_to_nmg_links_1(self, grid):
         """normal test"""
         # provide a link to rmg coicident node mapper
-        nmg_link_to_rmg_coincident_nodes_mapper = {'linkID': np.array([0, 0, 0, 0, 1, 2, 2, 2]),
+        nmg_link_to_rmg_coincident_nodes_mapper = {'link_id': np.array([0, 0, 0, 0, 1, 2, 2, 2]),
                                                     'coincident_node': np.array([ 3, 10, 16, 23, 30, 24, 31, 32]),
                                                     'x': np.array([30., 30., 20., 20., 20., 30., 30., 40.]),
                                                     'y': np.array([ 0., 10., 20., 30., 40., 30., 40., 40.]),
@@ -1003,9 +1005,9 @@ class TestMapRMGNodesToNMGLinks:
         l1_e = [np.int64(30), np.int64(36)]
         l2_e = [np.int64(31), np.int64(32)]
 
-        check_vals(cn_to_nmg_link_mapper['node'][cn_to_nmg_link_mapper['linkID'] == 0], l0_e)
-        check_vals(cn_to_nmg_link_mapper['node'][cn_to_nmg_link_mapper['linkID'] == 1], l1_e)
-        check_vals(cn_to_nmg_link_mapper['node'][cn_to_nmg_link_mapper['linkID'] == 2], l2_e)
+        check_vals(cn_to_nmg_link_mapper['node'][cn_to_nmg_link_mapper['link_id'] == 0], l0_e)
+        check_vals(cn_to_nmg_link_mapper['node'][cn_to_nmg_link_mapper['link_id'] == 1], l1_e)
+        check_vals(cn_to_nmg_link_mapper['node'][cn_to_nmg_link_mapper['link_id'] == 2], l2_e)
 
 
         # check that each channel and terrace node has only one equivalent nmg rmg node.
@@ -1014,7 +1016,7 @@ class TestMapRMGNodesToNMGLinks:
     def test_map_rmg_nodes_to_nmg_links_2(self, grid_up):
         """same test, using upside down grid"""
         # provide a link to rmg coicident node mapper
-        nmg_link_to_rmg_coincident_nodes_mapper_up = {'linkID': np.array([0, 0, 0, 1, 2, 2, 2, 2]),
+        nmg_link_to_rmg_coincident_nodes_mapper_up = {'link_id': np.array([0, 0, 0, 1, 2, 2, 2, 2]),
                                                     'coincident_node': np.array([31, 24, 23, 25, 52, 45, 39, 32]),
                                                     'x': np.array([30., 30., 20., 40., 30., 30., 40., 40.]),
                                                     'y': np.array([40., 30., 30., 30., 70., 60., 50., 40.]),
@@ -1030,9 +1032,9 @@ class TestMapRMGNodesToNMGLinks:
         l1_e = [np.int64(19), np.int64(25)]
         l2_e = [np.int64(32), np.int64(38),np.int64(46), np.int64(52)]
 
-        check_vals(cn_to_nmg_link_mapper_up['node'][cn_to_nmg_link_mapper_up['linkID'] == 0], l0_e)
-        check_vals(cn_to_nmg_link_mapper_up['node'][cn_to_nmg_link_mapper_up['linkID'] == 1], l1_e)
-        check_vals(cn_to_nmg_link_mapper_up['node'][cn_to_nmg_link_mapper_up['linkID'] == 2], l2_e)
+        check_vals(cn_to_nmg_link_mapper_up['node'][cn_to_nmg_link_mapper_up['link_id'] == 0], l0_e)
+        check_vals(cn_to_nmg_link_mapper_up['node'][cn_to_nmg_link_mapper_up['link_id'] == 1], l1_e)
+        check_vals(cn_to_nmg_link_mapper_up['node'][cn_to_nmg_link_mapper_up['link_id'] == 2], l2_e)
 
 
         # check that each channel and terrace node has only one equivalent nmg rmg node.
@@ -1041,7 +1043,7 @@ class TestMapRMGNodesToNMGLinks:
     def test_map_rmg_nodes_to_nmg_links_3(self, grid_up):        
         """for upside down grid, but with remove_small_tribs = 10 (shouldn't affect results)"""
         # provide a link to rmg coicident node mapper
-        nmg_link_to_rmg_coincident_nodes_mapper_up = {'linkID': np.array([0, 0, 0, 1, 2, 2, 2, 2]),
+        nmg_link_to_rmg_coincident_nodes_mapper_up = {'link_id': np.array([0, 0, 0, 1, 2, 2, 2, 2]),
                                                         'coincident_node': np.array([31, 24, 23, 25, 52, 45, 39, 32]),
                                                         'x': np.array([30., 30., 20., 40., 30., 30., 40., 40.]),
                                                         'y': np.array([40., 30., 30., 30., 70., 60., 50., 40.]),
@@ -1057,19 +1059,58 @@ class TestMapRMGNodesToNMGLinks:
         l1_e = [np.int64(19), np.int64(25)]
         l2_e = [np.int64(32), np.int64(38),np.int64(46), np.int64(52)]
 
-        check_vals(cn_to_nmg_link_mapper_up['node'][cn_to_nmg_link_mapper_up['linkID'] == 0], l0_e)
-        check_vals(cn_to_nmg_link_mapper_up['node'][cn_to_nmg_link_mapper_up['linkID'] == 1], l1_e)
-        check_vals(cn_to_nmg_link_mapper_up['node'][cn_to_nmg_link_mapper_up['linkID'] == 2], l2_e)
+        check_vals(cn_to_nmg_link_mapper_up['node'][cn_to_nmg_link_mapper_up['link_id'] == 0], l0_e)
+        check_vals(cn_to_nmg_link_mapper_up['node'][cn_to_nmg_link_mapper_up['link_id'] == 1], l1_e)
+        check_vals(cn_to_nmg_link_mapper_up['node'][cn_to_nmg_link_mapper_up['link_id'] == 2], l2_e)
 
         # check that each channel and terrace node has only one equivalent nmg rmg node.
         assert len(np.unique(cn_to_nmg_link_mapper_up['node'])) == len(cn_to_nmg_link_mapper_up['node'])
+
+
+
+
+class TestPlotNmgrids:
+ 
+    @pytest.fixture(autouse=True)
+    def _agg_backend(self):
+        """render headless (no GUI window, no blocking plt.show) during these
+        tests, and always clean up the figures they create"""
+        original_backend = matplotlib.get_backend()
+        matplotlib.use("Agg")
+        yield
+        plt.close("all")
+        matplotlib.use(original_backend)
+ 
+    def test_plot_nmgrids_runs_without_error(self, nmgrid_c, nmgrid_f):
+        """smoke test: function runs, returns nothing, and opens one figure"""
+        result = gt.plot_nmgrids(nmgrid_c, nmgrid_f)
+ 
+        assert result is None
+        assert len(plt.get_fignums()) == 1
+ 
+    def test_plot_nmgrids_line_count(self, nmgrid_c, nmgrid_f):
+        """one line is plotted per link, across both grids"""
+        gt.plot_nmgrids(nmgrid_c, nmgrid_f)
+        ax = plt.gcf().axes[0]
+ 
+        n_links_c = len(nmgrid_c.nodes_at_link)
+        n_links_f = len(nmgrid_f.nodes_at_link)
+        assert len(ax.get_lines()) == n_links_c + n_links_f
+
+    def test_plot_nmgrids_same_grid_twice(self, nmgrid_c):
+        """passing the same grid as both arguments should not raise, and doubles
+        the expected number of plotted lines"""
+        gt.plot_nmgrids(nmgrid_c, nmgrid_c)
+        ax = plt.gcf().axes[0]
+ 
+        assert len(ax.get_lines()) == 2 * len(nmgrid_c.nodes_at_link)
 
     
 class TestRemoveSmallTribs:
     def test_remove_small_tribs_1(self, example_nmg_link_to_rmg_coincident_nodes_mapper):
         """small trib at node 17, mapped to coincident node 16"""
         rmg_nodes_to_nmg_links_mapper = {'node': np.array([ 3,  9, 17, 23]),
-                                        'linkID': np.array([0, 0, 0, 0]),
+                                        'link_id': np.array([0, 0, 0, 0]),
                                         'coincident_node_downstream_dist': np.array([31.6227766 , 26.33648662, 26.33648662,  5.25463555]),
                                         'coincident_node': np.array([ 3, 10, 16, 23]),
                                         'link_drainage_area': np.array([2300., 2300., 2300., 2300.]),
@@ -1091,7 +1132,7 @@ class TestRemoveSmallTribs:
     def test_remove_small_tribs_2(self, example_nmg_link_to_rmg_coincident_nodes_mapper):
         """channel node representing a small trib (node 4) is mapped to the outlet node (node 3)"""
         rmg_nodes_to_nmg_links_mapper = {'node': np.array([ 3,  4,  9, 23]),
-                                        'linkID': np.array([0, 0, 0, 0]),
+                                        'link_id': np.array([0, 0, 0, 0]),
                                         'coincident_node_downstream_dist': np.array([31.6227766 , 31.6227766 , 26.33648662,  5.25463555]),
                                         'coincident_node': np.array([ 3,  3, 10, 23]),
                                         'link_drainage_area': np.array([2300., 2300., 2300., 2300.]),
@@ -1113,7 +1154,7 @@ class TestRemoveSmallTribs:
     def test_remove_small_tribs_3(self, example_nmg_link_to_rmg_coincident_nodes_mapper):
         """channel node representing a small trib (node 24), mapped to the inlet node (node 23)"""
         rmg_nodes_to_nmg_links_mapper = {'node': np.array([ 3,  9, 24, 23]),
-                                        'linkID': np.array([0, 0, 0, 0]),
+                                        'link_id': np.array([0, 0, 0, 0]),
                                         'coincident_node_downstream_dist': np.array([31.6227766 , 26.33648662,  5.25463555,  5.25463555]),
                                         'coincident_node': np.array([ 3, 10, 23, 23]),
                                         'link_drainage_area': np.array([2300., 2300., 2300., 2300.]),
@@ -1136,7 +1177,7 @@ class TestRemoveSmallTribs:
         node (node 23) in an nmg_link_to_rmg_coincident_nodes_mapper that also 
         has a node mapped to link 1"""
         rmg_nodes_to_nmg_links_mapper = {'node': np.array([ 3,  9, 24, 23, 29]),
-                                        'linkID': np.array([0, 0, 0, 0, 1]),
+                                        'link_id': np.array([0, 0, 0, 0, 1]),
                                         'coincident_node_downstream_dist': np.array([31.6227766 , 26.33648662,  5.25463555,  5.25463555,  5.        ]),
                                         'coincident_node': np.array([ 3, 10, 23, 23, 30]),
                                         'link_drainage_area': np.array([2300., 2300., 2300., 2300., 1100.]),
@@ -1154,4 +1195,45 @@ class TestRemoveSmallTribs:
         check_vals(np.array(list(rmg_nodes_to_nmg_links_mapper_corrected.values())),rmg_nodes_to_nmg_links_mapper_e)
 
         
+class TestMapNMG1LinksToNMG2Links:
+    def test_map_nmg1_links_to_nmg2_links_1(self, nmgrid_c, nmgrid_f):    
+        """map fine to coarse (a link ID from the fine network model grid is assigned to each link in the coarse grid)"""
+        link_mapper = gt.map_nmg1_links_to_nmg2_links(nmgrid_c, nmgrid_f,number_of_points = 11) #grid, nmg_link_to_rmg_coincident_nodes_mapper,nmg_link_to_rmg_coincident_nodes_mapper_f)
+        v_e = np.array([0,
+               3,
+               4])
+        check_vals(link_mapper,v_e)
+        
+    def test_map_nmg1_links_to_nmg2_links_2(self, nmgrid_c, nmgrid_f):
+        """map coarse to fine (a link ID from the coarse network model grid is assigned to each link in the fine grid)"""
+        link_mapper_ = gt.map_nmg1_links_to_nmg2_links(nmgrid_f,nmgrid_c,number_of_points = 11) 
+        v_e = np.array([0,
+                        0,
+                        0,
+                        1,
+                        2,
+                        2,
+                        1])
+        check_vals(link_mapper_,v_e)
+
+    def test_map_nmg1_links_to_nmg2_links_3(self, nmgrid_c_up, nmgrid_f_up):    
+        """upside down grids, map fine to coarse (a link ID from the fine network model grid is assigned to each link in the coarse grid)"""
+        link_mapper_up = gt.map_nmg1_links_to_nmg2_links(nmgrid_c_up, nmgrid_f_up, plot_grids = False)
+        v_e = np.array([2,
+                        3,
+                        6])
+
+        check_vals(link_mapper_up,v_e)
+        
+    def test_map_nmg1_links_to_nmg2_links_4(self, nmgrid_c_up, nmgrid_f_up):    
+        """upside down grids, map fine to coarse (a link ID from the fine network model grid is assigned to each link in the coarse grid)"""
+        link_mapper_up_ = gt.map_nmg1_links_to_nmg2_links(nmgrid_f_up, nmgrid_c_up, plot_grids = True)
+        v_e = np.array([1,
+                        0,
+                        0,
+                        1,
+                        2,
+                        2,
+                        2])
+        check_vals(link_mapper_up_,v_e)
         

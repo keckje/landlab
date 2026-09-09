@@ -23,7 +23,9 @@ class MWR_Calibrator():
     """an adaptive Markov Chain Monte Carlo calibration utility for calibrating
     MassWastingRunout to observed landslide runout extent, erosion and deposition
     
-    TODO:   See other beyesian calibration apporaches that use more than two variables
+    TODO:   make slpc_exponent and slpc_coefficient calibrator options
+        
+            See other Bayesian calibration apporaches that use more than two variables
             to figure out ways for visualizing results.
             
             Add an option for jumping in one parameter direction at a time 
@@ -75,6 +77,7 @@ class MWR_Calibrator():
         MCMC_adjusted_parameters : dictionary
             Defines the parameter space sampled by the MCMC algorithm.
             Each key is one of the adjustable parameters (presently qsc, k, slpc, landslide_thickness_uniform, soil_thickness_uniform, landslide_thickness_multiplier, soil_thickness_multiplier)
+            
             The value for each key is a list of the minimum, maximum and starting parameter value, in that order. 
 
         el_l : float
@@ -519,7 +522,7 @@ class MWR_Calibrator():
         average E<(qsc*lambda). If k is not a calibration parameter but qsc is, resample qsc until (qsc*lambda)>E"""
         equivalent_E = erosion_rate(self.MWR.k, self.tau, self.MWR.f, self.grid.dx)*self.grid.dx # rate times cell width to get depth
         _lambda = self._lambda_low_slope 
-        if self.MWR.slpc>=0.02: # when slpc is high (>0.02), model is unstable when ~E>(10*qsc)
+        if self.MWR.slpc.min()>=0.02: # when slpc is high (>0.02), model is unstable when ~E>(10*qsc)
             _lambda = self._lambda_high_slope
         #print('equivalent_E: {}, qsc: {}'.format(equivalent_E, self.MWR.qsc))   
         if equivalent_E>self.MWR.qsc*_lambda: # candidate values have already been transfered to MWR at this point
