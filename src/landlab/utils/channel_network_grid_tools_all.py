@@ -676,7 +676,7 @@ def plot_nmgrids(nmgrid_1, nmgrid_2): # plot_channel_networks
     plt.show()
 
 
-def map_nmg1_links_to_nmg2_links( # map_network_1_links_to_network_2_links)
+def map_nmg1_links_to_nmg2_links( # map_network_links_to_nearest_links)
     nmgrid_1, nmgrid_2, number_of_points=11, plot_grids=False
 ):
     """given two slightly different network model grids of the same channel network,
@@ -791,10 +791,12 @@ def map_rmg_channel_nodes_to_nmg_nodes(grid, nmgrid, acn): # map_channel_nodes_t
     # return as a dict with keys as nmgrid link ID, values as ID of closest rmg node
     return dict(zip(nmgrid.nodes, closest_node_IDs))
 
-
-def transfer_nmg2_link_field_to_nmg1_link_field( # transfer_network_2_link_values_to_network_1_links
+# landlab/core/component_utils//resolve field
+# passes 
+def transfer_nmg2_link_field_to_nmg1_link_field( # map_field_of_network_links_to_nearest_link
     nmgrid_2, nmgrid_1, link_mapper, link_field, default_value=np.nan
 ):
+    # link_field: string
     # add field to the nmgrid_2 links if not already present
     if link_field not in nmgrid_2.at_link.keys():  # field not
         nmgrid_2.at_link[link_field] = np.ones(nmgrid_2.number_of_links) * default_value
@@ -805,7 +807,7 @@ def transfer_nmg2_link_field_to_nmg1_link_field( # transfer_network_2_link_value
         nmgrid_2.at_link[link_field][link] = value
 
 
-def transfer_rmg_channel_node_field_to_nmg_node_field( # transfer_channel_node_values_to_network_nodes
+def transfer_rmg_channel_node_field_to_nmg_node_field( # map_channel_node_value_to_nearest_node
     grid, nmgrid, NMGtoRMGnodeMapper, field="topographic__elevation"
 ):
     """update the field value of the nmg nodes using the field value at the
@@ -819,8 +821,8 @@ def transfer_rmg_channel_node_field_to_nmg_node_field( # transfer_channel_node_v
 
 #### PULL REQUEST 5
 
-
-def transfer_nmg_link_field_to_rmg_channel_node_field( # transfer_network_link_values_to_channel_nodes
+# make 
+def transfer_nmg_link_field_to_rmg_channel_node_field( # transfer_network_link_field_to_channel_nodes
     grid, nmgrid, nmg_field, rmg_field, cn_to_nmg_link_mapper, default_value=np.nan
 ):
     """updates the field value of the rmg nodes using the values of each link mapped
