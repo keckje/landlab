@@ -530,9 +530,6 @@ def map_network_links_to_nodes(
 
 
 
-#### PULL REQUEST 2
-
-
 # def map_channel_nodes_to_network_links(
 #     grid: ModelGrid,
 #     nmgrid: NetworkModelGrid,
@@ -645,6 +642,10 @@ def map_network_links_to_nodes(
 
         
 #     return network_link_to_channel_nodes_mapper
+
+
+
+#### PULL REQUEST 2
 
 
 
@@ -770,7 +771,7 @@ def map_channel_nodes_to_network_links(
         node, y coordinate of the coincident node and drainage area of the link.
 
     """
-
+    #this should be an input because it may not change and should only be determined once
     network_points = network_to_points_and_dist(nmgrid,
                                    link_nodes,
                                    number_of_points_per_link,
@@ -882,7 +883,6 @@ def _remove_small_tribs_new(
         inlet_CA_ = network_link_to_channel_nodes_mapper["node_drainage_area"][mask2]
       
         
-        # 
         # There may be more than one contributing area associated with the inlet
         # if there is more than one, remove the contributing area that is much less than the link contributing area
         # Where "much less" is defined as being less than the contributing area to the link times the factor "remove_small_trib_ratio"
