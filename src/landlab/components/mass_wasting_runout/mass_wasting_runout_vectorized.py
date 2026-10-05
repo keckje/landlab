@@ -1112,8 +1112,8 @@ class MassWastingRunout(Component):
         c = -qsi
         radicand = (b**2) - 4 * a * c # doing this to avoid warning when taking sqrt of negative
         sqrt = np.sqrt(radicand, where=(radicand >= 0), out=np.zeros_like(a, dtype=float))
-        N1 = -b + (sqrt) / (2 * a)
-        N2 = -b - (sqrt) / (2 * a)
+        N1 = (-b + sqrt) / (2 * a)
+        N2 = (-b - sqrt) / (2 * a)
         ndn = np.round(np.max([N1,N2,np.ones(len(N1))],axis=0))
         A = np.min([(1 / ndn) * qsi + ((ndn - 1) / 2) * dx * sd, qsi],axis=0)
 
