@@ -273,7 +273,6 @@ class SedimentPulserEachParcel(SedimentPulserBase):
                 (link_distance_ratio, np.ones(p_np[i]) * val)
             )
         location_in_link = np.expand_dims(link_distance_ratio, axis=1)
-
         # element id and starting link
         element_id = np.array([])
         for i, row in PulseDF.iterrows():
