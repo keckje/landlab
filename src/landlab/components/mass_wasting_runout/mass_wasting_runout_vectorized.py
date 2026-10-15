@@ -5,7 +5,7 @@ import pandas as pd
 
 from landlab import Component
 from landlab.components import FlowDirectorMFD
-from landlab.components.mass_wasting_runout.mass_wasting_saver import MassWastingSaver
+from mass_wasting_saver import MassWastingSaver
 
 #TODO profile code, find slowest parts, convert those parts to cython using claude
 
@@ -365,12 +365,23 @@ class MassWastingRunout(Component):
 
         super().__init__(grid)
 
+        # if len(critical_slope) > 1:
+        #     self.variable_slpc = True
+        #     self.slpc = critical_slope[0] * self._grid.at_node["drainage_area"] ** critical_slope[1]
+        # else:
+        #     self.variable_slpc = False
+        #     self.slpc = np.ones(self._grid.number_of_nodes)*critical_slope[0]
+        # Tina add this start
         if len(critical_slope) > 1:
             self.variable_slpc = True
-            self.slpc = critical_slope[0] * self._grid.at_node["drainage_area"] ** critical_slope[1]
+            self.slpc_a = critical_slope[0]
+            self.slpc_b = critical_slope[1]
+            da = np.maximum(self._grid.at_node["drainage_area"], self._grid.dx**2)
+            self.slpc = self.slpc_a * da ** self.slpc_b
         else:
             self.variable_slpc = False
             self.slpc = np.ones(self._grid.number_of_nodes)*critical_slope[0]
+        # Tina add this end
         self.qsc = threshold_flux
         self.k = erosion_coefficient
         self._tracked_attributes = tracked_attributes
