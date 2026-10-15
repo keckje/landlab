@@ -23,9 +23,7 @@ class MWR_Calibrator():
     """an adaptive Markov Chain Monte Carlo calibration utility for calibrating
     MassWastingRunout to observed landslide runout extent, erosion and deposition
     
-    TODO:   make slpc_exponent and slpc_coefficient calibrator options
-        
-            See other Bayesian calibration apporaches that use more than two variables
+    TODO:   See other beyesian calibration apporaches that use more than two variables
             to figure out ways for visualizing results.
             
             Add an option for jumping in one parameter direction at a time 
@@ -76,8 +74,7 @@ class MWR_Calibrator():
 
         MCMC_adjusted_parameters : dictionary
             Defines the parameter space sampled by the MCMC algorithm.
-            Each key is one of the adjustable parameters (presently qsc, k, slpc, landslide_thickness_uniform, soil_thickness_uniform, landslide_thickness_multiplier, soil_thickness_multiplier)
-            
+            Each key is one of the adjustable parameters (presently qsc, k, slpc / slpc_a and slpc_b, landslide_thickness_uniform, soil_thickness_uniform, landslide_thickness_multiplier, soil_thickness_multiplier)
             The value for each key is a list of the minimum, maximum and starting parameter value, in that order. 
 
         el_l : float
@@ -145,8 +142,16 @@ class MWR_Calibrator():
         # a check that MCMC_adjusted_parameters parameter and parameter ranges are reasonable
         pvals = np.array(list(MCMC_adjusted_parameters.values()))
         min_p = pvals[:,0]; max_p = pvals[:,1];   opt_p = pvals[:,2];
-        if np.any(pvals <0):
+
+        # Tina add start
+        # slpc_b is a signed exponent (critical slope legitimately decreases with
+        # drainage area), so exclude it specifically from the non-negativity check
+        _neg_check_keys = [k for k in MCMC_adjusted_parameters if k != 'slpc_b']
+        _neg_check_vals = np.array([MCMC_adjusted_parameters[k] for k in _neg_check_keys]) if _neg_check_keys else np.empty((0,3))
+        if np.any(_neg_check_vals <0):
             raise ValueError("check MCMC_adjusted_parameters for negative values")
+        # Tina add end
+
         elif np.any((min_p>max_p) == True):
             raise ValueError("check MCMC_adjusted_parameters, minimum value less than the maximum value")
         elif np.any((opt_p<min_p) == True) or np.any((opt_p>max_p) == True):
@@ -157,6 +162,11 @@ class MWR_Calibrator():
         elif "landslide_thickness_uniform" in MCMC_adjusted_parameters.keys() and "landslide_thickness_multiplier" in MCMC_adjusted_parameters.keys():
                 msg = "candidate values include both landslide_thickness_uniform and landslide_thickness_multiplier parameters, pick one"
                 raise ValueError(msg)  
+        # Tina add for notebook3
+        elif "slpc" in MCMC_adjusted_parameters.keys() and ("slpc_a" in MCMC_adjusted_parameters.keys() or "slpc_b" in MCMC_adjusted_parameters.keys()):
+                msg = "candidate values include both slpc and slpc_a/slpc_b, pick one"
+                raise ValueError(msg)
+        # Tina add end
         else:
             self.params = MCMC_adjusted_parameters
             
@@ -241,8 +251,11 @@ class MWR_Calibrator():
         self.grid.at_node['disturbance_map'] = np.full(self.grid.number_of_nodes, False)
         if self.grid.has_field("particle__diameter", at="node"):
             self.grid.at_node["particle__diameter"] = self.initial_particle_diameter.copy()
-        
-            
+
+        # Tina add --- re-apply candidate parameter values, since the resets above just wiped them out
+        self._update_MWR_parameter_values(candidate_values)
+        # Tina add --- end
+               
         # run the model
         self.MWR.run_one_step()
         
@@ -522,8 +535,13 @@ class MWR_Calibrator():
         average E<(qsc*lambda). If k is not a calibration parameter but qsc is, resample qsc until (qsc*lambda)>E"""
         equivalent_E = erosion_rate(self.MWR.k, self.tau, self.MWR.f, self.grid.dx)*self.grid.dx # rate times cell width to get depth
         _lambda = self._lambda_low_slope 
-        if self.MWR.slpc.min()>=0.02: # when slpc is high (>0.02), model is unstable when ~E>(10*qsc)
+        # Tina add start # not sure if this is the best way to do this, but it works for now. The idea is that when the slope is high, the model is unstable when E>(10*qsc)
+        # if self.MWR.slpc>=0.02: # when slpc is high (>0.02), model is unstable when ~E>(10*qsc)
+        #     _lambda = self._lambda_high_slope
+        if np.mean(self.MWR.slpc[self.grid.at_node['mass__wasting_id'] >= 1]) >= 0.02:
             _lambda = self._lambda_high_slope
+        # Tina add end
+
         #print('equivalent_E: {}, qsc: {}'.format(equivalent_E, self.MWR.qsc))   
         if equivalent_E>self.MWR.qsc*_lambda: # candidate values have already been transfered to MWR at this point
             
@@ -604,6 +622,18 @@ class MWR_Calibrator():
                 self.MWR.k = candidate_values[key]
             elif key == 'slpc':
                 self.MWR.slpc = candidate_values[key]
+            # Tina add start
+            elif key == 'slpc_a':
+                da = np.maximum(self.MWR._grid.at_node["drainage_area"], self.MWR._grid.dx**2)
+                self.MWR.slpc_a = candidate_values['slpc_a']
+                self.MWR.slpc_b = candidate_values['slpc_b']
+                self.MWR.slpc = self.MWR.slpc_a * da ** self.MWR.slpc_b
+            elif key == 'slpc_b':
+                da = np.maximum(self.MWR._grid.at_node["drainage_area"], self.MWR._grid.dx**2)
+                self.MWR.slpc_a = candidate_values['slpc_a']
+                self.MWR.slpc_b = candidate_values['slpc_b']
+                self.MWR.slpc = self.MWR.slpc_a * da ** self.MWR.slpc_b
+            # Tina add end
             elif key == "landslide_thickness_uniform":
                 self.MWR._grid.at_node['soil__thickness'][self.MWR._grid.at_node['mass__wasting_id'] >= 1] = candidate_values[key]
             elif key == "soil_thickness_uniform":
