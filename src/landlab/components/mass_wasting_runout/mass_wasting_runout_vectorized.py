@@ -367,7 +367,10 @@ class MassWastingRunout(Component):
 
         if len(critical_slope) > 1:
             self.variable_slpc = True
-            self.slpc = critical_slope[0] * self._grid.at_node["drainage_area"] ** critical_slope[1]
+            self.slpc_a = critical_slope[0]
+            self.slpc_b = critical_slope[1]
+            da = np.maximum(self._grid.at_node["drainage_area"], self._grid.dx**2) # some grid cells may have DA of 0 if no upslope cells, assign minimum DA of cell area
+            self.slpc = self.slpc_a * da ** self.slpc_b
         else:
             self.variable_slpc = False
             self.slpc = np.ones(self._grid.number_of_nodes)*critical_slope[0]
