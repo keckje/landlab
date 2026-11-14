@@ -28,6 +28,7 @@ from .depth_dependent_diffusion import DepthDependentDiffuser
 from .depth_dependent_taylor_soil_creep import DepthDependentTaylorDiffuser
 from .detachment_ltd_erosion import DepthSlopeProductErosion
 from .detachment_ltd_erosion import DetachmentLtdErosion
+from .distributed_hydrology_generator import DistributedHydrologyGenerator
 from .diffusion import LinearDiffuser
 from .dimensionless_discharge import DimensionlessDischarge
 from .discharge_diffuser import DischargeDiffuser
@@ -51,11 +52,19 @@ from .groundwater import GroundwaterDupuitPercolator
 from .hack_calculator import HackCalculator
 from .hand_calculator import HeightAboveDrainageCalculator
 from .lake_fill import LakeMapperBarnes
-from .landslides import LandslideProbability
+from .landslides import (
+    LandslideProbability,
+    LandslideProbabilitySaturatedThickness
+    )
 from .lateral_erosion import LateralEroder
 from .lithology import LithoLayers
 from .lithology import Lithology
 from .marine_sediment_transport import SimpleSubmarineDiffuser
+from .mass_wasting_router import ( 
+	 LandslideMapper,
+    MassWastingEroder,
+    MassWastingRouter
+)
 from .mass_wasting_runout import MassWastingRunout
 from .network_sediment_transporter import NetworkSedimentTransporter
 from .network_sediment_transporter.bed_parcel_initializers import (
